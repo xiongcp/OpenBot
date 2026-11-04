@@ -2061,7 +2061,7 @@ U3《OpenBot 开源组件复用评估》PDF物理第4、12–14、18、23、25�
 
 **实现单实例daemon和调度租约**
 
-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Runtime · 规模 M
+阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
 
 **需求** [RQ01](requirements_traceability.md#rq01)、[RQ03](requirements_traceability.md#rq03)
 

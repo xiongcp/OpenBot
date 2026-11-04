@@ -1,8 +1,8 @@
-# OB-011—014、OB-016、OB-021、OB-023、OB-024、OB-030、OB-036：持久化、资源锁、Durable Outbox、预算熔断、上下文摘要、Artifact 存储与备份恢复验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, Context Summary, Artifact Store, and Backup/Restore Verification Scope
+# OB-011—016、OB-021、OB-023、OB-024、OB-030、OB-036：持久化、单实例调度、资源锁、Durable Outbox、预算熔断、上下文摘要、Artifact 存储与备份恢复验收范围 / Persistence, Single-Instance Scheduler, Resource Leases, Durable Outbox, Budget Circuit-Breaker, Context Summary, Artifact Store, and Backup/Restore Verification Scope
 
 ## 中文说明
 
-实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断、上下文摘要、Artifact 存储与数据库备份恢复共 83 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、单实例调度与父子交接、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断、上下文摘要、Artifact 存储、补丁/验证与消息草稿/发送共 91 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 
 OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 
@@ -11,6 +11,10 @@ OB-012：唯一 writer 线程独占完整短事务，稳定 request_id 与既有
 OB-013：source_scope 包含 channel/tenant/app/profile，100 次同事件仅一个 Task；不同 app 不互相去重，同 key 改 payload 拒绝。Task/budget/inbox/event/outbox 同事务，outbox 失败全部回滚。真实子进程分别在提交前与提交后 ACK 前 os._exit，重试后五表各一条；未提交不 ACK。模型/入站 body 不得赋 owner 或扩展网络权限。附件入口等待 OB-036，明确不可用。
 
 OB-014：完整覆盖 docs/03 的 11×11 Task 跃迁矩阵与 version CAS、source_scope 请求去重、只读无副作用审计回放与快照；实现 OutcomeVerifier（complete 用例核对 DIAGNOSIS/PATCH/TEST 产物、AVAILABLE 状态、零未决 Operation/Approval/BudgetReservation 及 PARTIAL 缺失项披露）、cancel 用例（无 UNKNOWN/DISPATCHING 时直接 CANCELLED 并撤销待决审批/未派发动作；存在 UNKNOWN/DISPATCHING 时递增 cancel_revision 并驻留 RECONCILING）以及 resume_reconciled 用例（核对未知结果证据与工作区 quarantine 后才允许 RECONCILING -> QUEUED）。真实子进程在 complete 提交前和提交后 ACK 前 os._exit，重查同一 request_id 结果一致且无重复事件/outbox。
+
+OB-015（实现单实例 daemon 和调度租约，保持 IN_PROGRESS）：先读取 `component_refs`（`profile-locks`、`windows-sys`）、`reuse_type`（`native_primitive`）与 `reuse_notes`。新增 `services/core/src/openbot/application/scheduler.py`（`SingleInstanceSupervisorLock`、`DaemonHandoffTicket`、`ProfileSchedulerService`）与 `native/supervisor/src/instance_lock.rs`：
+1. 唯一 Profile 排他锁拥有者与父子交接协议：Supervisor 作为唯一拥有者以非阻塞 `fcntl.flock(LOCK_EX | LOCK_NB)` 获取 `profile.lock` 并签发 `DaemonHandoffTicket`；子 daemon 启动时通过 `verify_child_daemon_handoff` 校验受管凭据而不重复争抢同一排他锁（避免父子自锁）；第二实例竞争立即非阻塞失败（`PROFILE_LOCK_HELD`），父实例释放后新实例可接管。
+2. 单活动 Task 调度、等待释槽与陈旧 Epoch/Fence 拒绝：`schedule_next_task` 在 `old_workers_isolated=False` 时拒绝启动新执行（绝不凭租约超时在旧 worker 未隔离时开启第二执行者）；同一会话保持单活动 `RUNNING` Task，进入 `WAITING_APPROVAL` 立即释放计算槽位供下一排队 Task 认领；`verify_worker_submission` 拒绝过期 `runtime_epoch` 或陈旧 `fencing_token`。因上游 `OB-093` 跨平台原生锁验证尚未闭合，`OB-015` 记为 `IN_PROGRESS`。
 
 OB-016（持久化资源锁与会话排队子集，保持 IN_PROGRESS）：实现 WORKSPACE、BROWSER_PROFILE、DESKTOP_SESSION、EXTERNAL_ACCOUNT 四类资源键及固定加锁顺序（按类型优先级与字典序排序防死锁），fencing_token 由 profile_config 单调递增分配；实现单活动 Task 串行槽位与会话内 FIFO 排队（claim_next_task）、人工审批/输入等待时的原子释锁点（park_for_wait，禁止在途 DISPATCHING/UNKNOWN 释锁）、重获锁时的工作区 generation/version 校验，以及租约过期不等于可抢占（仅旧 runtime_epoch=STOPPED 且未派发 attempt 可回收）与 UNKNOWN/DISPATCHING 资源 quarantine 阻断。因上游 OB-015 / OB-093 正式 Supervisor 代际交接尚未闭合，OB-016 记为 IN_PROGRESS。
 
@@ -44,12 +48,15 @@ OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺
 
 ## English Summary
 
-Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (83 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
+Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (91 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
 
 - **OB-011**: Checksum-locked ordered SQLite migrator creating all 23 baseline tables, pre-upgrade backup, foreign-key and integrity checks, and WAL/FULL/FK/recursive_triggers verification using stdlib `sqlite3`.
 - **OB-012**: Single writer thread owning short transactions with bounded per-lane queues, round-robin fairness, total deadline enforcement, and fail-closed fatal writer state on commit/rollback I/O errors.
 - **OB-013**: Source-scoped durable inbox deduplication (`channel/tenant/app/profile`) committing Task, budget, inbox, event, and outbox atomically in one transaction.
 - **OB-014**: Complete 11×11 Task state transition matrix with version CAS, `OutcomeVerifier` (DIAGNOSIS/PATCH/TEST artifact and unresolved operation/approval/budget checks), cancellation guard (`RECONCILING` when `UNKNOWN`/`DISPATCHING` operations exist), and `resume_reconciled` quarantine verification.
+- **OB-015 (`IN_PROGRESS`)**: Single-instance daemon lock handoff and task scheduler (`services/core/src/openbot/application/scheduler.py`, `native/supervisor/src/instance_lock.rs`, and `tests/integration/storage/test_scheduler.py`, 2 passed):
+  1. `SingleInstanceSupervisorLock` & `DaemonHandoffTicket`: Supervisor acquires non-blocking `flock(LOCK_EX | LOCK_NB)` on `profile.lock` and mints a handoff ticket verified by the child daemon without re-locking (preventing self-deadlock); competing instances fail immediately with `PROFILE_LOCK_HELD`.
+  2. `ProfileSchedulerService`: Refuses scheduling when `old_workers_isolated=False`, enforces single active `RUNNING` task per profile with slot release on `WAITING_APPROVAL`, and rejects stale `runtime_epoch` or `fencing_token` submissions.
 - **OB-016 (`IN_PROGRESS`)**: Durable resource leases (`WORKSPACE`, `BROWSER_PROFILE`, `DESKTOP_SESSION`, `EXTERNAL_ACCOUNT`) with deterministic lock ordering, monotonic `fencing_token`, single active Task FIFO session queueing, atomic release on `WAITING_APPROVAL`, workspace generation re-verification, and `UNKNOWN` quarantine enforcement.
 - **OB-021 (`IN_PROGRESS`)**: Control-owned durable outbox (`services/core/src/openbot/storage/outbox.py` and `services/core/src/openbot/application/outbox.py`) without `tenacity` decorators:
   1. Monotonic `revision` per `(target_key, semantic_key)`, progress coalescing (`UPSERT_REVISION` marks older `PENDING` rows `SUPERSEDED`), and terminal state protection (rejecting non-terminal progress after terminal state and preventing late/duplicate receipts from regressing higher revisions).
