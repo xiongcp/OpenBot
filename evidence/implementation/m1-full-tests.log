@@ -1,0 +1,6 @@
+..........................s............................................. [ 42%]
+........................................................................ [ 84%]
+..........................                                               [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/components/native_poc/test_docker.py:45: Requires explicit native Docker qualification command
+169 passed, 1 skipped in 3.87s

@@ -1,0 +1,35 @@
+# 实施日志
+
+## 2026-11-04
+
+- 已读取 README、AGENTS、持续实施提示、范围/计划、组件策略/资格与 M0 任务卡；盘点真实仓库与环境。
+- 采用执行计划、测试驱动、文件化进度与完成前验证技能；原设计保持权威，常规步骤不请求重复授权。
+- 下一步：保存初始设计 hash，完成 OB-001 决策与场景评审，再按依赖推进。
+- 已保存初始文件 hash；新增范围、信任和实施合同 ADR；Python 3.12.12 安装在仓库内，M0 最小组锁定并安装。
+- Bootstrap 三个行为测试 RED（模块不存在）→GREEN（Python 3.12）；系统 3.9 不属于目标基线，不适配其语法。
+- 标准合同测试已先失败；首次实现暴露 referencing Specification 无 id 属性，改用显式 Draft URI，继续验证。
+- uv 在默认缓存权限失败，改仓库缓存后遇 macOS 沙箱系统配置 panic；仅安装步骤提权后成功，未修改系统 Python。
+- Docker desktop-linux socket 不存在；OB-093 容器实测待可用专用后端，不启动用户服务。
+- 当前全套 91 测试通过，ruff 与 mypy 通过；标准合同及 PoC 两轮只读评审发现的问题均先补 RED 反例再修复。
+- PoC 已加入真实进程退出、独立 marker 账本、第二事务、参数复验、旧 runtime 隔离、重启时间证据、UNKNOWN quarantine 和 CONSUMED 替换/删除反例。
+- M0 基础 CI 已配置三 OS；本轮仅 macOS ARM64 实测，Windows/Linux 尚未执行，因此 OB-005 的整项原生验证保留阻塞，依赖它的本地实现与整项验收分开记录。
+- M1 独立 .venv-m1 已完成 9 项实际 OpenAI/httpx 回环与 audit probe 测试；发现 SDK 读取公共 SystemVersion.plist，限制为该精确文件只读，网络/子进程 canary 仍拒绝。SDK运行能力未启用。
+- 正式 SQLite 迁移、writer、inbox/state 子集已加入；当前 23 个存储测试通过，含真实迁移子进程退出、commit/rollback 双故障、fatal writer、100 次作用域去重和 Task/event/outbox 回滚。
+- M1 state 的成功/核对恢复仍等待正式 OutcomeVerifier；没有冒充完整 Task 生命周期或 OB-029。
+- 已读取新版 AGENTS 的 Context7 要求；jsonschema、OpenAI SDK、CPython sqlite3 API 均经 Context7 原始文档核对。
+- 两次补丁因 ruff 格式化后的上下文不匹配而未应用；已读取实际行后重新做最小补丁，没有覆盖原文件规避校验。
+- 初次 M1 probe 失败时资格被保留 PROBE_FAILED；仅在 set -e 的实际全部通过后重新生成 LOCAL_TESTED 记录。后续记录必须先确认 exit code，不能只看日志存在。
+- SDK、状态与 schema 只读评审的四项重要问题已补失败反例并修复：非法 usage、通用取消终态、跨 Task 请求 ID 冲突、隐藏引用目标。
+- 后续只读复检发现 Docker Desktop Engine 已可访问；固定官方 Alpine digest 后，以独立空 Docker config 运行合成资源，不使用已有企业镜像。
+- 容器内存压力夹具第一版未触发 OOM，记录失败；改为有明确增长的 128 MiB 分配后观察 exit 137/OOMKilled。8 项测试通过，登记的 4 个容器均按 ID 清理，证据位于 native-container.json；不等于完整 Supervisor 或三 OS 资格。
+- 本轮恢复时再次把阶段字段误写为 phase，真实字段为 milestone；只读盘点已更正，没有修改任务定义。
+- SDK 补连接断开、307 重定向、服务端工具提案 canary 和流内 deadline；当前回环合同 18 passed，未产生隐藏请求或工具效果。
+- Inbox 加入真正子进程 os._exit 的提交前/提交后 ACK 前崩溃，恢复后同事件重试仍只有一个 Task/inbox/event/outbox/budget；当前存储套件 27 passed。
+- 修正 ADR、组件选择和 backend-capabilities 中过时的 Docker 不可用描述，保留未实现的 Supervisor/旧执行域资格，不以环境为由掩盖工程待办。
+- 已按原 component_refs/reuse_notes 推进 OB-017/018 的独立本地提案/决定部分；没有新增依赖。先补模块缺失 RED，再增加权威 canonical 提案列及内部审批服务，审批仅 READY、不生成 Attempt。
+- SQLite ALTER 实测会内部调用 quick_check；已限定为当前 ADD COLUMN 同表 main 的只读检查，显式 PRAGMA 仍拒绝；未放宽 FK、事务或 ATTACH 守卫。两份旧测试夹具的后续迁移编号由 2 调整为 3，保留原失败场景。
+- 审批端口目前仅 local/internal，持久 challenge、安全预览/API 仍不可用；跨控制进程没有可信时间证据时旧敏感授权拒绝。正式 claim/recovery 仍待实现，保持任务 IN_PROGRESS。
+- 审批新增去重反例暴露相同 request_id 结果回读未绑定客户端作用域；已补 RED 并把可信 source_scope 纳入请求指纹，当前 19 项审批测试通过。新增审批子集已交独立只读评审。
+- 文件探针 canary 先实际读到了合成工作区私有文件（RED），现将整个工作区白名单缩为源码/包元数据与已锁解释器/venv；4 项探针 GREEN。未读取真实秘密，未扩大公共系统元数据例外。
+- 独立审批审查发现 canonical Operation ID 与 SQL 主键漏比对；自查发现 schema 异常链可能打印 nonce。两个失败反例均已修复，合成 nonce 的 RED 摘录明确脱敏，正式异常不再带原始值。
+- 当前完整本机验证：M0 150 passed/3 skipped；M1 169 passed/1 skipped；存储子集 49 passed；容器独立资格 8 passed。lint/format/mypy/组件及原设计/DDL检查通过。未通过 OB-029，未进入 M3 验收。

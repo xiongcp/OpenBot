@@ -1,0 +1,6 @@
+{
+  "version": "1.2",
+  "kind": "SOURCE_REUSE_LEDGER",
+  "entries": [],
+  "note": "This design package does not copy or patch candidate upstream application source. NO_COPY is a valid audited decision for OB-094/095."
+}

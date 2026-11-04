@@ -1,0 +1,1535 @@
+{
+  "scope": "M0 protocol only; synthetic worker; not OS isolation",
+  "platform": [
+    "Darwin",
+    "arm64"
+  ],
+  "python": "3.12.12 (main, Jan 14 2026, 23:36:32) [Clang 21.1.4 ]",
+  "sqlite": "3.50.4",
+  "scenarios": [
+    {
+      "seed": 7,
+      "fault": "before_claim",
+      "before": {
+        "task": "QUEUED",
+        "operation": "READY",
+        "approval": "APPROVED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "QUEUED",
+        "operation": "READY",
+        "approval": "APPROVED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ]
+        ]
+      },
+      "final": {
+        "task": "SUCCEEDED",
+        "operation": "SUCCEEDED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            2,
+            "SUCCEEDED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OPERATION_FINISHED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OPERATION_FINISHED"
+          ]
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "fault": "claim_before_commit",
+      "before": {
+        "task": "QUEUED",
+        "operation": "READY",
+        "approval": "APPROVED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "QUEUED",
+        "operation": "READY",
+        "approval": "APPROVED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ]
+        ]
+      },
+      "final": {
+        "task": "SUCCEEDED",
+        "operation": "SUCCEEDED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            2,
+            "SUCCEEDED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OPERATION_FINISHED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OPERATION_FINISHED"
+          ]
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "fault": "claim_after_commit",
+      "before": {
+        "task": "QUEUED",
+        "operation": "CLAIMED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "CLAIMED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "QUEUED",
+        "operation": "READY",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "ABORTED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "SAFE_RETRY_READY"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "SAFE_RETRY_READY"
+          ]
+        ]
+      },
+      "final": {
+        "task": "SUCCEEDED",
+        "operation": "SUCCEEDED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "ABORTED"
+          ],
+          [
+            2,
+            "dsp_seed7_2",
+            2,
+            "SUCCEEDED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "SAFE_RETRY_READY"
+          ],
+          [
+            6,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            7,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            8,
+            "OPERATION_FINISHED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "SAFE_RETRY_READY"
+          ],
+          [
+            "6",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "7",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "8",
+            "OPERATION_FINISHED"
+          ]
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "fault": "dispatch_before_commit",
+      "before": {
+        "task": "QUEUED",
+        "operation": "CLAIMED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "CLAIMED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "QUEUED",
+        "operation": "READY",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "ABORTED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "SAFE_RETRY_READY"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "SAFE_RETRY_READY"
+          ]
+        ]
+      },
+      "final": {
+        "task": "SUCCEEDED",
+        "operation": "SUCCEEDED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "ABORTED"
+          ],
+          [
+            2,
+            "dsp_seed7_2",
+            2,
+            "SUCCEEDED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "SAFE_RETRY_READY"
+          ],
+          [
+            6,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            7,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            8,
+            "OPERATION_FINISHED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "SAFE_RETRY_READY"
+          ],
+          [
+            "6",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "7",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "8",
+            "OPERATION_FINISHED"
+          ]
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "fault": "dispatch_after_commit",
+      "before": {
+        "task": "QUEUED",
+        "operation": "DISPATCHING",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "RECONCILING",
+        "operation": "UNKNOWN",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [
+          "workspace:seed7"
+        ],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OUTCOME_UNKNOWN"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OUTCOME_UNKNOWN"
+          ]
+        ]
+      },
+      "final": {
+        "task": "RECONCILING",
+        "operation": "UNKNOWN",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [
+          "workspace:seed7"
+        ],
+        "effects": 0,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OUTCOME_UNKNOWN"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OUTCOME_UNKNOWN"
+          ]
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "fault": "effect_after_success",
+      "before": {
+        "task": "QUEUED",
+        "operation": "DISPATCHING",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "RECONCILING",
+        "operation": "UNKNOWN",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [
+          "workspace:seed7"
+        ],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OUTCOME_UNKNOWN"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OUTCOME_UNKNOWN"
+          ]
+        ]
+      },
+      "final": {
+        "task": "RECONCILING",
+        "operation": "UNKNOWN",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [
+          "workspace:seed7"
+        ],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OUTCOME_UNKNOWN"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OUTCOME_UNKNOWN"
+          ]
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "fault": "result_before_commit",
+      "before": {
+        "task": "QUEUED",
+        "operation": "DISPATCHING",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "RECONCILING",
+        "operation": "UNKNOWN",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [
+          "workspace:seed7"
+        ],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OUTCOME_UNKNOWN"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OUTCOME_UNKNOWN"
+          ]
+        ]
+      },
+      "final": {
+        "task": "RECONCILING",
+        "operation": "UNKNOWN",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "DISPATCHING"
+          ]
+        ],
+        "quarantine": [
+          "workspace:seed7"
+        ],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OUTCOME_UNKNOWN"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OUTCOME_UNKNOWN"
+          ]
+        ]
+      }
+    },
+    {
+      "seed": 7,
+      "fault": "result_after_commit",
+      "before": {
+        "task": "SUCCEEDED",
+        "operation": "SUCCEEDED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "SUCCEEDED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OPERATION_FINISHED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OPERATION_FINISHED"
+          ]
+        ]
+      },
+      "recovered": {
+        "task": "SUCCEEDED",
+        "operation": "SUCCEEDED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "SUCCEEDED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OPERATION_FINISHED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OPERATION_FINISHED"
+          ]
+        ]
+      },
+      "final": {
+        "task": "SUCCEEDED",
+        "operation": "SUCCEEDED",
+        "approval": "CONSUMED",
+        "provider_key": "provider:op_seed7",
+        "attempts": [
+          [
+            1,
+            "dsp_seed7_1",
+            1,
+            "SUCCEEDED"
+          ]
+        ],
+        "quarantine": [],
+        "effects": 1,
+        "events": [
+          [
+            1,
+            "TASK_QUEUED"
+          ],
+          [
+            2,
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            3,
+            "APPROVAL_DECIDED"
+          ],
+          [
+            4,
+            "OPERATION_CLAIMED"
+          ],
+          [
+            5,
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            6,
+            "OPERATION_FINISHED"
+          ]
+        ],
+        "outbox": [
+          [
+            "1",
+            "TASK_QUEUED"
+          ],
+          [
+            "2",
+            "APPROVAL_REQUESTED"
+          ],
+          [
+            "3",
+            "APPROVAL_DECIDED"
+          ],
+          [
+            "4",
+            "OPERATION_CLAIMED"
+          ],
+          [
+            "5",
+            "OPERATION_DISPATCHING"
+          ],
+          [
+            "6",
+            "OPERATION_FINISHED"
+          ]
+        ]
+      }
+    }
+  ]
+}

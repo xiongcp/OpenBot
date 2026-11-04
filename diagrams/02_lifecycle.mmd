@@ -1,0 +1,12 @@
+flowchart TB
+  OS["OS 用户级服务管理器"] --> SUP["Native Supervisor 单实例与受管资源"]
+  SUP --> D["OpenBot Daemon 常驻运行"]
+  D --> G["独立 Gateway"]
+  D --> W["隔离 Workers"]
+  UI["CLI / Tauri 客户端"] -->|连接或重连| D
+  UI --> CLOSE["关闭窗口 仅关闭显示层"]
+  CLOSE --> KEEP["后台任务与审批继续"]
+  STOP["显式停止 OpenBot 服务"] --> DRAIN["停止接单 撤销待派发"]
+  DRAIN --> REAP["回收 Workers 提交并关闭"]
+  RESTART["服务重启"] --> EPOCH["新 runtime_epoch 旧许可失效"]
+  EPOCH --> RECOVER["读取权威状态 恢复或核对"]

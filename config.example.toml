@@ -1,0 +1,65 @@
+# OpenBot design example. Not a runnable release configuration.
+schema_version = "1.2"
+profile_id = "pro_localdemo"
+
+[runtime]
+max_active_tasks = 1
+default_network_mode = "LOCAL_MODEL"
+default_max_steps = 25
+default_task_timeout_seconds = 600
+host_execution_enabled = false
+
+[storage]
+journal_mode = "WAL"
+synchronous = "FULL"
+writer_queue_limit = 256
+# Actual per-request wait must be bounded by remaining callback deadline.
+busy_timeout_ms = 250
+
+[model]
+# Adapter policy fields; map to the pinned SDK API, not arbitrary passthrough.
+sdk_max_retries = 0
+retry_owner = "model_gateway"
+allow_auto_tool_runner = false
+require_local_execution_evidence = true
+provider = "local"
+endpoint = "http://127.0.0.1:11434"
+cloud_fallback = false
+# Fill from capability-tested local model, never from an assumed universal tool model.
+model_name = "CONFIGURE_AND_VALIDATE_LOCALLY"
+secret_ref = ""
+
+[feishu]
+enabled = false
+region = "feishu"
+tenant_id = ""
+app_id = ""
+secret_ref = ""
+group_execution_enabled = false
+max_active_gateway = 1
+
+[execution]
+required_backend = "isolated-container"
+allow_network_by_default = false
+mount_user_home = false
+mount_docker_socket = false
+default_tool_timeout_seconds = 60
+
+[artifacts]
+preview_max_bytes = 8192
+max_object_bytes = 20971520
+max_task_bytes = 104857600
+
+[approvals]
+default_ttl_seconds = 900
+allow_remote_policy_change = false
+allow_blanket_session_approval = false
+
+
+[components]
+catalog_path = "components/catalog.json"
+qualification_manifest = "" # Populate from actual qualified build; design catalog is not runtime authorization.
+allow_runtime_downloads = false
+
+[observability]
+external_exporter_enabled = false

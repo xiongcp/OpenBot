@@ -1,0 +1,14 @@
+# 合同使用说明
+
+本目录是设计合同。schema_version为1.1，OpenAPI版本为3.1.0。openapi.yaml使用JSON语法，JSON是YAML的合法子集；请用JSON或YAML解析器读取，不依赖手工文本替换。
+
+model-tool-call.schema.json是模型输出边界，只接收tool_name和args；tool-proposal.schema.json是服务端创建的不可变提案。身份、风险、policy、retry_class和授权信息不能由模型直接提供。
+
+通用args对象仍必须通过具体Tool Manifest的参数schema验证。通用RuntimeEvent payload也必须按event_type使用公开字段allowlist；不能把任意内部对象直接序列化到SSE。
+
+binding_hash计算时排除binding_hash字段自身；所有其他绑定字段使用约定canonicalization。示例hash仅验证格式，不是有效授权。Approval nonce原值只经受保护交互传递，数据库存摘要；它不是飞书卡片更新token。
+
+state-machine.json定义允许的迁移边与文字guard。实现必须同时检查guard，不能只看边存在就放行。CLAIMED->READY与UNKNOWN->READY只有恢复器在规定证据和权限条件满足时可用；终态不因UI刷新而复活。
+
+兼容性文件是模板，状态标为EXAMPLE_NOT_A_VALIDATED_RELEASE。真正发布前必须填入已锁定并实测的版本，不允许混用不同MCP版本字段。
+

@@ -1,0 +1,102 @@
+{
+  "version": "1.2",
+  "status": "NOT_RUN",
+  "scenarios": [
+    {
+      "qualification_id": "Q01",
+      "title": "导入与离线资产",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q02",
+      "title": "JCS与严格JSON",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q03",
+      "title": "DTO与Schema",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q04",
+      "title": "模型SDK与计费",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q05",
+      "title": "SQLite与事务",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q06",
+      "title": "搜索与补丁",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q07",
+      "title": "Parser隔离",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q08",
+      "title": "容器后端",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q09",
+      "title": "原生进程与会话",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q10",
+      "title": "飞书SDK与回调",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q11",
+      "title": "Browser边界",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q12",
+      "title": "MCP边界",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q13",
+      "title": "凭据与数据出口",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q14",
+      "title": "源码摘取",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q15",
+      "title": "发布与SBOM",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    },
+    {
+      "qualification_id": "Q16",
+      "title": "最小崩溃协议PoC",
+      "status": "NOT_RUN",
+      "specification": "docs/13_component_qualification.md"
+    }
+  ]
+}

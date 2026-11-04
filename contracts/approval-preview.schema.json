@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "approval-preview.schema.json",
+  "title": "approval-preview.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.1"
+    },
+    "approval_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "operation_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "task_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "status": {
+      "$ref": "./common.schema.json#/$defs/ApprovalState"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "binding_hash": {
+      "$ref": "./common.schema.json#/$defs/Hash"
+    },
+    "tool_display_name": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "impact_summary": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "display_preview": {
+      "type": "string",
+      "maxLength": 12000
+    },
+    "sensitive_details_omitted": {
+      "type": "boolean"
+    },
+    "decision_surface": {
+      "enum": [
+        "REMOTE_ALLOWED",
+        "LOCAL_REQUIRED"
+      ]
+    },
+    "expires_at_ms": {
+      "$ref": "./common.schema.json#/$defs/UtcMs"
+    },
+    "challenge_available": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "approval_id",
+    "operation_id",
+    "task_id",
+    "status",
+    "version",
+    "binding_hash",
+    "tool_display_name",
+    "impact_summary",
+    "display_preview",
+    "sensitive_details_omitted",
+    "decision_surface",
+    "expires_at_ms",
+    "challenge_available"
+  ],
+  "additionalProperties": false
+}

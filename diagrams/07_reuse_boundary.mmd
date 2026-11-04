@@ -1,0 +1,35 @@
+flowchart TB
+  subgraph PATH["组件接入与运行边界"]
+    direction LR
+    C["自研权威控制面：身份、策略、审批、状态与恢复"]
+    P["类型化 Ports：权限、副作用、期限、取消与结果合同"]
+    A["已准入 SDK / 原语：精确锁定、显式装配、单一生命周期所有者"]
+    E["隔离执行域：受限 Worker、独立 Gateway、Supervisor 管理资源"]
+    C --> P --> A --> E
+  end
+  subgraph GATE["组件门禁"]
+    direction TB
+    G1["来源 / 锁定：版本、哈希、许可证"]
+    G2["副作用 / 合同：重试、出口、清理与测试"]
+    G3["目标平台：原生探针、能力与限制"]
+    G4["启用：按阶段与受测组合"]
+    G1 --> G2 --> G3 --> G4
+  end
+  G4 -.->|准入结果控制启用| A
+  subgraph TIERS["复用层级"]
+    direction TB
+    T1["默认适配：官方 SDK、keyring、structlog；仍需准入"]
+    T2["条件候选：容器、进程与服务适配、离线检测、OTel、权限插件"]
+    T3["源码参考：nanobot 通道与卡片、browser-use 提取思路；不引入 Agent 循环"]
+    T1 ~~~ T2 ~~~ T3
+  end
+  N["MCP / 浏览器本身不是沙箱；UNKNOWN 只核对、不自动重发"]
+  E --- N
+  classDef authority fill:#EFF5FA,stroke:#153247,color:#153247
+  classDef admitted fill:#EAF7F5,stroke:#087F85,color:#153247
+  classDef candidate fill:#FFF5E3,stroke:#9A5A08,color:#243F51
+  classDef reference fill:#F6F8FA,stroke:#667A89,color:#243F51
+  class C,P authority
+  class A,E,T1 admitted
+  class T2 candidate
+  class G1,G2,G3,G4,T3,N reference

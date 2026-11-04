@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.schema.json",
+  "title": "common.schema.json",
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*_[A-Za-z0-9][A-Za-z0-9_-]{3,95}$"
+    },
+    "Hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "UtcMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "TaskState": {
+      "enum": [
+        "QUEUED",
+        "RUNNING",
+        "WAITING_APPROVAL",
+        "WAITING_INPUT",
+        "WAITING_RESOURCE",
+        "RECONCILING",
+        "PAUSED",
+        "SUCCEEDED",
+        "PARTIAL",
+        "FAILED",
+        "CANCELLED"
+      ]
+    },
+    "OperationState": {
+      "enum": [
+        "PROPOSED",
+        "AWAITING_APPROVAL",
+        "READY",
+        "CLAIMED",
+        "DISPATCHING",
+        "SUCCEEDED",
+        "FAILED",
+        "REJECTED",
+        "EXPIRED",
+        "REVOKED",
+        "CANCELLED",
+        "UNKNOWN"
+      ]
+    },
+    "ApprovalState": {
+      "enum": [
+        "PENDING",
+        "APPROVED",
+        "DENIED",
+        "EXPIRED",
+        "REVOKED",
+        "CONSUMED"
+      ]
+    },
+    "RetryClass": {
+      "enum": [
+        "SAFE_READ",
+        "IDEMPOTENT_WRITE",
+        "PROVIDER_IDEMPOTENT",
+        "RECONCILE_ONLY",
+        "NON_RETRYABLE"
+      ]
+    },
+    "DataClass": {
+      "enum": [
+        "PUBLIC",
+        "WORKSPACE",
+        "SENSITIVE",
+        "SECRET"
+      ]
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]+$"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "trace_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*_[A-Za-z0-9][A-Za-z0-9_-]{3,95}$"
+        },
+        "details": {
+          "type": "object",
+          "maxProperties": 30
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "trace_id"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

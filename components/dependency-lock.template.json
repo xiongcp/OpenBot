@@ -1,0 +1,31 @@
+{
+  "kind": "TEMPLATE_NOT_A_LOCKFILE",
+  "design_version": "1.2",
+  "resolutions": [],
+  "required_resolution_fields": [
+    "component_id",
+    "package_name",
+    "version_or_commit",
+    "platform",
+    "features",
+    "source_url",
+    "sha256",
+    "license_expression",
+    "license_evidence",
+    "dependency_group",
+    "qualification_evidence"
+  ],
+  "groups": [
+    "dev-contracts",
+    "core",
+    "provider-openai",
+    "provider-ollama",
+    "feishu",
+    "tools-file",
+    "executor-container",
+    "browser",
+    "mcp",
+    "desktop",
+    "p2"
+  ]
+}

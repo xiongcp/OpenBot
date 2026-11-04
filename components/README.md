@@ -1,0 +1,11 @@
+# 组件目录的使用规则
+
+catalog.json记录设计选择，catalog.schema.json只描述本轮未实施的设计目录。所有pinned_release、artifact_sha256为空，qualification_state为NOT_RUN，runtime_enabled为false。这些值是如实记录当前状态，不是待随意翻转的功能开关。
+
+实施OB-089时建立独立的准入记录和构建门禁；组件通过精确版本、许可证、配置、Q场景与目标平台验证后，实际release manifest才可引用它。不可把设计目录原地改成运行时授权数据库。组件目录仅用于工程决策与验收，运行期仍通过既有Tool Registry、Policy和Capability Probe执行。
+
+任务中的component_refs可能包含默认件、替代件或禁止项。请先读取decision：DEFAULT_ADAPTER也须完成资格验证；GATED_CANDIDATE先PoC；REFERENCE_ONLY默认不复制；DEFERRED等待所属阶段；REJECTED_MVP不可作为MVP实现路径。
+
+CATALOG.md是JSON的可读视图。依赖锁模板不是真实lockfile；source-reuse-ledger当前为空，NO_COPY是合法且需说明理由的决策。直接使用包与复制上游代码都需要来源记录，但维护责任不同。
+
+更新此目录时同时更新相关任务、ADR、来源证据和验证记录。运行validation/verify_components.py检查ID、引用和未实施状态；它不代替真实库、网络、进程或平台验证。

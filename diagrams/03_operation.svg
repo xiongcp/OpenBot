@@ -1,0 +1,557 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="1584pt" height="1526.4pt" viewBox="0 0 1584 1526.4" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <title>03_operation</title>
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:title>03_operation</dc:title>
+    <dc:date>2026-11-04T06:30:18.799070</dc:date>
+    <dc:description>OpenBot engineering architecture, editable vector shapes and text</dc:description>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 1526.4 
+L 1584 1526.4 
+L 1584 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="line2d_1">
+    <path d="M 64.8 146.16 
+L 1519.2 146.16 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #cbd6de; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="patch_2">
+    <path d="M 576 180 
+L 1008 180 
+Q 1022.4 180 1022.4 194.4 
+L 1022.4 280.8 
+Q 1022.4 295.2 1008 295.2 
+L 576 295.2 
+Q 561.6 295.2 561.6 280.8 
+L 561.6 194.4 
+Q 561.6 180 576 180 
+z
+" clip-path="url(#p11110f5914)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 72 424.8 
+L 482.4 424.8 
+Q 496.8 424.8 496.8 439.2 
+L 496.8 547.2 
+Q 496.8 561.6 482.4 561.6 
+L 72 561.6 
+Q 57.6 561.6 57.6 547.2 
+L 57.6 439.2 
+Q 57.6 424.8 72 424.8 
+z
+" clip-path="url(#p11110f5914)" style="fill: #fff5e3; stroke: #9a5a08; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 590.4 424.8 
+L 993.6 424.8 
+Q 1008 424.8 1008 439.2 
+L 1008 547.2 
+Q 1008 561.6 993.6 561.6 
+L 590.4 561.6 
+Q 576 561.6 576 547.2 
+L 576 439.2 
+Q 576 424.8 590.4 424.8 
+z
+" clip-path="url(#p11110f5914)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 1101.6 424.8 
+L 1512 424.8 
+Q 1526.4 424.8 1526.4 439.2 
+L 1526.4 547.2 
+Q 1526.4 561.6 1512 561.6 
+L 1101.6 561.6 
+Q 1087.2 561.6 1087.2 547.2 
+L 1087.2 439.2 
+Q 1087.2 424.8 1101.6 424.8 
+z
+" clip-path="url(#p11110f5914)" style="fill: #fff0f0; stroke: #a83e43; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 590.4 662.4 
+L 993.6 662.4 
+Q 1008 662.4 1008 676.8 
+L 1008 777.6 
+Q 1008 792 993.6 792 
+L 590.4 792 
+Q 576 792 576 777.6 
+L 576 676.8 
+Q 576 662.4 590.4 662.4 
+z
+" clip-path="url(#p11110f5914)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 1101.6 648 
+L 1512 648 
+Q 1526.4 648 1526.4 662.4 
+L 1526.4 806.4 
+Q 1526.4 820.8 1512 820.8 
+L 1101.6 820.8 
+Q 1087.2 820.8 1087.2 806.4 
+L 1087.2 662.4 
+Q 1087.2 648 1101.6 648 
+z
+" clip-path="url(#p11110f5914)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 590.4 885.6 
+L 993.6 885.6 
+Q 1008 885.6 1008 900 
+L 1008 1051.2 
+Q 1008 1065.6 993.6 1065.6 
+L 590.4 1065.6 
+Q 576 1065.6 576 1051.2 
+L 576 900 
+Q 576 885.6 590.4 885.6 
+z
+" clip-path="url(#p11110f5914)" style="fill: #eff5fa; stroke: #153247; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 72 1166.4 
+L 482.4 1166.4 
+Q 496.8 1166.4 496.8 1180.8 
+L 496.8 1274.4 
+Q 496.8 1288.8 482.4 1288.8 
+L 72 1288.8 
+Q 57.6 1288.8 57.6 1274.4 
+L 57.6 1180.8 
+Q 57.6 1166.4 72 1166.4 
+z
+" clip-path="url(#p11110f5914)" style="fill: #eaf7f5; stroke: #087f85; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 590.4 1166.4 
+L 993.6 1166.4 
+Q 1008 1166.4 1008 1180.8 
+L 1008 1274.4 
+Q 1008 1288.8 993.6 1288.8 
+L 590.4 1288.8 
+Q 576 1288.8 576 1274.4 
+L 576 1180.8 
+Q 576 1166.4 590.4 1166.4 
+z
+" clip-path="url(#p11110f5914)" style="fill: #fff0f0; stroke: #a83e43; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 1101.6 1166.4 
+L 1512 1166.4 
+Q 1526.4 1166.4 1526.4 1180.8 
+L 1526.4 1274.4 
+Q 1526.4 1288.8 1512 1288.8 
+L 1101.6 1288.8 
+Q 1087.2 1288.8 1087.2 1274.4 
+L 1087.2 1180.8 
+Q 1087.2 1166.4 1101.6 1166.4 
+z
+" clip-path="url(#p11110f5914)" style="fill: #fff5e3; stroke: #9a5a08; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 1101.6 1324.8 
+L 1512 1324.8 
+Q 1526.4 1324.8 1526.4 1339.2 
+L 1526.4 1447.2 
+Q 1526.4 1461.6 1512 1461.6 
+L 1101.6 1461.6 
+Q 1087.2 1461.6 1087.2 1447.2 
+L 1087.2 1339.2 
+Q 1087.2 1324.8 1101.6 1324.8 
+z
+" clip-path="url(#p11110f5914)" style="fill: #fff5e3; stroke: #9a5a08; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 72 1324.8 
+L 993.6 1324.8 
+Q 1008 1324.8 1008 1339.2 
+L 1008 1447.2 
+Q 1008 1461.6 993.6 1461.6 
+L 72 1461.6 
+Q 57.6 1461.6 57.6 1447.2 
+L 57.6 1339.2 
+Q 57.6 1324.8 72 1324.8 
+z
+" clip-path="url(#p11110f5914)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 561.6 237.6 
+L 277.2 237.6 
+L 277.2 424.8 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_3">
+    <path d="M 1022.4 237.6 
+L 1306.8 237.6 
+L 1306.8 424.8 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #a83e43; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_4">
+    <path d="M 792 295.2 
+L 792 424.8 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_5">
+    <path d="M 496.8 493.2 
+L 576 493.2 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_6">
+    <path d="M 792 561.6 
+L 792 662.4 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_7">
+    <path d="M 792 792 
+L 792 885.6 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_8">
+    <path d="M 792 1065.6 
+L 792 1101.6 
+L 277.2 1101.6 
+L 277.2 1166.4 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_9">
+    <path d="M 792 1101.6 
+L 792 1166.4 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #a83e43; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_10">
+    <path d="M 792 1101.6 
+L 1306.8 1101.6 
+L 1306.8 1166.4 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #9a5a08; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_11">
+    <path d="M 1306.8 1288.8 
+L 1306.8 1324.8 
+" clip-path="url(#p11110f5914)" style="fill: none; stroke: #9a5a08; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 277.2 424.8 
+L 271.44 412.56 
+L 282.96 412.56 
+z
+" clip-path="url(#p11110f5914)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 1306.8 424.8 
+L 1301.04 412.56 
+L 1312.56 412.56 
+z
+" clip-path="url(#p11110f5914)" style="fill: #a83e43; stroke: #a83e43; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 792 424.8 
+L 786.24 412.56 
+L 797.76 412.56 
+z
+" clip-path="url(#p11110f5914)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_17">
+    <path d="M 576 493.2 
+L 563.76 498.96 
+L 563.76 487.44 
+z
+" clip-path="url(#p11110f5914)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_18">
+    <path d="M 792 662.4 
+L 786.24 650.16 
+L 797.76 650.16 
+z
+" clip-path="url(#p11110f5914)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_19">
+    <path d="M 792 885.6 
+L 786.24 873.36 
+L 797.76 873.36 
+z
+" clip-path="url(#p11110f5914)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_20">
+    <path d="M 277.2 1166.4 
+L 271.44 1154.16 
+L 282.96 1154.16 
+z
+" clip-path="url(#p11110f5914)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_21">
+    <path d="M 792 1166.4 
+L 786.24 1154.16 
+L 797.76 1154.16 
+z
+" clip-path="url(#p11110f5914)" style="fill: #a83e43; stroke: #a83e43; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_22">
+    <path d="M 1306.8 1166.4 
+L 1301.04 1154.16 
+L 1312.56 1154.16 
+z
+" clip-path="url(#p11110f5914)" style="fill: #9a5a08; stroke: #9a5a08; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_23">
+    <path d="M 1306.8 1324.8 
+L 1301.04 1312.56 
+L 1312.56 1312.56 
+z
+" clip-path="url(#p11110f5914)" style="fill: #9a5a08; stroke: #9a5a08; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_1">
+    <text style="font-size: 54.72px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #243f51" x="64.8" y="74.99925" transform="rotate(-0 64.8 74.99925)">Operation 执行与恢复边界</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 25.2px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #667a89" x="67.68" y="125.222625" transform="rotate(-0 67.68 125.222625)">批准、claim 与真正派发分别落盘；结果不明是 UNKNOWN，不能按失败自动重试。</text>
+   </g>
+   <g id="text_3">
+    <text style="font-size: 36px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="792" y="225.773438" transform="rotate(-0 792 225.773438)">PROPOSED</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 27.36px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="792" y="263.35485" transform="rotate(-0 792 263.35485)">合同校验与策略判定</text>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 25.92px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="277.2" y="467.635275" transform="rotate(-0 277.2 467.635275)">AWAITING_APPROVAL</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 27.36px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="277.2" y="508.15485" transform="rotate(-0 277.2 508.15485)">等待具体动作批准</text>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="792" y="470.783306" transform="rotate(-0 792 470.783306)">READY</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 27.36px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="792" y="508.15485" transform="rotate(-0 792 508.15485)">具备派发候选条件</text>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 36px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1306.8" y="470.573437" transform="rotate(-0 1306.8 470.573437)">REJECTED</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 24.48px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="1306.8" y="507.33855" transform="rotate(-0 1306.8 507.33855)">硬拒绝 · 不可用批准覆盖</text>
+   </g>
+   <g id="text_11">
+    <g id="patch_24">
+     <path d="M 253.226025 345.5496 
+L 301.173975 345.5496 
+Q 305.839575 345.5496 305.839575 340.884 
+L 305.839575 314.316 
+Q 305.839575 309.6504 301.173975 309.6504 
+L 253.226025 309.6504 
+Q 248.560425 309.6504 248.560425 314.316 
+L 248.560425 340.884 
+Q 248.560425 345.5496 253.226025 345.5496 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 25.92px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="277.2" y="334.9467" transform="rotate(-0 277.2 334.9467)">ASK</text>
+   </g>
+   <g id="text_12">
+    <g id="patch_25">
+     <path d="M 1273.99905 345.5496 
+L 1339.60095 345.5496 
+Q 1344.26655 345.5496 1344.26655 340.884 
+L 1344.26655 314.316 
+Q 1344.26655 309.6504 1339.60095 309.6504 
+L 1273.99905 309.6504 
+Q 1269.33345 309.6504 1269.33345 314.316 
+L 1269.33345 340.884 
+Q 1269.33345 345.5496 1273.99905 345.5496 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 25.92px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #a83e43" x="1306.8" y="334.9467" transform="rotate(-0 1306.8 334.9467)">DENY</text>
+   </g>
+   <g id="text_13">
+    <g id="patch_26">
+     <path d="M 749.051775 370.7496 
+L 834.948225 370.7496 
+Q 839.613825 370.7496 839.613825 366.084 
+L 839.613825 339.516 
+Q 839.613825 334.8504 834.948225 334.8504 
+L 749.051775 334.8504 
+Q 744.386175 334.8504 744.386175 339.516 
+L 744.386175 366.084 
+Q 744.386175 370.7496 749.051775 370.7496 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 25.92px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="792" y="360.1467" transform="rotate(-0 792 360.1467)">ALLOW</text>
+   </g>
+   <g id="text_14">
+    <g id="patch_27">
+     <path d="M 515.52 475.2594 
+L 557.28 475.2594 
+Q 561.0384 475.2594 561.0384 471.501 
+L 561.0384 450.099 
+Q 561.0384 446.3406 557.28 446.3406 
+L 515.52 446.3406 
+Q 511.7616 446.3406 511.7616 450.099 
+L 511.7616 471.501 
+Q 511.7616 475.2594 515.52 475.2594 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 20.88px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="536.4" y="466.718175" transform="rotate(-0 536.4 466.718175)">批准</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="792" y="708.383306" transform="rotate(-0 792 708.383306)">CLAIMED</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="792" y="745.119" transform="rotate(-0 792 745.119)">复验 · 首次消费授权 · 创建 attempt</text>
+   </g>
+   <g id="text_17">
+    <g id="patch_28">
+     <path d="M 730.024875 629.9496 
+L 853.975125 629.9496 
+Q 858.640725 629.9496 858.640725 625.284 
+L 858.640725 598.716 
+Q 858.640725 594.0504 853.975125 594.0504 
+L 730.024875 594.0504 
+Q 725.359275 594.0504 725.359275 598.716 
+L 725.359275 625.284 
+Q 725.359275 629.9496 730.024875 629.9496 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 25.92px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="792" y="619.3467" transform="rotate(-0 792 619.3467)">原子 claim</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1306.8" y="691.464881" transform="rotate(-0 1306.8 691.464881)">执行前再次检查</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 22.32px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(1171.704712 727.884394)">取消标记 / policy / identity</text>
+    <text style="font-size: 22.32px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(1187.607712 759.756656)">资源版本 / 一次授权 / 锁</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 33.12px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="792" y="930.533963" transform="rotate(-0 792 930.533963)">DISPATCHING</text>
+   </g>
+   <g id="text_21">
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(670.149 962.2134)">复核取消 / epoch / 资源</text>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(630.6588 996.867)">落盘本 Attempt 的 dispatch_id</text>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(676.8 1029.6522)">提交后才允许发送指令</text>
+   </g>
+   <g id="text_22">
+    <g id="patch_29">
+     <path d="M 722.88 858.3552 
+L 861.12 858.3552 
+Q 865.2672 858.3552 865.2672 854.208 
+L 865.2672 830.592 
+Q 865.2672 826.4448 861.12 826.4448 
+L 722.88 826.4448 
+Q 718.7328 826.4448 718.7328 830.592 
+L 718.7328 854.208 
+Q 718.7328 858.3552 722.88 858.3552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="792" y="848.9304" transform="rotate(-0 792 848.9304)">第二个短事务</text>
+   </g>
+   <g id="text_23">
+    <text style="font-size: 33.84px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="277.2" y="1211.543831" transform="rotate(-0 277.2 1211.543831)">SUCCEEDED</text>
+   </g>
+   <g id="text_24">
+    <text style="font-size: 25.2px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="277.2" y="1249.142625" transform="rotate(-0 277.2 1249.142625)">已获得可验证成功结果</text>
+   </g>
+   <g id="text_25">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="792" y="1212.383306" transform="rotate(-0 792 1212.383306)">FAILED</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 25.2px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="792" y="1249.142625" transform="rotate(-0 792 1249.142625)">已获得可验证失败结果</text>
+   </g>
+   <g id="text_27">
+    <text style="font-size: 36px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1306.8" y="1212.173438" transform="rotate(-0 1306.8 1212.173438)">UNKNOWN</text>
+   </g>
+   <g id="text_28">
+    <text style="font-size: 25.92px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="1306.8" y="1249.3467" transform="rotate(-0 1306.8 1249.3467)">未获得可验证终态</text>
+   </g>
+   <g id="text_29">
+    <g id="patch_30">
+     <path d="M 232.56 1149.4566 
+L 321.84 1149.4566 
+Q 325.8576 1149.4566 325.8576 1145.439 
+L 325.8576 1122.561 
+Q 325.8576 1118.5434 321.84 1118.5434 
+L 232.56 1118.5434 
+Q 228.5424 1118.5434 228.5424 1122.561 
+L 228.5424 1145.439 
+Q 228.5424 1149.4566 232.56 1149.4566 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 22.32px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="277.2" y="1140.326325" transform="rotate(-0 277.2 1140.326325)">明确成功</text>
+   </g>
+   <g id="text_30">
+    <g id="patch_31">
+     <path d="M 747.36 1149.4566 
+L 836.64 1149.4566 
+Q 840.6576 1149.4566 840.6576 1145.439 
+L 840.6576 1122.561 
+Q 840.6576 1118.5434 836.64 1118.5434 
+L 747.36 1118.5434 
+Q 743.3424 1118.5434 743.3424 1122.561 
+L 743.3424 1145.439 
+Q 743.3424 1149.4566 747.36 1149.4566 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 22.32px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #a83e43" x="792" y="1140.326325" transform="rotate(-0 792 1140.326325)">明确失败</text>
+   </g>
+   <g id="text_31">
+    <g id="patch_32">
+     <path d="M 1252.783856 1149.4566 
+L 1360.816144 1149.4566 
+Q 1364.833744 1149.4566 1364.833744 1145.439 
+L 1364.833744 1122.561 
+Q 1364.833744 1118.5434 1360.816144 1118.5434 
+L 1252.783856 1118.5434 
+Q 1248.766256 1118.5434 1248.766256 1122.561 
+L 1248.766256 1145.439 
+Q 1248.766256 1149.4566 1252.783856 1149.4566 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 22.32px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #9a5a08" x="1306.8" y="1140.326325" transform="rotate(-0 1306.8 1140.326325)">超时 / 失联</text>
+   </g>
+   <g id="text_32">
+    <text style="font-size: 25.2px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1306.8" y="1367.425406" transform="rotate(-0 1306.8 1367.425406)">先核对，禁止自动重发</text>
+   </g>
+   <g id="text_33">
+    <text style="font-size: 23.76px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="1306.8" y="1407.134475" transform="rotate(-0 1306.8 1407.134475)">远端查询或用户确认</text>
+   </g>
+   <g id="text_34">
+    <text style="font-size: 26.64px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="532.8" y="1367.845144" transform="rotate(-0 532.8 1367.845144)">CLAIMED 尚未 DISPATCHING</text>
+   </g>
+   <g id="text_35">
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(231.7212 1403.9316)">隔离旧 runtime 并确认未派发后，复验原 grant 才可排队。</text>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(257.2866 1438.7544)">同 Operation 沿用消费关系；CONSUMED 不可回退。</text>
+   </g>
+   <g id="text_36">
+    <text style="font-size: 23.76px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #667a89" x="64.8" y="1504.9656" transform="rotate(-0 64.8 1504.9656)">图中未展开过期、撤销与取消；改变参数必须创建新 Operation。</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p11110f5914">
+   <rect x="0" y="0" width="1584" height="1526.4"/>
+  </clipPath>
+ </defs>
+</svg>

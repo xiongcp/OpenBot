@@ -1,0 +1,86 @@
+{
+  "scope": "native CLI primitives only; not production worker qualification",
+  "platform": [
+    "Darwin",
+    "arm64"
+  ],
+  "image": {
+    "phase": "M1",
+    "purpose": "OB-093 synthetic native isolation PoC only",
+    "source": "https://hub.docker.com/_/alpine",
+    "requested_release": "3.24.3",
+    "repo_digest": "alpine@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a",
+    "image_id": "sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a",
+    "platform": "linux/arm64",
+    "runtime_enabled": false,
+    "preparation_log": "evidence/implementation/container-asset-prepare.log"
+  },
+  "checks": {
+    "readonly_and_no_network": true,
+    "client_exit_does_not_stop_container": true,
+    "memory_limit_enforced": true,
+    "pids_limit_enforced": true
+  },
+  "trace": [
+    {
+      "event": "create",
+      "role": "bounds",
+      "container_id": "bd547be29cdd5261981211a1d24c122ac94b26e7a7c0cf6ce7fe7504755ea85c"
+    },
+    {
+      "event": "create",
+      "role": "lifecycle",
+      "container_id": "83e2e964ffb7c992583102352b00c81d569cf77ae5552db0e5021850e512d2df"
+    },
+    {
+      "event": "client_killed_container_still_running",
+      "client_pid": 16993,
+      "container_id": "83e2e964ffb7c992583102352b00c81d569cf77ae5552db0e5021850e512d2df"
+    },
+    {
+      "event": "stop",
+      "container_id": "83e2e964ffb7c992583102352b00c81d569cf77ae5552db0e5021850e512d2df"
+    },
+    {
+      "event": "wait",
+      "container_id": "83e2e964ffb7c992583102352b00c81d569cf77ae5552db0e5021850e512d2df"
+    },
+    {
+      "event": "validated_export",
+      "container_id": "83e2e964ffb7c992583102352b00c81d569cf77ae5552db0e5021850e512d2df"
+    },
+    {
+      "event": "create",
+      "role": "memory",
+      "container_id": "475484ccf9795d62826941e0a765a04a61f0e229b8f81777749303313f661f76"
+    },
+    {
+      "event": "create",
+      "role": "pids",
+      "container_id": "b2ebea16a2c6164b316e0e33ffa58bea81410aa96f53558dcbf656be676279c6"
+    },
+    {
+      "event": "remove",
+      "container_id": "bd547be29cdd5261981211a1d24c122ac94b26e7a7c0cf6ce7fe7504755ea85c"
+    },
+    {
+      "event": "remove",
+      "container_id": "83e2e964ffb7c992583102352b00c81d569cf77ae5552db0e5021850e512d2df"
+    },
+    {
+      "event": "remove",
+      "container_id": "475484ccf9795d62826941e0a765a04a61f0e229b8f81777749303313f661f76"
+    },
+    {
+      "event": "remove",
+      "container_id": "b2ebea16a2c6164b316e0e33ffa58bea81410aa96f53558dcbf656be676279c6"
+    }
+  ],
+  "asset_package_metadata": "3.24.3\nC:Q17hOhjufinXWHIBdAPVnASE2s2WM=\nP:alpine-baselayout\nV:3.7.2-r1\nA:aarch64\nS:8265\nI:6552\nT:Alpine base dir structure and init scripts\nU:https://gitlab.alpinelinux.org/alpine/aports/-/tree/master/main/alpine-baselayout\nL:GPL-2.0-only\no:alpine-baselayout\nm:Natanael Copa <ncopa@alpinelinux.org>\nt:1774381254\nc:60a7585bbab2fa0f762504eb617dbca90216e31f\nD:alpine-baselayout-data=3.7.2-r1 /bin/sh\nq:1000\nF:dev\nF:dev/pts\nF:dev/shm\nF:etc\nR:motd\nZ:Q1SLkS9hBidUbPwwrw+XR0Whv3ww8=\nF:etc/crontabs\nR:root\na:0:0:600\nZ:Q1vfk1apUWI4yLJGhhNRd0kJixfvY=\nF:etc/modprobe.d\nR:aliases.conf\nZ:Q1WUbh6TBYNVK7e4Y+uUvLs/7viqk=\nR:blacklist.conf\nZ:Q1aOF8uBj142eLXKB+WyA7KXUVmdE=\nR:i386.conf\nZ:Q1pnay/njn6ol9cCssL7KiZZ8etlc=\nF:etc/modules-load.d\nF:etc/network\nF:etc/network/if-down.d\nF:etc/network/if-post-down.d\nF:etc/network/if-pre-up.d\nF:etc/network/if-up.d\nF:etc/opt\nF:etc/periodic\nF:etc/periodic/15min\nF:etc/periodic/daily\nF:etc/periodic/hourly\nF:etc/periodic/monthly\nF:etc/periodic/weekly\nF:etc/profile.d\nR:20locale.sh\nZ:Q1lq29lQzPmSCFKVmQ+bvmZ/DPTE4=\nR:README\nZ:Q135OWsCzzvnB2fmFx62kbqm1Ax1k=\nR:color_prompt.sh.disabled\nZ:Q11XM9mde1Z29tWMGaOkeovD/m4uU=\nF:etc/sysctl.d\nF:home\nF:lib\nF:lib/firmware\nF:lib/modules-load.d\nF:lib/sysctl.d\nF:media\nF:media/cdrom\nF:media/floppy\nF:media/usb\nF:mnt\nF:opt\nF:proc\nF:root\nM:0:0:700\nF:run\nF:run/lock\nF:sbin\nF:srv\nF:sys\nF:tmp\nM:0:0:1777\nF:usr\nF:usr/bin\nF:usr/lib\nF:usr/lib/modules-load.d\nF:usr/lib/sysctl.d\nR:00-alpine.conf\nZ:Q1HpElzW1xEgmKfERtTy7oommnq6c=\nF:usr/local\nF:usr/local/bin\nF:usr/local/lib\nF:usr/local/share\nF:usr/sbin\nF:usr/share\nF:usr/share/misc\nF:var\nR:lock\na:0:0:777\nZ:Q1AlKRzNY2tL5VHCUulI/O8Gf3f+Y=\nR:run\na:0:0:777\nZ:Q17YsfxskJinWuZ3JoRSm9MMYXz1c=\nF:var/cache\nF:var/cache/misc\nF:var/empty\nM:0:0:555\nF:var/lib\nF:var/lib/misc\nF:var/local\nF:var/log\nF:var/mail\nF:var/opt\nF:var/spool\nR:mail\na:0:0:777\nZ:Q1UjAZ8b+Ffvgl10kRbACKOtFgZTw=\nF:var/spool/cron\nR:crontabs\na:0:0:777\nZ:Q1Urj2+WCTswmFlzElXjdLVF4LQ+s=\nF:var/tmp\nM:0:0:1777\n\nC:Q1MzfIPSHI6xFODUuydeVh3TSTvbg=\nP:alpine-baselayout-data\nV:3.7.2-r1\nA:aarch64\nS:10780\nI:19034\nT:Alpine base dir structure and init scripts\nU:https://gitlab.alpinelinux.org/alpine/aports/-/tree/master/main/alpine-baselayout\nL:GPL-2.0-only\no:alpine-baselayout\nm:Natanael Copa <ncopa@alpinelinux.org>\nt:1774381254\nc:60a7585bbab2fa0f762504eb617dbca90216e31f\nr:alpine-baselayout\nq:1000\nF:etc\nR:fstab\nZ:Q11Q7hNe8QpDS531guqCdrXBzoA/o=\nR:group\nZ:Q12Otk4M39fP2Zjkobu0nC9FvlRI0=\nR:hostname\nZ:Q16nVwYVXP/tChvUPdukVD2ifXOmc=\nR:hosts\nZ:Q1BD6zJKZTRWyqGnPi4tSfd3krsMU=\nR:inittab\nZ:Q1zpWG0qzx2UYnZSWaIczE+WpAIVE=\nR:modules\nZ:Q1toogjUipHGcMgECgPJX64SwUT1M=\nR:mtab\na:0:0:777\nZ:Q1aFfANMgcqDT9yYrvPxy5ePVsaZg=\nR:nsswitch.conf\nZ:Q19DBsMnv0R2fajaTjoTv0C91NOqo=\nR:passwd\nZ:Q1r+bLonZkAyBix/HLgSeDsez22Zs=\nR:profile\nZ:Q1VN0dmawDg3mBE/ljB+6bUrC7Dzc=\nR:protocols\nZ:Q11fllRTkIm5bxsZVoSNeDUn2m+0c=\nR:services\nZ:Q1oNeiKb8En3/hfoRFImI25AJFNdA=\nR:shadow\na:0:0:640\nZ:Q1miRFe6MuYCWAiVxqiFzhddegBq4=\nR:shells\nZ:Q1ojm2YdpCJ6B/apGDaZ/Sdb2xJkA=\nR:sysctl.conf\nZ:Q14upz3tfnNxZkIEsUhWn7Xoiw96g=\n\nC:Q1ZEDSgayIcU2W6hJkHMark83sG4w=\nP:alpine-keys\nV:2.6-r0\nA:aarch64\nS:12708\nI:12510\nT:Public keys for Alpine Linux packages\nU:https://alpinelinux.org\nL:MIT\no:alpine-keys\nm:Natanael Copa <ncopa@alpinelinux.org>\nt:1758215632\nc:b9f23becced4d7b3ccc0fa0f28530243ccd314a0\nr:alpine-base\nF:etc\nF:etc/apk\nF:etc/apk/keys\nR:alpine-devel@lists.alpinelinux.org-58199dcc.rsa.pub\nZ:Q1Oaxdcsa6AYoPdLi0U4lO3J2we18=\nR:alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub\nZ:Q1V/a5P9pKRJb6tihE3e8O6xaPgLU=\nF:usr\nF:usr/share\nF:usr/share/apk\nF:usr/share/apk/keys\nR:alpine-devel@lists.alpinelinux.org-4a6a0840.rsa.pub\nZ:Q1OvCFSO94z97c80mIDCxqGkh2Og4=\nR:alpine-devel@lists.alpinelinux.org-5243ef4b.rsa.pub\nZ:Q1v7YWZYzAWoclaLDI45jEguI7YN0=\nR:alpine-devel@lists.alpinelinux.org-524d27bb.rsa.pub\nZ:Q1BTqS+H/UUyhQuzHwiBl47+BTKuU=\nR:alpine-devel@lists.alpinelinux.org-5261cecb.rsa.pub\nZ:Q1NnGuDsdQOx4ZNYfB3N97eLyGPkI=\nR:alpine-devel@lists.alpinelinux.org-58199dcc.rsa.pub\nZ:Q1Oaxdcsa6AYoPdLi0U4lO3J2we18=\nR:alpine-devel@lists.alpinelinux.org-58cbb476.rsa.pub\nZ:Q1yPq+su65ksNox3uXB+DR7P18+QU=\nR:alpine-devel@lists.alpin",
+  "memory_observation": {
+    "exit_code": 137,
+    "oom_killed": true
+  },
+  "export_sha256": "eeaf80d17bb53d3ccca97013e137cae950651f81db99ac3d1bde03a276698a0f",
+  "remaining_owned_containers": []
+}

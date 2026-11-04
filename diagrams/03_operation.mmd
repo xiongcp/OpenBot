@@ -1,0 +1,33 @@
+stateDiagram-v2
+  direction TB
+  state "PROPOSED 合同与策略检查" as Proposed
+  state "AWAITING_APPROVAL 待批准" as Await
+  state "READY 具备候选条件" as Ready
+  state "REJECTED 硬拒绝" as Rejected
+  state "CLAIMED 复验并消费授权" as Claimed
+  state "DISPATCHING 先落盘再派发" as Dispatching
+  state "SUCCEEDED 明确成功" as Succeeded
+  state "FAILED 明确失败" as Failed
+  state "UNKNOWN 结果不明" as Unknown
+  state "核对远端或请求用户确认" as Reconcile
+  [*] --> Proposed
+  Proposed --> Await: ASK
+  Proposed --> Ready: ALLOW
+  Proposed --> Rejected: DENY
+  Await --> Ready: 批准事务提交
+  Ready --> Claimed: 原子 claim
+  Claimed --> Dispatching: 复核取消 epoch 资源并落盘本 Attempt 的 dispatch_id
+  Claimed --> Ready: 旧 runtime 已隔离且确认未派发并复验原 grant
+  Dispatching --> Succeeded: 可验证成功
+  Dispatching --> Failed: 可验证失败
+  Dispatching --> Unknown: 超时或失联且缺少终态
+  Unknown --> Reconcile: 禁止自动重发
+  note right of Claimed
+    CONSUMED 不回退
+    同 Operation 安全重试沿用消费关系并复验
+    dispatch_id 属于 Attempt
+    Provider 幂等键属于 Operation
+  end note
+  Succeeded --> [*]
+  Failed --> [*]
+  Rejected --> [*]

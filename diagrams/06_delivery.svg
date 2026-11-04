@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="1584pt" height="1641.6pt" viewBox="0 0 1584 1641.6" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <title>06_delivery</title>
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:title>06_delivery</dc:title>
+    <dc:date>2026-11-04T06:30:19.545184</dc:date>
+    <dc:description>OpenBot engineering architecture, editable vector shapes and text</dc:description>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 1641.6 
+L 1584 1641.6 
+L 1584 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="line2d_1">
+    <path d="M 64.8 146.16 
+L 1519.2 146.16 
+" clip-path="url(#pf43ad03e44)" style="fill: none; stroke: #cbd6de; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="patch_2">
+    <path d="M 230.4 201.6 
+L 1497.6 201.6 
+Q 1512 201.6 1512 216 
+L 1512 363.6 
+Q 1512 378 1497.6 378 
+L 230.4 378 
+Q 216 378 216 363.6 
+L 216 216 
+Q 216 201.6 230.4 201.6 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 77.76 246.24 
+L 159.84 246.24 
+Q 172.8 246.24 172.8 259.2 
+L 172.8 319.68 
+Q 172.8 332.64 159.84 332.64 
+L 77.76 332.64 
+Q 64.8 332.64 64.8 319.68 
+L 64.8 259.2 
+Q 64.8 246.24 77.76 246.24 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #153247; stroke: #153247; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 230.4 468 
+L 1497.6 468 
+Q 1512 468 1512 482.4 
+L 1512 630 
+Q 1512 644.4 1497.6 644.4 
+L 230.4 644.4 
+Q 216 644.4 216 630 
+L 216 482.4 
+Q 216 468 230.4 468 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 77.76 512.64 
+L 159.84 512.64 
+Q 172.8 512.64 172.8 525.6 
+L 172.8 586.08 
+Q 172.8 599.04 159.84 599.04 
+L 77.76 599.04 
+Q 64.8 599.04 64.8 586.08 
+L 64.8 525.6 
+Q 64.8 512.64 77.76 512.64 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #153247; stroke: #153247; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 230.4 734.4 
+L 1497.6 734.4 
+Q 1512 734.4 1512 748.8 
+L 1512 896.4 
+Q 1512 910.8 1497.6 910.8 
+L 230.4 910.8 
+Q 216 910.8 216 896.4 
+L 216 748.8 
+Q 216 734.4 230.4 734.4 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #eaf7f5; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 77.76 779.04 
+L 159.84 779.04 
+Q 172.8 779.04 172.8 792 
+L 172.8 852.48 
+Q 172.8 865.44 159.84 865.44 
+L 77.76 865.44 
+Q 64.8 865.44 64.8 852.48 
+L 64.8 792 
+Q 64.8 779.04 77.76 779.04 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #153247; stroke: #153247; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 230.4 1000.8 
+L 1497.6 1000.8 
+Q 1512 1000.8 1512 1015.2 
+L 1512 1162.8 
+Q 1512 1177.2 1497.6 1177.2 
+L 230.4 1177.2 
+Q 216 1177.2 216 1162.8 
+L 216 1015.2 
+Q 216 1000.8 230.4 1000.8 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 77.76 1045.44 
+L 159.84 1045.44 
+Q 172.8 1045.44 172.8 1058.4 
+L 172.8 1118.88 
+Q 172.8 1131.84 159.84 1131.84 
+L 77.76 1131.84 
+Q 64.8 1131.84 64.8 1118.88 
+L 64.8 1058.4 
+Q 64.8 1045.44 77.76 1045.44 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #153247; stroke: #153247; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 230.4 1267.2 
+L 1497.6 1267.2 
+Q 1512 1267.2 1512 1281.6 
+L 1512 1429.2 
+Q 1512 1443.6 1497.6 1443.6 
+L 230.4 1443.6 
+Q 216 1443.6 216 1429.2 
+L 216 1281.6 
+Q 216 1267.2 230.4 1267.2 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #eaf7f5; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 77.76 1311.84 
+L 159.84 1311.84 
+Q 172.8 1311.84 172.8 1324.8 
+L 172.8 1385.28 
+Q 172.8 1398.24 159.84 1398.24 
+L 77.76 1398.24 
+Q 64.8 1398.24 64.8 1385.28 
+L 64.8 1324.8 
+Q 64.8 1311.84 77.76 1311.84 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #153247; stroke: #153247; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 79.2 1504.8 
+L 1497.6 1504.8 
+Q 1512 1504.8 1512 1519.2 
+L 1512 1580.4 
+Q 1512 1594.8 1497.6 1594.8 
+L 79.2 1594.8 
+Q 64.8 1594.8 64.8 1580.4 
+L 64.8 1519.2 
+Q 64.8 1504.8 79.2 1504.8 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 864 378 
+L 864 468 
+" clip-path="url(#pf43ad03e44)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_3">
+    <path d="M 864 644.4 
+L 864 734.4 
+" clip-path="url(#pf43ad03e44)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_4">
+    <path d="M 864 910.8 
+L 864 1000.8 
+" clip-path="url(#pf43ad03e44)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_5">
+    <path d="M 864 1177.2 
+L 864 1267.2 
+" clip-path="url(#pf43ad03e44)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 864 468 
+L 858.24 455.76 
+L 869.76 455.76 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 864 734.4 
+L 858.24 722.16 
+L 869.76 722.16 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 864 1000.8 
+L 858.24 988.56 
+L 869.76 988.56 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 864 1267.2 
+L 858.24 1254.96 
+L 869.76 1254.96 
+z
+" clip-path="url(#pf43ad03e44)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_1">
+    <text style="font-size: 54.72px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #243f51" x="64.8" y="73.550025" transform="rotate(-0 64.8 73.550025)">分阶段交付与放行门禁</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 25.2px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #667a89" x="67.68" y="125.222625" transform="rotate(-0 67.68 125.222625)">按可验证闭环推进；MVP 保留原研究稿范围，桌面 UI 与 GUI 控制分开交付。</text>
+   </g>
+   <g id="text_3">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #ffffff" x="118.8" y="300.143306" transform="rotate(-0 118.8 300.143306)">M0</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 38.16px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #153247" x="252" y="254.483044" transform="rotate(-0 252 254.483044)">规格与风险验证</text>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 301.926319)">交付：仓库骨架、合同、威胁模型、SDK / 平台 spike</text>
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 341.883281)">门禁：P0 架构问题清零，实际版本基线已记录</text>
+   </g>
+   <g id="text_6">
+    <g id="patch_17">
+     <path d="M 922.32 440.7552 
+L 1014.48 440.7552 
+Q 1018.6272 440.7552 1018.6272 436.608 
+L 1018.6272 412.992 
+Q 1018.6272 408.8448 1014.48 408.8448 
+L 922.32 408.8448 
+Q 918.1728 408.8448 918.1728 412.992 
+L 918.1728 436.608 
+Q 918.1728 440.7552 922.32 440.7552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="968.4" y="431.3304" transform="rotate(-0 968.4 431.3304)">门禁通过</text>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #ffffff" x="118.8" y="566.543306" transform="rotate(-0 118.8 566.543306)">M1</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 38.16px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #153247" x="252" y="520.883044" transform="rotate(-0 252 520.883044)">本地闭环</text>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 567.580444)">交付：CLI、持久化、1 个 Provider、文件 ACI、隔离执行、审批恢复</text>
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 607.537406)">门禁：mock 可重现端到端，安全与崩溃边界测试通过</text>
+   </g>
+   <g id="text_10">
+    <g id="patch_18">
+     <path d="M 922.32 707.1552 
+L 1014.48 707.1552 
+Q 1018.6272 707.1552 1018.6272 703.008 
+L 1018.6272 679.392 
+Q 1018.6272 675.2448 1014.48 675.2448 
+L 922.32 675.2448 
+Q 918.1728 675.2448 918.1728 679.392 
+L 918.1728 703.008 
+Q 918.1728 707.1552 922.32 707.1552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="968.4" y="697.7304" transform="rotate(-0 968.4 697.7304)">门禁通过</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #ffffff" x="118.8" y="832.943306" transform="rotate(-0 118.8 832.943306)">M2</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 38.16px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #153247" x="252" y="787.283044" transform="rotate(-0 252 787.283044)">飞书闭环</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 833.980444)">交付：配对、入站去重、审批卡片、Outbox、断连恢复</text>
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 873.937406)">门禁：真实测试租户完成任务与故障恢复</text>
+   </g>
+   <g id="text_14">
+    <g id="patch_19">
+     <path d="M 922.32 973.5552 
+L 1014.48 973.5552 
+Q 1018.6272 973.5552 1018.6272 969.408 
+L 1018.6272 945.792 
+Q 1018.6272 941.6448 1014.48 941.6448 
+L 922.32 941.6448 
+Q 918.1728 941.6448 918.1728 945.792 
+L 918.1728 969.408 
+Q 918.1728 973.5552 922.32 973.5552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="968.4" y="964.1304" transform="rotate(-0 968.4 964.1304)">门禁通过</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #ffffff" x="118.8" y="1099.343306" transform="rotate(-0 118.8 1099.343306)">M3</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 38.16px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #153247" x="252" y="1053.683044" transform="rotate(-0 252 1053.683044)">三平台 MVP</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 1100.424319)">交付：至少 2 个 Provider、受控 Browser / MCP、三平台 CLI、评测备份</text>
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 1140.381281)">门禁：macOS / Windows / Linux 原生能力报告与安装烟测</text>
+   </g>
+   <g id="text_18">
+    <g id="patch_20">
+     <path d="M 922.32 1239.9552 
+L 1014.48 1239.9552 
+Q 1018.6272 1239.9552 1018.6272 1235.808 
+L 1018.6272 1212.192 
+Q 1018.6272 1208.0448 1014.48 1208.0448 
+L 922.32 1208.0448 
+Q 918.1728 1208.0448 918.1728 1212.192 
+L 918.1728 1235.808 
+Q 918.1728 1239.9552 922.32 1239.9552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="968.4" y="1230.5304" transform="rotate(-0 968.4 1230.5304)">门禁通过</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 36.72px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #ffffff" x="118.8" y="1365.743306" transform="rotate(-0 118.8 1365.743306)">M4</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 38.16px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #153247" x="252" y="1320.083044" transform="rotate(-0 252 1320.083044)">桌面 Beta</text>
+   </g>
+   <g id="text_21">
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 1366.780444)">交付：Tauri、签名安装、升级回滚、诊断与操作面板</text>
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(252 1406.737406)">门禁：干净机器安装、升级与恢复通过</text>
+   </g>
+   <g id="text_22">
+    <text style="font-size: 28.08px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="788.4" y="1557.984881" transform="rotate(-0 788.4 1557.984881)">后续单独立项：GUI 控制、定时任务、更多渠道、多设备、企业策略</text>
+   </g>
+   <g id="text_23">
+    <text style="font-size: 23.76px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #667a89" x="64.8" y="1619.534475" transform="rotate(-0 64.8 1619.534475)">原型、MVP、Beta 分别验收；不以代码量或生成完成代替发布门禁。</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pf43ad03e44">
+   <rect x="0" y="0" width="1584" height="1641.6"/>
+  </clipPath>
+ </defs>
+</svg>

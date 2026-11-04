@@ -1,0 +1,29 @@
+{
+  "status": "EXAMPLE_NOT_A_VALIDATED_RELEASE",
+  "product_version": "0.1.0-dev",
+  "protocol_version": "1.1",
+  "db_schema_min": 1,
+  "db_schema_max": 1,
+  "supported_profiles": [
+    "single-owner-local"
+  ],
+  "dependency_versions": "Populate exact lockfiles per implementation stage, with release evidence; no latest ranges or forged hashes.",
+  "mcp_supported_features": [
+    "stdio",
+    "tools/list",
+    "tools/call"
+  ],
+  "mcp_disabled_features": [
+    "sampling",
+    "automatic_install",
+    "implicit_privilege_expansion"
+  ],
+  "platform_capabilities": {
+    "macos-arm64": "pending native validation",
+    "windows-x64": "pending native validation",
+    "linux-x64": "pending native validation"
+  },
+  "design_baseline": "1.2",
+  "component_qualification": "NOT_RUN",
+  "non_python_assets": "Record browser, grammar, tokenizer, container, Rust, frontend and vendored-source versions and hashes."
+}

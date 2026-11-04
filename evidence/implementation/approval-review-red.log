@@ -1,0 +1,16 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+________ test_authoritative_operation_id_must_match_ledger_primary_key _________
+tests/integration/storage/test_approvals.py:297: in test_authoritative_operation_id_must_match_ledger_primary_key
+    with pytest.raises(PermissionError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE <class 'PermissionError'>
+_______ test_schema_failure_traceback_does_not_reveal_raw_approval_nonce _______
+tests/integration/storage/test_approvals.py:309: in test_schema_failure_traceback_does_not_reveal_raw_approval_nonce
+    assert challenges.get(proposal["approval_id"]).decode() not in rendered
+E   AssertionError: synthetic nonce appeared in the rendered traceback.
+[REDACTED: synthetic nonce and its pytest excerpts; no real credentials were used.]
+=========================== short test summary info ============================
+FAILED tests/integration/storage/test_approvals.py::test_authoritative_operation_id_must_match_ledger_primary_key
+FAILED tests/integration/storage/test_approvals.py::test_schema_failure_traceback_does_not_reveal_raw_approval_nonce
+2 failed, 19 deselected in 0.22s

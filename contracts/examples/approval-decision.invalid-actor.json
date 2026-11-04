@@ -1,0 +1,7 @@
+{
+  "decision": "APPROVE",
+  "nonce": "example_nonce_012345678901234567890123456789",
+  "expected_binding_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected_version": 1,
+  "actor_id": "usr_attacker"
+}

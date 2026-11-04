@@ -1,0 +1,30 @@
+sequenceDiagram
+  participant U as 用户或入口
+  participant D as Daemon
+  participant S as SQLite
+  participant B as Broker
+  participant W as Worker
+  Note over D,B: Broker 为 Daemon 内模块，统一 SQLite writer
+  rect rgb(239,245,250)
+    U->>D: 批准 approval_id 与 nonce
+    D->>S: 事务 A 校验 actor TTL digest 并 CAS
+    Note over D,S: APPROVED 与 READY、event、outbox 同事务
+    S-->>D: COMMIT
+    D-->>U: 已记录批准，尚未执行
+  end
+  rect rgb(234,247,245)
+    D->>B: 调度 READY
+    B->>S: 事务 B 复验并首次消费批准，创建 attempt 与 CLAIMED
+    Note over S,B: 同 Operation 安全重试复用既有消费关系并复验
+    Note over S,B: CONSUMED 不可回退，不能给新 Operation 复用
+    S-->>B: COMMIT，claim 成功
+  end
+  rect rgb(246,248,250)
+    B->>S: 复核取消 epoch 与资源，先持久化 DISPATCHING
+    Note over S,B: dispatch_id 属于 Attempt，Provider 幂等键属于 Operation
+    S-->>B: COMMIT
+    B->>W: 发送绑定的 dispatch_id
+    W-->>B: 可验证结果或超时失联
+    B->>S: 记录明确终态；缺少结果则 UNKNOWN
+  end
+  Note over D,W: DISPATCHING 后结果不明需核对，禁止自动重发

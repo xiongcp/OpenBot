@@ -1,0 +1,11 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_probe_does_not_treat_every_workspace_file_as_an_approved_import _____
+tests/components/contracts/test_probe.py:50: in test_probe_does_not_treat_every_workspace_file_as_an_approved_import
+    assert result.returncode == 4, result.stderr
+E   AssertionError: 
+E   assert 0 == 4
+E    +  where 0 = CompletedProcess(args=['/Users/Zhuanz/Documents/OpenBot/.venv-m1/bin/python', '/Users/Zhuanz/Documents/OpenBot/tests/c... after interpreter startup only", "observed": {"open": 1, "network": 0, "process": 0}, "violations": []}\n', stderr='').returncode
+=========================== short test summary info ============================
+FAILED tests/components/contracts/test_probe.py::test_probe_does_not_treat_every_workspace_file_as_an_approved_import
+1 failed, 3 deselected in 0.27s

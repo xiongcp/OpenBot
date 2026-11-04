@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.1",
+  "event_id": "evt_demo0001",
+  "seq": 8,
+  "event_type": "APPROVAL_REQUESTED",
+  "task_id": "tsk_demo0001",
+  "operation_id": "op_demo0001",
+  "trace_id": "tr_demo0001",
+  "occurred_at_ms": 1793750500000,
+  "payload": {
+    "approval_id": "apr_demo0001",
+    "task_version": 3
+  }
+}

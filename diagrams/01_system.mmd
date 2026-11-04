@@ -1,0 +1,23 @@
+flowchart TB
+  CLI["CLI / Tauri 用户入口"]
+  FG["Feishu Gateway 独立进程"]
+  SUP["User Supervisor 单实例与进程归属"]
+  subgraph CONTROL["权威控制平面"]
+    D["OpenBot Daemon 身份 任务 策略 审批 调度"]
+    MG["Model Gateway 出口与预算"]
+    B["Tool Broker preflight claim dispatch"]
+    D --> MG
+    D --> B
+  end
+  MODEL["指定 Provider 或本机模型"]
+  DB[("SQLite 单写事务状态")]
+  W["隔离 Worker 仅执行绑定能力"]
+  A["Artifact Store 不可变产物"]
+  CLI -->|认证请求| D
+  FG -->|验证 归一化 去重| D
+  SUP -.->|生命周期监督| D
+  MG <-->|受控上下文| MODEL
+  D -->|唯一 writer| DB
+  B -->|一次派发许可| W
+  W -->|产物| A
+  D -->|注册与引用| A

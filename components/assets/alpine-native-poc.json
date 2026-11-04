@@ -1,0 +1,11 @@
+{
+  "phase": "M1",
+  "purpose": "OB-093 synthetic native isolation PoC only",
+  "source": "https://hub.docker.com/_/alpine",
+  "requested_release": "3.24.3",
+  "repo_digest": "alpine@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a",
+  "image_id": "sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a",
+  "platform": "linux/arm64",
+  "runtime_enabled": false,
+  "preparation_log": "evidence/implementation/container-asset-prepare.log"
+}

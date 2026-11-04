@@ -1,0 +1,471 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="1584pt" height="1303.2pt" viewBox="0 0 1584 1303.2" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <title>02_lifecycle</title>
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:title>02_lifecycle</dc:title>
+    <dc:date>2026-11-04T06:30:18.550850</dc:date>
+    <dc:description>OpenBot engineering architecture, editable vector shapes and text</dc:description>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 1303.2 
+L 1584 1303.2 
+L 1584 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="line2d_1">
+    <path d="M 64.8 146.16 
+L 1519.2 146.16 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #cbd6de; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="patch_2">
+    <path d="M 79.2 172.8 
+L 734.4 172.8 
+Q 748.8 172.8 748.8 187.2 
+L 748.8 1008 
+Q 748.8 1022.4 734.4 1022.4 
+L 79.2 1022.4 
+Q 64.8 1022.4 64.8 1008 
+L 64.8 187.2 
+Q 64.8 172.8 79.2 172.8 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 136.8 259.2 
+L 676.8 259.2 
+Q 691.2 259.2 691.2 273.6 
+L 691.2 360 
+Q 691.2 374.4 676.8 374.4 
+L 136.8 374.4 
+Q 122.4 374.4 122.4 360 
+L 122.4 273.6 
+Q 122.4 259.2 136.8 259.2 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 136.8 468 
+L 676.8 468 
+Q 691.2 468 691.2 482.4 
+L 691.2 583.2 
+Q 691.2 597.6 676.8 597.6 
+L 136.8 597.6 
+Q 122.4 597.6 122.4 583.2 
+L 122.4 482.4 
+Q 122.4 468 136.8 468 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 136.8 676.8 
+L 676.8 676.8 
+Q 691.2 676.8 691.2 691.2 
+L 691.2 792 
+Q 691.2 806.4 676.8 806.4 
+L 136.8 806.4 
+Q 122.4 806.4 122.4 792 
+L 122.4 691.2 
+Q 122.4 676.8 136.8 676.8 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 115.2 885.6 
+L 381.6 885.6 
+Q 396 885.6 396 900 
+L 396 979.2 
+Q 396 993.6 381.6 993.6 
+L 115.2 993.6 
+Q 100.8 993.6 100.8 979.2 
+L 100.8 900 
+Q 100.8 885.6 115.2 885.6 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eaf7f5; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 468 885.6 
+L 691.2 885.6 
+Q 705.6 885.6 705.6 900 
+L 705.6 979.2 
+Q 705.6 993.6 691.2 993.6 
+L 468 993.6 
+Q 453.6 993.6 453.6 979.2 
+L 453.6 900 
+Q 453.6 885.6 468 885.6 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eaf7f5; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 914.4 259.2 
+L 1497.6 259.2 
+Q 1512 259.2 1512 273.6 
+L 1512 367.2 
+Q 1512 381.6 1497.6 381.6 
+L 914.4 381.6 
+Q 900 381.6 900 367.2 
+L 900 273.6 
+Q 900 259.2 914.4 259.2 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 914.4 496.8 
+L 1497.6 496.8 
+Q 1512 496.8 1512 511.2 
+L 1512 626.4 
+Q 1512 640.8 1497.6 640.8 
+L 914.4 640.8 
+Q 900 640.8 900 626.4 
+L 900 511.2 
+Q 900 496.8 914.4 496.8 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eaf7f5; stroke: #087f85; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 914.4 748.8 
+L 1497.6 748.8 
+Q 1512 748.8 1512 763.2 
+L 1512 910.8 
+Q 1512 925.2 1497.6 925.2 
+L 914.4 925.2 
+Q 900 925.2 900 910.8 
+L 900 763.2 
+Q 900 748.8 914.4 748.8 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #eff5fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 86.4 1123.2 
+L 363.6 1123.2 
+Q 378 1123.2 378 1137.6 
+L 378 1188 
+Q 378 1202.4 363.6 1202.4 
+L 86.4 1202.4 
+Q 72 1202.4 72 1188 
+L 72 1137.6 
+Q 72 1123.2 86.4 1123.2 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 464.4 1123.2 
+L 741.6 1123.2 
+Q 756 1123.2 756 1137.6 
+L 756 1188 
+Q 756 1202.4 741.6 1202.4 
+L 464.4 1202.4 
+Q 450 1202.4 450 1188 
+L 450 1137.6 
+Q 450 1123.2 464.4 1123.2 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 842.4 1123.2 
+L 1119.6 1123.2 
+Q 1134 1123.2 1134 1137.6 
+L 1134 1188 
+Q 1134 1202.4 1119.6 1202.4 
+L 842.4 1202.4 
+Q 828 1202.4 828 1188 
+L 828 1137.6 
+Q 828 1123.2 842.4 1123.2 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 1220.4 1123.2 
+L 1497.6 1123.2 
+Q 1512 1123.2 1512 1137.6 
+L 1512 1188 
+Q 1512 1202.4 1497.6 1202.4 
+L 1220.4 1202.4 
+Q 1206 1202.4 1206 1188 
+L 1206 1137.6 
+Q 1206 1123.2 1220.4 1123.2 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #f6f8fa; stroke: #cbd6de; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 406.8 374.4 
+L 406.8 468 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_3">
+    <path d="M 406.8 597.6 
+L 406.8 676.8 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_4">
+    <path d="M 406.8 806.4 
+L 406.8 846 
+L 248.4 846 
+L 248.4 885.6 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_5">
+    <path d="M 406.8 846 
+L 579.6 846 
+L 579.6 885.6 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_6">
+    <path d="M 900 320.4 
+L 813.6 320.4 
+L 813.6 741.6 
+L 691.2 741.6 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_7">
+    <path d="M 1206 381.6 
+L 1206 496.8 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #087f85; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_8">
+    <path d="M 378 1162.8 
+L 450 1162.8 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #667a89; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_9">
+    <path d="M 756 1162.8 
+L 828 1162.8 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #667a89; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_10">
+    <path d="M 1134 1162.8 
+L 1206 1162.8 
+" clip-path="url(#pcac6c80c62)" style="fill: none; stroke: #667a89; stroke-width: 2.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 406.8 468 
+L 401.04 455.76 
+L 412.56 455.76 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 406.8 676.8 
+L 401.04 664.56 
+L 412.56 664.56 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_17">
+    <path d="M 248.4 885.6 
+L 242.64 873.36 
+L 254.16 873.36 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_18">
+    <path d="M 579.6 885.6 
+L 573.84 873.36 
+L 585.36 873.36 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_19">
+    <path d="M 691.2 741.6 
+L 703.44 735.84 
+L 703.44 747.36 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_20">
+    <path d="M 1206 496.8 
+L 1200.24 484.56 
+L 1211.76 484.56 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #087f85; stroke: #087f85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_21">
+    <path d="M 450 1162.8 
+L 437.76 1168.56 
+L 437.76 1157.04 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #667a89; stroke: #667a89; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_22">
+    <path d="M 828 1162.8 
+L 815.76 1168.56 
+L 815.76 1157.04 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #667a89; stroke: #667a89; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_23">
+    <path d="M 1206 1162.8 
+L 1193.76 1168.56 
+L 1193.76 1157.04 
+z
+" clip-path="url(#pcac6c80c62)" style="fill: #667a89; stroke: #667a89; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_1">
+    <text style="font-size: 54.72px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #243f51" x="64.8" y="73.550025" transform="rotate(-0 64.8 73.550025)">常驻服务与进程生命周期</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 25.2px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #667a89" x="67.68" y="125.840812" transform="rotate(-0 67.68 125.840812)">进程回收归属 Supervisor；关闭窗口、停止服务和重启恢复是不同操作。</text>
+   </g>
+   <g id="text_3">
+    <text style="font-size: 30.96px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="406.8" y="221.424356" transform="rotate(-0 406.8 221.424356)">常驻进程所有权</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 32.4px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="406.8" y="303.924094" transform="rotate(-0 406.8 303.924094)">OS 用户级服务管理器</text>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 26.64px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="406.8" y="342.350775" transform="rotate(-0 406.8 342.350775)">登录用户上下文 · 非 root</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 34.56px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="406.8" y="513.5778" transform="rotate(-0 406.8 513.5778)">Native Supervisor</text>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 24.48px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="406.8" y="551.15055" transform="rotate(-0 406.8 551.15055)">profile 锁 · runtime_epoch · 受管资源</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 34.56px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="406.8" y="722.1537" transform="rotate(-0 406.8 722.1537)">OpenBot Daemon</text>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 25.92px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="406.8" y="759.7467" transform="rotate(-0 406.8 759.7467)">统一状态与调度 · 启动受控子进程</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 30.24px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="248.4" y="929.420438" transform="rotate(-0 248.4 929.420438)">Gateway</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="248.4" y="967.7304" transform="rotate(-0 248.4 967.7304)">SDK 独立故障域</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 30.24px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="579.6" y="929.694488" transform="rotate(-0 579.6 929.694488)">Workers</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="579.6" y="967.7304" transform="rotate(-0 579.6 967.7304)">隔离工具执行</text>
+   </g>
+   <g id="text_14">
+    <g id="patch_24">
+     <path d="M 349.2 437.1552 
+L 464.4 437.1552 
+Q 468.5472 437.1552 468.5472 433.008 
+L 468.5472 409.392 
+Q 468.5472 405.2448 464.4 405.2448 
+L 349.2 405.2448 
+Q 345.0528 405.2448 345.0528 409.392 
+L 345.0528 433.008 
+Q 345.0528 437.1552 349.2 437.1552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="406.8" y="427.7304" transform="rotate(-0 406.8 427.7304)">启动与监督</text>
+   </g>
+   <g id="text_15">
+    <g id="patch_25">
+     <path d="M 337.68 653.1552 
+L 475.92 653.1552 
+Q 480.0672 653.1552 480.0672 649.008 
+L 480.0672 625.392 
+Q 480.0672 621.2448 475.92 621.2448 
+L 337.68 621.2448 
+Q 333.5328 621.2448 333.5328 625.392 
+L 333.5328 649.008 
+Q 333.5328 653.1552 337.68 653.1552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="406.8" y="643.7304" transform="rotate(-0 406.8 643.7304)">受管运行实例</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 35.28px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1206" y="305.292769" transform="rotate(-0 1206 305.292769)">CLI / Tauri 客户端</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 26.64px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #243f51" x="1206" y="342.350775" transform="rotate(-0 1206 342.350775)">连接已有 daemon；可随时重连</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 36px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1206" y="542.573438" transform="rotate(-0 1206 542.573438)">关闭窗口</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 27.36px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(1123.92 577.104638)">仅关闭显示层</text>
+    <text style="font-size: 27.36px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(1013.071388 616.037063)">任务和审批继续保存在 daemon</text>
+   </g>
+   <g id="text_20">
+    <g id="patch_26">
+     <path d="M 759.583856 447.4566 
+L 867.616144 447.4566 
+Q 871.633744 447.4566 871.633744 443.439 
+L 871.633744 420.561 
+Q 871.633744 416.5434 867.616144 416.5434 
+L 759.583856 416.5434 
+Q 755.566256 416.5434 755.566256 420.561 
+L 755.566256 443.439 
+Q 755.566256 447.4566 759.583856 447.4566 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 22.32px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="813.6" y="438.326325" transform="rotate(-0 813.6 438.326325)">附着 / 重连</text>
+   </g>
+   <g id="text_21">
+    <g id="patch_27">
+     <path d="M 1182.96 451.5552 
+L 1229.04 451.5552 
+Q 1233.1872 451.5552 1233.1872 447.408 
+L 1233.1872 423.792 
+Q 1233.1872 419.6448 1229.04 419.6448 
+L 1182.96 419.6448 
+Q 1178.8128 419.6448 1178.8128 423.792 
+L 1178.8128 447.408 
+Q 1178.8128 451.5552 1182.96 451.5552 
+z
+" style="fill: #ffffff; opacity: 0.98"/>
+    </g>
+    <text style="font-size: 23.04px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #087f85" x="1206" y="442.1304" transform="rotate(-0 1206 442.1304)">关闭</text>
+   </g>
+   <g id="text_22">
+    <text style="font-size: 35.28px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1206" y="794.363569" transform="rotate(-0 1206 794.363569)">服务重启</text>
+   </g>
+   <g id="text_23">
+    <text style="font-size: 26.64px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(1053.923063 826.651913)">生成新的 runtime_epoch</text>
+    <text style="font-size: 26.64px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(1112.76 864.5598)">旧执行许可失效</text>
+    <text style="font-size: 26.64px; font-family: 'Noto Sans CJK SC'; fill: #243f51" transform="translate(1046.16 902.467688)">按权威状态恢复或进入核对</text>
+   </g>
+   <g id="text_24">
+    <text style="font-size: 30.24px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #153247" x="72" y="1078.921687" transform="rotate(-0 72 1078.921687)">显式「停止 OpenBot 服务」才进入停止流程</text>
+   </g>
+   <g id="text_25">
+    <text style="font-size: 28.8px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="225" y="1171.19475" transform="rotate(-0 225 1171.19475)">停止接单</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 28.8px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="603" y="1171.19475" transform="rotate(-0 603 1171.19475)">撤销待派发</text>
+   </g>
+   <g id="text_27">
+    <text style="font-size: 28.8px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="981" y="1171.19475" transform="rotate(-0 981 1171.19475)">回收 Workers</text>
+   </g>
+   <g id="text_28">
+    <text style="font-size: 28.8px; font-family: 'Noto Sans CJK SC'; text-anchor: middle; fill: #153247" x="1359" y="1171.19475" transform="rotate(-0 1359 1171.19475)">提交并关闭</text>
+   </g>
+   <g id="text_29">
+    <text style="font-size: 23.76px; font-family: 'Noto Sans CJK SC'; text-anchor: start; fill: #667a89" x="64.8" y="1266.734475" transform="rotate(-0 64.8 1266.734475)">进程回收能力由 doctor 实测；休眠、注销与关机不等同于持续在线。</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pcac6c80c62">
+   <rect x="0" y="0" width="1584" height="1303.2"/>
+  </clipPath>
+ </defs>
+</svg>

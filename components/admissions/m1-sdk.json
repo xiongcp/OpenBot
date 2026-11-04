@@ -1,0 +1,765 @@
+{
+  "schema_version": "1.0",
+  "phase": "M1",
+  "platform": [
+    "Darwin",
+    "arm64"
+  ],
+  "python": "3.12.12 (main, Jan 14 2026, 23:36:32) [Clang 21.1.4 ]",
+  "lock_sha256": "2d461a312280457241adc2efc8e8d49369ceade8ab7eae9ff409e390577b77dd",
+  "lock_snapshot": "components/locks/m1-sdk.uv.lock",
+  "runtime_enabled": false,
+  "packages": [
+    {
+      "package": "annotated-types",
+      "version": "0.8.0",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl",
+      "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/annotated-types/LICENSE",
+          "sha256": "fe1049884b1a0d9342901e88e07f32925d24b3121d9972b6a6805fb9824b095d"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/annotated-types/0.8.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "anyio",
+      "version": "4.16.0",
+      "phase": "M1",
+      "component_id": "httpx",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/a9/16/7757fb84c819accc7d7e9af5291b261e4abb8627ee040f99e7d35ef2457a/anyio-4.16.0-py3-none-any.whl",
+      "sha256": "c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/anyio/LICENSE",
+          "sha256": "5361ac9dc58f2ef5fd2e9b09c68297c17f04950909bbc8023bdb82eacf22c2b0"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/anyio/4.16.0/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "attrs",
+      "version": "26.1.0",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl",
+      "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/attrs/LICENSE",
+          "sha256": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/attrs/26.1.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "certifi",
+      "version": "2026.10.23",
+      "phase": "M1",
+      "component_id": "httpx",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl",
+      "sha256": "e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1",
+      "license": "MPL-2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/certifi/LICENSE",
+          "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/certifi/2026.10.23/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "distro",
+      "version": "1.9.0",
+      "phase": "M1",
+      "component_id": "model-openai",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl",
+      "sha256": "7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2",
+      "license": "Apache License, Version 2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/distro/LICENSE",
+          "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/distro/1.9.0/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "h11",
+      "version": "0.16.0",
+      "phase": "M1",
+      "component_id": "httpx",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl",
+      "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/h11/LICENSE.txt",
+          "sha256": "37db5bb85926db28a427a25867f10b1232003aea1be69ccb851138adb8e6f361"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/h11/0.16.0/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "httpcore",
+      "version": "1.0.9",
+      "phase": "M1",
+      "component_id": "httpx",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl",
+      "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+      "license": "BSD-3-Clause",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/httpcore/LICENSE.md",
+          "sha256": "fdcb59154c74cbaba16a11242f7740bea9f23d6feb5547917d8c5f94a80392a5"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/httpcore/1.0.9/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "httpx",
+      "version": "0.28.1",
+      "phase": "M1",
+      "component_id": "httpx",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl",
+      "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad",
+      "license": "BSD-3-Clause",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/httpx/LICENSE.md",
+          "sha256": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/httpx/0.28.1/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "idna",
+      "version": "3.20",
+      "phase": "M1",
+      "component_id": "httpx",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl",
+      "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+      "license": "BSD-3-Clause",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/idna/LICENSE.md",
+          "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/idna/3.20/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "iniconfig",
+      "version": "2.3.1",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/56/43/4ca9e49d27a1fcf6bece6f6aec0ea46bb9112489b93d4b688fb415457bdb/iniconfig-2.3.1-py3-none-any.whl",
+      "sha256": "9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/iniconfig/LICENSE",
+          "sha256": "3409fa91f7ace557894632676656e32264fe5ef7581535725dc9a23774551bd4"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/iniconfig/2.3.1/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "jiter",
+      "version": "0.18.0",
+      "phase": "M1",
+      "component_id": "model-openai",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/2e/e2/f4000a4d9c519ca019bf0e2922cc0c6b6db347be6303161382eda7635be7/jiter-0.18.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "7b41cd64ee6b54db94bea6274e6e37002ed526aa06c114a8be6f36ffe21c184e",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/jiter/LICENSE",
+          "sha256": "7c7134b9f7b978c03fca875517cf398db91f19bbb8109b6685e742aa3f57468e"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/jiter/0.18.0/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "jsonschema",
+      "version": "4.26.0",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/69/90/f63fb5873511e014207a475e2bb4e8b2e570d655b00ac19a9a0ca0a385ee/jsonschema-4.26.0-py3-none-any.whl",
+      "sha256": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/jsonschema/COPYING",
+          "sha256": "4f92a015a13c4d1a040bef018aa13430b4f1bc73b41b16bb846c346766de7439"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/jsonschema/4.26.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl",
+      "sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/jsonschema-specifications/COPYING",
+          "sha256": "42dcd63495f87b4eb7c7757afa379bb55a53f94afd7a5f657d9adf57236e515c"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/jsonschema-specifications/2025.9.1/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "librt",
+      "version": "0.16.0",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/fd/0c/ab8ed3dab0085931aec4a792c7eaac8dc6c5ff4691fda3a5360d9d8a9cd2/librt-0.16.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "5bcc2c4726ced915b00de0c9856a4eeabfb3fddb93e10e0b8f735b7709358b6d",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/librt/LICENSE",
+          "sha256": "88f9e379c684580053c58e75e296ca2eb243b6edcc6e5357f247310e96eeef8a"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/librt/0.16.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "mypy",
+      "version": "1.19.1",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/a5/34/3e63879ab041602154ba2a9f99817bb0c85c4df19a23a1443c8986e4d565/mypy-1.19.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "ffcebe56eb09ff0c0885e750036a095e23793ba6c2e894e7e63f6d89ad51f22e",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/mypy/LICENSE",
+          "sha256": "fdf1cd17f50e1305ed8cfd37467312d27a984648dba622cef70573b5512e4e1b"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/mypy/1.19.1/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "mypy-extensions",
+      "version": "1.2.0",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/b5/99/7b1adac7e97ce7bbda34792dc6e9b2f5cc5cffd1875883f78a818b2a2687/mypy_extensions-1.2.0-py3-none-any.whl",
+      "sha256": "993e7a20aa5671eb41a7132cf555af30062da99729601601b9a8382b11cae768",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/mypy-extensions/LICENSE",
+          "sha256": "a50450da1d53cd777b80ced77c58ff96abe0ccd879706bd142c3ec20e245f0b4"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/mypy-extensions/1.2.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "openai",
+      "version": "2.26.0",
+      "phase": "M1",
+      "component_id": "model-openai",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/c6/2e/3f73e8ca53718952222cacd0cf7eecc9db439d020f0c1fe7ae717e4e199a/openai-2.26.0-py3-none-any.whl",
+      "sha256": "6151bf8f83802f036117f06cc8a57b3a4da60da9926826cc96747888b57f394f",
+      "license": "Apache-2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/openai/LICENSE",
+          "sha256": "636eb7d79da9bb6d515a4b3fd417aa26679eb3cf16396ddab4bc55fa74e616e4"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/openai/2.26.0/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "packaging",
+      "version": "26.3",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/packaging/LICENSE",
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "evidence/implementation/licenses/packaging/LICENSE.APACHE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "evidence/implementation/licenses/packaging/LICENSE.BSD",
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/packaging/26.3/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "pathspec",
+      "version": "1.1.1",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl",
+      "sha256": "a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189",
+      "license": "MPL-2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/pathspec/LICENSE",
+          "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/pathspec/1.1.1/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "pluggy",
+      "version": "1.7.0",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/40/9e/2b38731e0fc536806f16490e1a12d7f0dc2a1235aa8cc07bcc75416a7daa/pluggy-1.7.0-py3-none-any.whl",
+      "sha256": "7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/pluggy/LICENSE",
+          "sha256": "d6b65e6c213a5d0b577911d34d6e5949b9f59d76c238c5071a2f3fc16cfb2606"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/pluggy/1.7.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "pydantic",
+      "version": "2.12.5",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/5a/87/b70ad306ebb6f9b585f114d0ac2137d792b48be34d732d60e597c2f8465a/pydantic-2.12.5-py3-none-any.whl",
+      "sha256": "e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/pydantic/LICENSE",
+          "sha256": "a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/pydantic/2.12.5/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "pydantic-core",
+      "version": "2.41.5",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/aa/32/9c2e8ccb57c01111e0fd091f236c7b371c1bccea0fa85247ac55b1e2b6b6/pydantic_core-2.41.5-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "070259a8818988b9a84a449a2a7337c7f430a22acc0859c6b110aa7212a6d9c0",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/pydantic-core/LICENSE",
+          "sha256": "2afdd30d54b4d62b6f488a6bcc1546e84ec5061f13f4209c03d012348783795a"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/pydantic-core/2.41.5/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "pygments",
+      "version": "2.21.0",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl",
+      "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+      "license": "BSD-2-Clause",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/pygments/LICENSE",
+          "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/pygments/2.21.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "pytest",
+      "version": "8.4.2",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl",
+      "sha256": "872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/pytest/LICENSE",
+          "sha256": "ca836a5f9ecca3b2f350230faa20a48fb8b145653b5568d784862df864706b9b"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/pytest/8.4.2/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "referencing",
+      "version": "0.37.0",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl",
+      "sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/referencing/COPYING",
+          "sha256": "42dcd63495f87b4eb7c7757afa379bb55a53f94afd7a5f657d9adf57236e515c"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/referencing/0.37.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "rfc3339-validator",
+      "version": "0.1.4",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/7b/44/4e421b96b67b2daff264473f7465db72fbdf36a07e05494f50300cc7b0c6/rfc3339_validator-0.1.4-py2.py3-none-any.whl",
+      "sha256": "24f6ec1eda14ef823da9e36ec7113124b39c04d50a4d3d3a3c2859577e7791fa",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/rfc3339-validator/LICENSE",
+          "sha256": "5ba1a4f03626ccca6dcbf53a554545e4f776a335bfdaa233ec3bfe9bb7fac15d"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/rfc3339-validator/0.1.4/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "rfc8785",
+      "version": "0.1.4",
+      "phase": "M0",
+      "component_id": "rfc8785",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/4d/78/119878110660b2ad709888c8a1614fce7e2fab39080ab960656dc8605bf6/rfc8785-0.1.4-py3-none-any.whl",
+      "sha256": "520d690b448ecf0703691c76e1a34a24ddcd4fc5bc41d589cb7c58ec651bcd48",
+      "license": "Apache-2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/rfc8785/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/rfc8785/0.1.4/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "rpds-py",
+      "version": "2026.9.1",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/90/81/ac6a0d064982251856ce009c9e1dd51a34110b3c055aa7d1aad18b4899a3/rpds_py-2026.9.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "e21c1429e205828ea886a2293a4a2c8e01f4c25d9893ca330e97a6cf73f52e7b",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/rpds-py/LICENSE",
+          "sha256": "314e4e91be3baa93c0fb4bccc9e4e97cd643eb839b065af921782c2175fe9909"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/rpds-py/2026.9.1/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "ruff",
+      "version": "0.14.10",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/7b/82/36be59f00a6082e38c23536df4e71cdbc6af8d7c707eade97fcad5c98235/ruff-0.14.10-py3-none-macosx_11_0_arm64.whl",
+      "sha256": "d85713d522348837ef9df8efca33ccb8bd6fcfc86a2cde3ccb4bc9d28a18003d",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/ruff/LICENSE",
+          "sha256": "2597d854122b77ddc71971564ca2350a37608575ce324adc5650a2b2051c8f18"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/ruff/0.14.10/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "six",
+      "version": "1.17.0",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/six/LICENSE",
+          "sha256": "4375ba20e2b9c6c4e7cad2940a628fd90e95cc3d50ee92aae755715d8ba1fbd0"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/six/1.17.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "sniffio",
+      "version": "1.3.1",
+      "phase": "M1",
+      "component_id": "httpx",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl",
+      "sha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2",
+      "license": "MIT OR Apache-2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/sniffio/LICENSE",
+          "sha256": "652c878488d1456361e08c3f8607fd7ba59892a14103d15cce4ff93c85b5cc8b"
+        },
+        {
+          "path": "evidence/implementation/licenses/sniffio/LICENSE.APACHE2",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "evidence/implementation/licenses/sniffio/LICENSE.MIT",
+          "sha256": "3e6dae555eb92787fc82d1d48355677f454c7f65aeb38d3f9e72bf9a3daf034b"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/sniffio/1.3.1/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "tqdm",
+      "version": "4.70.1",
+      "phase": "M1",
+      "component_id": "model-openai",
+      "group": "provider-openai",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl",
+      "sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+      "license": "MPL-2.0 AND MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/tqdm/LICENCE",
+          "sha256": "fcff87c3a47ce8028a8512aa182d4fcf0ad1c90544ee75cf9b343684cac194de"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/tqdm/4.70.1/",
+      "evidence": [
+        "evidence/implementation/m1-sdk-tests.log"
+      ]
+    },
+    {
+      "package": "types-jsonschema",
+      "version": "4.26.0.20260202",
+      "phase": "M0",
+      "component_id": "cli-toolchain",
+      "group": "dev-contracts",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/c1/06/962d4f364f779d7389cd31a1bb581907b057f52f0ace2c119a8dd8409db6/types_jsonschema-4.26.0.20260202-py3-none-any.whl",
+      "sha256": "41c95343abc4de9264e333a55e95dfb4d401e463856d0164eec9cb182e8746da",
+      "license": "Apache-2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/types-jsonschema/LICENSE",
+          "sha256": "295f8538c94ae5c3043301cf7cff1c852dab6a786a8ddee471e061b40d5ecabe"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/types-jsonschema/4.26.0.20260202/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "typing-extensions",
+      "version": "4.16.0",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "license": "PSF-2.0",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/typing-extensions/LICENSE",
+          "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/typing-extensions/4.16.0/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    },
+    {
+      "package": "typing-inspection",
+      "version": "0.4.4",
+      "phase": "M0",
+      "component_id": "pydantic-jsonschema",
+      "group": "core",
+      "state": "LOCAL_TESTED",
+      "source": "https://files.pythonhosted.org/packages/67/81/4add07e5172b7ac40d8ed5ff580409a7801a4fe26d529bdd915401dabfbe/typing_inspection-0.4.4-py3-none-any.whl",
+      "sha256": "65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147",
+      "license": "MIT",
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/typing-inspection/LICENSE",
+          "sha256": "804b59b25f2c31bd278f9202a19ae49a3945aa2664387e2d0a128c7cacc61ec3"
+        }
+      ],
+      "upstream_metadata": "https://pypi.org/project/typing-inspection/0.4.4/",
+      "evidence": [
+        "evidence/implementation/m0-tests.log"
+      ]
+    }
+  ]
+}

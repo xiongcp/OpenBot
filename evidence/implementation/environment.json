@@ -1,0 +1,13 @@
+{
+  "user_facing_date": "2026-11-04",
+  "system": "Darwin",
+  "release": "24.6.0",
+  "architecture": "arm64",
+  "python": "3.12.12",
+  "sqlite": "3.50.4",
+  "native_environments_supplied_in_this_task": [
+    "Darwin/arm64"
+  ],
+  "real_test_tenants_or_model_credentials_supplied_in_this_task": false,
+  "scope": "Current task only; no scan of personal credentials or account inventories"
+}

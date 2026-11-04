@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "migrations": [
+    {
+      "version": 1,
+      "name": "baseline",
+      "file": "0001_baseline.sql",
+      "sha256": "05ff25881cd88af97ba7359157864f8ea6dba8bc84aa0a251566d3efe2a99db1"
+    },
+    {
+      "version": 2,
+      "name": "proposal_bytes",
+      "file": "0002_proposal_bytes.sql",
+      "sha256": "0ebdd1b9d9cd42c7529644c7e563e52c2b671dc9587a65d936053478263553ba"
+    }
+  ]
+}

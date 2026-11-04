@@ -1,0 +1,300 @@
+{
+  "version": "1.2",
+  "sources": [
+    {
+      "source_id": "R01",
+      "title": "RFC8785与所选实现",
+      "supports": "UTF-16码元排序、严格输入域；库负责规范化，不负责授权。",
+      "urls": [
+        "https://www.rfc-editor.org/rfc/rfc8785.html",
+        "https://github.com/trailofbits/rfc8785.py"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R02",
+      "title": "DTO与JSON Schema",
+      "supports": "frozen不深冻结；format需显式启用；当前Registry默认不自动联网，旧RefResolver不同。",
+      "urls": [
+        "https://docs.pydantic.dev/latest/concepts/models/#faux-immutability",
+        "https://python-jsonschema.readthedocs.io/en/stable/validate/",
+        "https://python-jsonschema.readthedocs.io/en/stable/referencing/"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R03",
+      "title": "OpenAI官方SDK与工具",
+      "supports": "内建重试与配置；基础模型请求、function提案和服务端工具需分开。",
+      "urls": [
+        "https://github.com/openai/openai-python",
+        "https://developers.openai.com/api/docs/guides/tools"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R04",
+      "title": "Anthropic官方SDK",
+      "supports": "基础Messages、默认重试与tool_runner自动执行helper；按实际版本限制入口。",
+      "urls": [
+        "https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/python"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R05",
+      "title": "本地模型与token资产",
+      "supports": "Ollama支持云功能，存在禁云配置；tiktoken缺缓存时可获取词表，估算不能当全Provider账单。",
+      "urls": [
+        "https://docs.ollama.com/faq",
+        "https://github.com/openai/tiktoken/blob/main/tiktoken/load.py"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R06",
+      "title": "原生parser与grammar",
+      "supports": "Tree-sitter可含C external scanner；language-pack当前文档包含首次按需下载。",
+      "urls": [
+        "https://tree-sitter.github.io/tree-sitter/creating-parsers/4-external-scanners.html",
+        "https://github.com/xberg-io/tree-sitter-language-pack/blob/main/README.md"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R07",
+      "title": "容器CLI适配",
+      "supports": "python-on-whales可切换CLI，Podman/nerdctl为best-effort，不证明配置语义等价。",
+      "urls": [
+        "https://gabrieldemarmiesse.github.io/python-on-whales/docker_client/",
+        "https://gabrieldemarmiesse.github.io/python-on-whales/sub-commands/container/",
+        "https://docs.podman.io/en/latest/markdown/podman-machine.1.html"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R08",
+      "title": "容器产物复制",
+      "supports": "docker cp可从已停止容器复制；权限与所有权受平台及参数影响。",
+      "urls": [
+        "https://docs.docker.com/reference/cli/docker/container/cp/"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R09",
+      "title": "MCP官方SDK与迁移",
+      "supports": "SDK主版本、stdio环境基线与协议功能应固定成完整组合；默认环境有选择不代表适合全部任务。",
+      "urls": [
+        "https://github.com/modelcontextprotocol/python-sdk",
+        "https://py.sdk.modelcontextprotocol.io/migration/",
+        "https://github.com/modelcontextprotocol/python-sdk/blob/main/src/mcp/client/stdio.py"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R10",
+      "title": "飞书SDK发现请求",
+      "supports": "核对到的v2_main源码有同步requests发现调用；issue169讨论超时问题。必须对锁定版本复核。",
+      "urls": [
+        "https://github.com/larksuite/oapi-sdk-python/blob/v2_main/lark_oapi/ws/client.py",
+        "https://github.com/larksuite/oapi-sdk-python/issues/169"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R11",
+      "title": "飞书冷导入历史issue",
+      "supports": "24.25/24.27秒来自具体Windows/Hermes/lark-oapi组合的个例，不能外推为所有平台。",
+      "urls": [
+        "https://github.com/NousResearch/hermes-agent/issues/85564"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R12",
+      "title": "进程组封装维护状态",
+      "supports": "command-group明确弃用并指向process-wrap；候选API仍需原生故障验证。",
+      "urls": [
+        "https://github.com/watchexec/command-group",
+        "https://docs.rs/process-wrap/10.0.1/process_wrap/"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R13",
+      "title": "服务安装层级",
+      "supports": "service-manager对systemd/launchd有用户级支持，Windows后端不直接提供同等User能力。",
+      "urls": [
+        "https://docs.rs/service-manager/latest/service_manager/",
+        "https://docs.rs/service-manager/latest/src/service_manager/sc.rs.html",
+        "https://docs.rs/service-manager/latest/src/service_manager/winsw.rs.html"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R14",
+      "title": "进程监督能力边界",
+      "supports": "processkit的Drop/平台保证及管道协作清理有边界；不能推出通用100%回收。",
+      "urls": [
+        "https://docs.rs/processkit/latest/processkit/",
+        "https://docs.rs/processkit/latest/processkit/struct.ProcessGroup.html",
+        "https://docs.rs/ur-taking-me-with-you/latest/ur_taking_me_with_you/"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R15",
+      "title": "凭据后端",
+      "supports": "keyring有自动后端选择与替代后端；服务会话、锁定和无图形环境需单独处理。",
+      "urls": [
+        "https://keyring.readthedocs.io/en/latest/"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R16",
+      "title": "秘密扫描",
+      "supports": "detect-secrets存在网络验证、插件和allowlist机制；不等同通用实时脱敏。",
+      "urls": [
+        "https://github.com/Yelp/detect-secrets"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R17",
+      "title": "SBOM格式",
+      "supports": "CycloneDX Python产生CycloneDX；Syft支持SPDX与CycloneDX，实际产物需按对应格式验证。",
+      "urls": [
+        "https://cyclonedx-bom-tool.readthedocs.io/en/stable/",
+        "https://github.com/anchore/syft"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R18",
+      "title": "浏览器默认值与请求路由",
+      "supports": "Chromium sandbox配置需要显式核验；route不拦截Service Worker处理的全部请求。",
+      "urls": [
+        "https://playwright.dev/python/docs/api/class-browsertype",
+        "https://playwright.dev/python/docs/api/class-browsercontext"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R19",
+      "title": "SQLite、队列与异步驱动",
+      "supports": "SQLite默认同步选项受编译配置影响；backup仅复制DB；aiosqlite每连接线程队列不等于业务事务独占。",
+      "urls": [
+        "https://www.sqlite.org/compile.html#default_synchronous",
+        "https://www.sqlite.org/backup.html",
+        "https://aiosqlite.omnilib.dev/en/stable/",
+        "https://docs.python.org/3/library/asyncio-queue.html#asyncio.PriorityQueue"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R20",
+      "title": "搜索与Git隐藏执行",
+      "supports": "ripgrep有配置与preprocessor；git worktree add可触发post-checkout。",
+      "urls": [
+        "https://github.com/BurntSushi/ripgrep/blob/master/GUIDE.md",
+        "https://git-scm.com/docs/githooks#_post_checkout"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R21",
+      "title": "Patch职责与版本差异",
+      "supports": "unidiff解析；patch-ng发布版与开发分支能力不能混写，最终宿主提交仍由File Broker控制。",
+      "urls": [
+        "https://github.com/matiasb/python-unidiff",
+        "https://pypi.org/project/patch-ng/",
+        "https://github.com/conan-io/python-patch-ng"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R22",
+      "title": "社区飞书参考",
+      "supports": "nanobot聊天接入和QR应用注册可参考；不能据此赋予OpenBot owner。",
+      "urls": [
+        "https://github.com/HKUDS/nanobot/blob/main/docs/chat-apps.md",
+        "https://github.com/HKUDS/nanobot/blob/main/docs/guides/feishu-ai-agent.md"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R23",
+      "title": "日志、追踪与平台权限",
+      "supports": "上下文需管理；OTel外部exporter与敏感数据需配置；Apple权限按实际状态检测。",
+      "urls": [
+        "https://www.structlog.org/en/stable/contextvars.html",
+        "https://opentelemetry.io/docs/security/handling-sensitive-data/",
+        "https://opentelemetry.io/docs/languages/sdk-configuration/general/",
+        "https://support.apple.com/guide/mac-help/control-access-screen-system-audio-recording-mchld6aa7d23/mac",
+        "https://support.apple.com/en-my/guide/mac-help/mh43185/mac"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    },
+    {
+      "source_id": "R24",
+      "title": "版本化许可证据",
+      "supports": "pathspec、Anthropic SDK与AstrBot的精确许可不同；最终以锁定发行物及使用方式审查。",
+      "urls": [
+        "https://pypi.org/project/pathspec/",
+        "https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/README.md",
+        "https://github.com/AstrBotDevs/AstrBot/blob/master/LICENSE"
+      ],
+      "checked_date": "2026-11-04",
+      "evidence_scope": "PRIMARY_DOCUMENTATION_OR_SOURCE_REVIEW_NOT_RUNTIME_TEST",
+      "limitations": "Moving branches and documentation are not release pins; qualify the exact selected artifact before use."
+    }
+  ]
+}

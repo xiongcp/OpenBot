@@ -1,0 +1,16 @@
+.venv/
+.venv-m1/
+.cache/
+.python/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+.coverage
+.DS_Store
+*.log
+!evidence/implementation/*.log

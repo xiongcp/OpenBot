@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runtime-event.schema.json",
+  "title": "runtime-event.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.1"
+    },
+    "event_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "event_type": {
+      "enum": [
+        "TASK_QUEUED",
+        "TASK_STATE_CHANGED",
+        "APPROVAL_REQUESTED",
+        "APPROVAL_DECIDED",
+        "OPERATION_CLAIMED",
+        "OPERATION_DISPATCHING",
+        "OPERATION_FINISHED",
+        "OUTCOME_UNKNOWN",
+        "ARTIFACT_CREATED",
+        "TASK_FINISHED",
+        "CHANNEL_HEALTH_CHANGED"
+      ]
+    },
+    "task_id": {
+      "anyOf": [
+        {
+          "$ref": "./common.schema.json#/$defs/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "operation_id": {
+      "anyOf": [
+        {
+          "$ref": "./common.schema.json#/$defs/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "trace_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "occurred_at_ms": {
+      "$ref": "./common.schema.json#/$defs/UtcMs"
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 50
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "seq",
+    "event_type",
+    "task_id",
+    "operation_id",
+    "trace_id",
+    "occurred_at_ms",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "description": "Public durable event envelope. Payloads are allowlisted per event_type, redacted and bounded; payload is not a command."
+}

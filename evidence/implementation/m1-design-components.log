@@ -1,0 +1,47 @@
+{
+  "status": "PASS",
+  "scope": "Offline design integrity, not runtime component qualification",
+  "component_groups": 52,
+  "qualification_scenarios": 16,
+  "source_groups": 24,
+  "tasks": 96,
+  "legacy_task_ids_and_phases_preserved": 88,
+  "new_task_ids": [
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96
+  ],
+  "milestones": {
+    "M0": 13,
+    "M1": 37,
+    "M3": 25,
+    "P2": 6,
+    "M2": 11,
+    "M4": 4
+  },
+  "decisions": {
+    "DEFAULT_ADAPTER": 22,
+    "GATED_CANDIDATE": 17,
+    "DEFERRED": 7,
+    "REFERENCE_ONLY": 4,
+    "REJECTED_MVP": 2
+  },
+  "preserved_protocol_files": [
+    "db/001_baseline.sql",
+    "contracts/openapi.yaml",
+    "contracts/state-machine.json"
+  ],
+  "all_component_runtime_statuses": "NOT_RUN",
+  "not_validated": [
+    "Exact dependency locks and license compliance of a release",
+    "Actual SDK behavior or network/OS isolation",
+    "Full JSON Schema meta-schema validation",
+    "Real providers, Feishu, browser or MCP servers",
+    "Native installation, signing and upgrades"
+  ]
+}

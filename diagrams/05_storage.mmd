@@ -1,0 +1,32 @@
+flowchart TB
+  D["Daemon 唯一 SQLite writer"]
+  subgraph DB["SQLite WAL 事务状态与可靠队列"]
+    direction TB
+    subgraph ROW1["接入与当前状态"]
+      direction LR
+      I["inbox 入站去重"]
+      T["tasks 当前任务状态"]
+      O["operations 操作与尝试账本"]
+      I ~~~ T ~~~ O
+    end
+    subgraph ROW2["授权与可靠记录"]
+      direction LR
+      P["approvals 提案绑定与授权"]
+      E["events 只追加审计与增量流"]
+      X["outbox 待发送通知"]
+      P ~~~ E ~~~ X
+    end
+    subgraph ROW3["产物与事务边界"]
+      direction LR
+      A["artifacts 元数据 hash 引用"]
+      TX["同一事务提交状态 events outbox"]
+      A ~~~ TX
+    end
+    ROW1 ~~~ ROW2 ~~~ ROW3
+  end
+  STORE["Artifact Store 不可变对象"]
+  BACKUP["一致数据库快照与产物清单"]
+  D -->|统一事务仓储| DB
+  A -->|内容 hash 与受控引用| STORE
+  DB --> BACKUP
+  STORE --> BACKUP

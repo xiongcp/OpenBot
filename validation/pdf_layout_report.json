@@ -1,0 +1,68 @@
+[
+  {
+    "file": "OpenBot_Architecture_and_Project_Design_v1_2.pdf",
+    "pages": 55,
+    "text_bounds_anomalies": [],
+    "visual_review": "PASS",
+    "visual_review_scope": {
+      "contact_sheets": "All 55 pages reviewed; 5 contact sheets",
+      "full_page_reviews": [
+        34,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        55
+      ],
+      "correction": "Added four missing punctuation/math glyphs to both embedded fonts; rebuilt all PDFs",
+      "post_correction_full_page_reviews": [
+        34,
+        46
+      ],
+      "post_correction_all_pages": "Re-rendered 55 pages, no bounds anomalies, NUL or replacement characters",
+      "observed": "No clipping, overlaps, missing table rows or unreasonable blank pages; standalone diagrams retain intentional whitespace"
+    }
+  },
+  {
+    "file": "OpenBot_Implementation_Taskbook_v1_2.pdf",
+    "pages": 99,
+    "text_bounds_anomalies": [],
+    "visual_review": "PASS",
+    "visual_review_scope": {
+      "contact_sheets": "All 99 pages reviewed; 9 contact sheets",
+      "full_page_reviews": [
+        6,
+        7,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        42,
+        43,
+        60,
+        61,
+        65,
+        66,
+        75,
+        76,
+        94,
+        95,
+        96,
+        99
+      ],
+      "new_task_cards": "OB-089 through OB-096 reviewed in full, including page continuations",
+      "all_pages_scan": "No bounds anomalies, NUL or replacement characters",
+      "observed": "No clipping, overlaps, header/footer collisions or missing continuation fields; traceability table headers repeat correctly; chapter-ending whitespace is intentional"
+    }
+  }
+]

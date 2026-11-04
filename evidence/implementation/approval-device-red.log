@@ -1,0 +1,10 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______ test_completed_request_id_cannot_bypass_authenticated_device_scope ______
+tests/integration/storage/test_approvals.py:268: in test_completed_request_id_cannot_bypass_authenticated_device_scope
+    with pytest.raises((PermissionError, RequestConflict)):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE any of (<class 'PermissionError'>, <class 'openbot.storage.writer.RequestConflict'>)
+=========================== short test summary info ============================
+FAILED tests/integration/storage/test_approvals.py::test_completed_request_id_cannot_bypass_authenticated_device_scope
+1 failed, 18 deselected in 0.12s

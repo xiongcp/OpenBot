@@ -1,0 +1,5 @@
+{
+  "workspace_id": "ws_demo0001",
+  "goal": "在指定工作区生成修复补丁并在隔离环境验证",
+  "network_mode": "CONNECTED"
+}

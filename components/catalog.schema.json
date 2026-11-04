@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openbot.invalid/design/component-catalog/1.2",
+  "title": "Unimplemented design recommendation catalog; not runtime admission data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "catalog_version",
+    "kind",
+    "review_date",
+    "components"
+  ],
+  "properties": {
+    "catalog_version": {
+      "const": "1.2"
+    },
+    "kind": {
+      "const": "DESIGN_RECOMMENDATIONS_NOT_INSTALL_MANIFEST"
+    },
+    "review_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "component_id",
+          "display_name",
+          "decision",
+          "introduction_phase",
+          "port",
+          "task_ids",
+          "qualification_ids",
+          "upstream_urls",
+          "source_review",
+          "exact_release_license_status",
+          "pinned_release",
+          "artifact_sha256",
+          "qualification_state",
+          "runtime_enabled",
+          "required_controls",
+          "admission_rule"
+        ],
+        "properties": {
+          "component_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]+$"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decision": {
+            "enum": [
+              "DEFAULT_ADAPTER",
+              "GATED_CANDIDATE",
+              "REFERENCE_ONLY",
+              "DEFERRED",
+              "REJECTED_MVP"
+            ]
+          },
+          "introduction_phase": {
+            "enum": [
+              "M0",
+              "M1",
+              "M2",
+              "M3",
+              "M4",
+              "P2"
+            ]
+          },
+          "port": {
+            "type": "string",
+            "minLength": 1
+          },
+          "task_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^OB-[0-9]{3}$"
+            }
+          },
+          "qualification_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^Q[0-9]{2}$"
+            }
+          },
+          "upstream_urls": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "source_review": {
+            "enum": [
+              "PRIMARY_DOCUMENTATION_REVIEW",
+              "CANDIDATE_SOURCE_TO_REVIEW"
+            ]
+          },
+          "exact_release_license_status": {
+            "const": "VERIFY_BEFORE_ADMISSION"
+          },
+          "pinned_release": {
+            "type": "null"
+          },
+          "artifact_sha256": {
+            "type": "null"
+          },
+          "qualification_state": {
+            "const": "NOT_RUN"
+          },
+          "runtime_enabled": {
+            "const": false
+          },
+          "required_controls": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "admission_rule": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

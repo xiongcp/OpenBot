@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool-result.schema.json",
+  "title": "tool-result.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.1"
+    },
+    "operation_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "attempt_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "dispatch_id": {
+      "$ref": "./common.schema.json#/$defs/Id"
+    },
+    "status": {
+      "enum": [
+        "SUCCEEDED",
+        "FAILED",
+        "UNKNOWN"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 8000
+    },
+    "artifact_ids": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "$ref": "./common.schema.json#/$defs/Id"
+      }
+    },
+    "receipt": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "maxProperties": 30
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "./common.schema.json#/$defs/Error"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "operation_id",
+    "attempt_id",
+    "dispatch_id",
+    "status",
+    "summary",
+    "artifact_ids",
+    "receipt",
+    "error"
+  ],
+  "additionalProperties": false,
+  "description": "Receipt and summary must be filtered by the broker before entering model context or public channels."
+}

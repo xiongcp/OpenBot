@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.1",
+  "operation_id": "op_demo0001",
+  "profile_id": "pro_demo0001",
+  "principal_id": "usr_demo0001",
+  "session_id": "ses_demo0001",
+  "task_id": "tsk_demo0001",
+  "workspace_id": "ws_demo0001",
+  "tool": {
+    "name": "workspace.apply_patch",
+    "version": "1.0.0",
+    "manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "args": {
+    "patch_artifact_id": "art_patch001"
+  },
+  "resource_snapshot": {
+    "workspace_generation": 1,
+    "files": [
+      {
+        "relative_path": "src/demo.py",
+        "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    ]
+  },
+  "effect": "LOCAL_WRITE",
+  "retry_class": "IDEMPOTENT_WRITE",
+  "data_class": "WORKSPACE",
+  "destination": {
+    "kind": "LOCAL",
+    "resource_ref": "ws_demo0001"
+  },
+  "policy_version": "policy-1",
+  "identity_epoch": 1,
+  "expires_at_ms": 1793808000000,
+  "approval_nonce_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "provider_idempotency_key": null,
+  "binding_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}

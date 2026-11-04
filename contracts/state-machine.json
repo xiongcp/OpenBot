@@ -1,0 +1,134 @@
+{
+  "schema_version": "1.1",
+  "task": {
+    "initial": "QUEUED",
+    "transitions": {
+      "QUEUED": [
+        "RUNNING",
+        "PAUSED",
+        "CANCELLED"
+      ],
+      "RUNNING": [
+        "WAITING_APPROVAL",
+        "WAITING_INPUT",
+        "WAITING_RESOURCE",
+        "RECONCILING",
+        "PAUSED",
+        "SUCCEEDED",
+        "PARTIAL",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "WAITING_APPROVAL": [
+        "QUEUED",
+        "PAUSED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "WAITING_INPUT": [
+        "QUEUED",
+        "PAUSED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "WAITING_RESOURCE": [
+        "QUEUED",
+        "PAUSED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "RECONCILING": [
+        "QUEUED",
+        "PARTIAL",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "PAUSED": [
+        "QUEUED",
+        "CANCELLED"
+      ],
+      "SUCCEEDED": [],
+      "PARTIAL": [],
+      "FAILED": [],
+      "CANCELLED": []
+    }
+  },
+  "operation": {
+    "initial": "PROPOSED",
+    "transitions": {
+      "PROPOSED": [
+        "AWAITING_APPROVAL",
+        "READY",
+        "REJECTED",
+        "CANCELLED"
+      ],
+      "AWAITING_APPROVAL": [
+        "READY",
+        "REJECTED",
+        "EXPIRED",
+        "REVOKED",
+        "CANCELLED"
+      ],
+      "READY": [
+        "CLAIMED",
+        "EXPIRED",
+        "REVOKED",
+        "CANCELLED"
+      ],
+      "CLAIMED": [
+        "DISPATCHING",
+        "READY",
+        "EXPIRED",
+        "REVOKED",
+        "CANCELLED"
+      ],
+      "DISPATCHING": [
+        "SUCCEEDED",
+        "FAILED",
+        "UNKNOWN"
+      ],
+      "UNKNOWN": [
+        "SUCCEEDED",
+        "FAILED",
+        "READY"
+      ],
+      "SUCCEEDED": [],
+      "FAILED": [],
+      "REJECTED": [],
+      "EXPIRED": [],
+      "REVOKED": [],
+      "CANCELLED": []
+    }
+  },
+  "approval": {
+    "initial": "PENDING",
+    "transitions": {
+      "PENDING": [
+        "APPROVED",
+        "DENIED",
+        "EXPIRED",
+        "REVOKED"
+      ],
+      "APPROVED": [
+        "CONSUMED",
+        "EXPIRED",
+        "REVOKED"
+      ],
+      "CONSUMED": [],
+      "DENIED": [],
+      "EXPIRED": [],
+      "REVOKED": []
+    }
+  },
+  "guards": {
+    "operation.CLAIMED.READY": "Recovery only; prove no dispatch and old worker isolated; same-operation consumed grant stays consumed.",
+    "operation.UNKNOWN.READY": "Recovery only; allowed retry_class, authenticated reconciliation evidence with provenance, matching consumed grant, unchanged original authorization and resource preconditions.",
+    "operation.CLAIMED.DISPATCHING": "Atomic recheck of cancel, epoch, identity, policy, deadline and resource versions before any external dispatch.",
+    "task.RECONCILING.CANCELLED": "No unresolved UNKNOWN operation remains.",
+    "task.RUNNING.SUCCEEDED": "Outcome verifier confirms requirements and no unresolved operations.",
+    "approval.APPROVED.CONSUMED": "First claim of this operation only; safe retry reuses matching consumed record without status reversal.",
+    "task.*.CANCELLED": "No DISPATCHING or UNKNOWN operation remains; otherwise RECONCILING.",
+    "task.RECONCILING.QUEUED": "Recovery service only after unresolved outcomes are reconciled; ordinary resume and new IDs cannot bypass resource quarantine.",
+    "network.request_scope": "Effective permissions are the intersection of profile policy, principal grant, workspace policy and request scope. Requests cannot expand authority."
+  }
+}

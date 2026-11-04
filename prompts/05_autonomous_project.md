@@ -1,0 +1,18 @@
+# 持续实施到MVP的交接提示
+
+请按当前目录的OpenBot v1.2工程设计包实施到M3产品MVP。先读取README.md、AGENTS.md、docs/00_scope.md、docs/10_project_plan.md、docs/12_component_reuse.md、docs/13_component_qualification.md、docs/14_revision_v1_2.md、components/catalog.json和tasks/backlog.json，检查真实仓库状态，再从第一个依赖满足的TODO任务开始。任务总数96，保持原ID，不因文档或SQL存在就标记DONE。
+
+先完成M0的组件目录、标准合同向量与OB-091最小崩溃协议PoC，之后按DAG连续推进。M1优先降低SDK副作用和首发OS隔离风险，再通过OB-029正式集成门禁。每个任务保持独立可审查的改动，实际跑验收，记录证据后再选下一项。常规可逆的本地实现、修复、测试和集成不必每完成一个小步骤就停下来询问。每个里程碑输出实际通过与未通过的门禁。
+
+每轮读取component_refs、reuse_type与reuse_notes；按catalog的采用层级处理，不在M0全量安装候选。版本、许可证、非Python资产与真实副作用都要验证。源码审查可以决定NO_COPY。真实组件资格不得由目录里的NOT_RUN模板改名伪造。
+
+SDK自动重试与应用重试不能叠加；不调用官方或第三方自动工具运行器；模型提出动作后仍由Broker授权。Ollama localhost不证明本地推理，grammar/词表不得运行期下载。不要用128字节窗口、单一regex、Drop或进程组宣称100%安全。
+
+你可以并行分配互不改同一文件的工作包，并使用独立worktree。schema、迁移编号、锁文件、公共接口与安全策略由一个Integrator负责。集成后必须重新验证真实合并结果。
+
+Task、Operation、Approval、Attempt四个概念不能合并。CONSUMED不可复活，dispatch_id属于Attempt，provider幂等键属于Operation。审批预览不能泄露内部提案和SECRET；任何UNKNOWN须保留资源quarantine并核对，不允许换ID重发。所有副作用经Broker，无隔离后端不得降级宿主执行。
+
+遇到缺少真实飞书租户、模型凭据、OS机器或签名环境时，完成能独立实现和验证的部分，把受影响任务标BLOCKED并明确最小缺失条件，继续其他就绪任务。不要伪造真实服务通过结果，不为了通过测试放宽策略。
+
+本次范围是代码实现与验收。生产部署、正式发布、对真实第三方发送内容或破坏性数据操作必须依据用户另行给出的具体授权。需要交接或结束时更新任务状态、证据、风险和下一任务，保证另一个编码助手能够从仓库真实状态继续。
+

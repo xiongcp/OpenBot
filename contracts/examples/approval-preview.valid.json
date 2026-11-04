@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.1",
+  "approval_id": "apr_demo0001",
+  "operation_id": "op_demo0001",
+  "task_id": "tsk_demo0001",
+  "status": "PENDING",
+  "version": 1,
+  "binding_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tool_display_name": "应用补丁",
+  "impact_summary": "在指定工作树修改1个文件",
+  "display_preview": "本地展示经过过滤的diff",
+  "sensitive_details_omitted": false,
+  "decision_surface": "REMOTE_ALLOWED",
+  "expires_at_ms": 1793808000000,
+  "challenge_available": true
+}

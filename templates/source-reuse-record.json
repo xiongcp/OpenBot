@@ -1,0 +1,16 @@
+{
+  "kind": "UNFILLED_SOURCE_REUSE_TEMPLATE",
+  "decision": "UNDECIDED",
+  "task_id": null,
+  "upstream_url": null,
+  "commit": null,
+  "files": [],
+  "license_expression": null,
+  "license_files": [],
+  "local_patch": null,
+  "owner": null,
+  "regression_tests": [],
+  "upgrade_trigger": null,
+  "replacement_plan": null,
+  "reason": null
+}

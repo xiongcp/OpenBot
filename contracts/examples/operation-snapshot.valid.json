@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.1",
+  "operation_id": "op_demo0001",
+  "task_id": "tsk_demo0001",
+  "version": 4,
+  "state": "UNKNOWN",
+  "binding_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "retry_class": "RECONCILE_ONLY",
+  "effect": "EXTERNAL_WRITE",
+  "last_attempt_id": "att_demo0001",
+  "artifact_ids": [],
+  "reconciliation_options": [
+    "KEEP_UNKNOWN",
+    "CONFIRMED_SUCCEEDED",
+    "CONFIRMED_FAILED_NO_EFFECT"
+  ]
+}
