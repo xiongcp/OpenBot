@@ -5132,7 +5132,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **完成MVP发布验收与风险登记**
 
-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Lead · 规模 S
+阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Lead · 规模 S
 
 **需求** [RQ01](requirements_traceability.md#rq01)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
 

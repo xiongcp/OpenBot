@@ -3412,6 +3412,63 @@
 +### 4. Reproducible Command
 +- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q` (`1 passed`)
 --- /dev/null
++++ b/docs/releases/mvp-acceptance.md
+@@ -0,0 +1,30 @@
++# M3 MVP 发布验收签核与平台能力报告 / M3 MVP Release Acceptance & Platform Capability Report (OB-080)
++
++## 中文说明
++
++### 1. M0—M3 实施与验证汇总（Darwin arm64）
++- **安全必阻断失败数**：`0`（M0 验证套件 `299 passed` / M1 验证套件 `318 passed`，存储集成测试 `91 passed`）。
++- **已在本机（`Darwin arm64`）实测通过的子系统**：
++  - 23 表 SQLite 单写者持久化、Outbox、取消传播、持久预算与上下文快照（`OB-011`—`OB-024`、`OB-030`）。
++  - 六维策略、一次性 `CONSUMED` 审批、两次短事务派发与按副作用等级恢复（`OB-017`—`OB-020`、`OB-031`）。
++  - 工作区文件守卫、`list/read/search`、补丁冻结与回滚、隔离语法验证、本地消息草稿与受控发送（`OB-032`—`OB-036`、`OB-043`—`OB-044`）。
++  - 统一外发策略、OS Keychain 分域与单次句柄、流式脱敏、结构化进程执行、容器沙箱与进程树回收（`OB-037`—`OB-042`）。
++  - 认证本地 HTTP/SSE 控制 API、CLI 任务与审批操作、M1 首条持久化垂直切片与威胁回归（`OB-081`、`OB-028`—`OB-029`、`OB-045`—`OB-046`）。
++  - 飞书配对、WebSocket 入站、审批 callback、普通卡/进度节流/CardKit 降级、外部健康监督、死信重投与受控 E2E 套件（`OB-048`—`OB-056`、`OB-094`）。
++  - 云模型与本地 Ollama 适配器、浏览器专用 profile/网络策略/读写工具与结果验证、MCP 协商/JCS 锁定/隔离执行与故障套件、只读技能、用户级 daemon、macOS 原生门禁、打包审计、统一可观测性、质量基准、SPDX-2.3 供应链、分层 CI 与混沌浸泡（`OB-025`—`OB-026`、`OB-057`—`OB-069`、`OB-072`、`OB-075`—`OB-080`、`OB-095`—`OB-096`）。
++
++### 2. 跨平台与外部租户诚实放行结论
++- **`darwin_arm64_pilot_ready = True`**：macOS ARM64 本地受控试点全部门禁通过。
++- **`full_three_os_mvp_release_approved = False`**：因当前环境未提供原生 Windows/Linux 实机（`OB-005`/`OB-070`/`OB-071` `BLOCKED`）及真实飞书测试租户与云模型生产凭据（`OB-047`/`OB-056`），严格遵守架构不变量，不将单平台或本地契约通过宣称为全三平台 MVP 放行。
++- **`m4_signing_is_reverse_prerequisite = False`**：M4 桌面 Tauri UI、代码签名与自动升级不作为 M3 门禁的反向前置依赖。
++
++---
++
++## English Summary
++
++### 1. M0–M3 Implementation & Verification Summary (`Darwin arm64`)
++- **Security-Critical Failures**: `0` (`299 passed` in M0 verification / `318 passed` in M1 verification, `91 passed` storage integration tests).
++- **Verified Subsystems on `Darwin arm64`**: 23-table SQLite persistence, two-transaction dispatch, 6D policy & one-time `CONSUMED` approvals, workspace ACI tools, process/container isolation, authenticated loopback HTTP/SSE API & CLI, Feishu gateway/cards/callbacks/health/DLQ, OpenAI & local Ollama adapters, browser & MCP guards, read-only skills, user-session daemon, macOS native gate, packaging auditor, redacted observability, benchmark runner, SPDX-2.3 supply chain, tiered CI, and chaos soak suite.
++
++### 2. Release Gate Decision
++- **`darwin_arm64_pilot_ready = True`**, **`full_three_os_mvp_release_approved = False`** (blocked on `windows_native_unverified`, `linux_native_unverified`, and `real_feishu_tenant_unverified`), and **`m4_signing_is_reverse_prerequisite = False`**.
+--- /dev/null
++++ b/docs/risks.md
+@@ -0,0 +1,21 @@
++# 残余风险与外部环境阻塞登记表 / Residual Risk & External Blocker Register (OB-080)
++
++## 中文说明
++
++| 风险 / 阻塞 ID | 关联任务 | 描述与影响边界 | 处置状态与最小解除条件 |
++|---|---|---|---|
++| `BLK-FEISHU-TENANT` | `OB-047`、`OB-056` | 缺少专用飞书企业测试租户与自建应用凭据；已通过脱敏契约夹具与 6 故障场景验证网关边界，但未执行真实飞书云端长连接实测 | 保持 `BLOCKED`/`IN_PROGRESS`；提供专用测试租户 `app_id`/`app_secret` 后运行真实验收 |
++| `BLK-NATIVE-WIN-LINUX` | `OB-005`、`OB-070`、`OB-071`、`OB-072` | 当前机器为 `Darwin arm64`，缺少原生 Windows 11（Win32 Job Object、WinVaultKeyring）与原生 Linux（cgroup v2、SecretService）物理/CI 机器 | 保持 `BLOCKED`/`IN_PROGRESS`；接入原生 Windows 与 Linux runner 后执行对应平台门禁 |
++| `RSK-POSIX-PGID-ESCAPE` | `OB-042`、`OB-093` | POSIX 进程组（`setpgid`/`killpg`）无法阻止调 `setsid()` 的双 fork 子进程逃逸 | 高风险不受信任执行必须启用容器沙箱后端并按容器 ID 独立回收 |
++| `RSK-REGEX-REDACTION` | `OB-039`、`OB-075` | 正则与精确 canary 脱敏不能保证识别 100% 非结构化隐私文本 | 以数据分级（`SECRET`/`SENSITIVE`）和 `EgressGuard` 作为主防线，敏感审批强制 `REQUIRE_LOCAL` |
++
++---
++
++## English Summary
++
++| Risk / Blocker ID | Tasks | Impact & Boundary | Status & Minimum Unblock Condition |
++|---|---|---|---|
++| `BLK-FEISHU-TENANT` | `OB-047`, `OB-056` | No dedicated live Feishu test tenant provisioned; offline replay and 6 failure scenarios pass locally | Keep `BLOCKED`/`IN_PROGRESS` until live test tenant credentials are provided |
++| `BLK-NATIVE-WIN-LINUX` | `OB-005`, `OB-070`, `OB-071`, `OB-072` | Current host is `Darwin arm64`; native Windows 11 and Linux hardware/runners are absent | Keep `BLOCKED`/`IN_PROGRESS` until native Windows and Linux runners execute the platform gates |
++| `RSK-POSIX-PGID-ESCAPE` | `OB-042`, `OB-093` | POSIX process groups cannot prevent `setsid()` double-fork escapes | Require container sandbox backend and container-ID tracking for untrusted execution |
++| `RSK-REGEX-REDACTION` | `OB-039`, `OB-075` | Regex and canary redaction cannot guarantee 100% detection of unstructured private text | Enforce `EgressGuard` data classification and `REQUIRE_LOCAL` approval previews as primary controls |
+--- /dev/null
 +++ b/docs/runtime-dependencies.md
 @@ -0,0 +1,22 @@
 +# 可复现打包与运行时资源清单说明 / Reproducible Packaging & Runtime Asset Manifest (OB-072)
@@ -3628,7 +3685,7 @@
 +}
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,104 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3726,12 +3783,13 @@
 +- 推进 OB-077（建立分层 CI 门禁）：实现 TieredCiGateEvaluator 及 .github/workflows/pull_request/gate.yml、.github/workflows/nightly/soak.yml、.github/workflows/release/supply_chain.yml（PR 层即包含契约与安全威胁回归，严禁跳过失败测试 CI_SKIP_FAILED_TESTS_FORBIDDEN，故障注入可可靠阻断门禁，且不在 PR 层全局安装全目录组件）；新增单元测试通过，M0 增至 296 passed/3 skipped，M1 增至 315 passed/1 skipped。因上游 OB-070/071 缺少 Windows/Linux 原生机器，OB-077 记 IN_PROGRESS。
 +- 推进 OB-078（建立断网休眠与崩溃浸泡）：实现 ChaosSoakHarness、ChaosSoakReport、双语模板 docs/soak-report-template.md 与测试 tests/chaos/soak/test_chaos_soak.py（覆盖 DNS 停滞/半开、系统休眠时钟跳变、SIGKILL 崩溃恢复零盲重试与备份异常 4 类故障，明确声明 physical_power_loss_tested=False 与 claims_100_percent_lossless_guarantee=False）；M0 增至 297 passed/3 skipped，M1 增至 316 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-078 记 IN_PROGRESS。
 +- 推进 OB-079（完成上手与故障处置文档）：新增中英双语 docs/getting-started.md、docs/troubleshooting.md、SECURITY.md 并更新 README.md（完整说明 CLI/飞书配对、停止任务、UNKNOWN 核对恢复、密钥轮换、备份恢复与脱敏诊断导出；明确禁止 --ignore-and-rerun，且诚实标明 M4 桌面签名与自动升级尚未实现）；新增单元测试通过，M0 增至 298 passed/3 skipped，M1 增至 317 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-079 记 IN_PROGRESS。
++- 推进 OB-080（完成 MVP 发布验收与风险登记）：实现 MvpReleaseAcceptanceGate、中英双语 docs/releases/mvp-acceptance.md 与 docs/risks.md（签核 Darwin arm64 本地试点就绪 darwin_arm64_pilot_ready=True、security_critical_failures=0，同时因缺少 Windows/Linux 原生实机与真实飞书租户诚实判定 full_three_os_mvp_release_approved=False，且 m4_signing_is_reverse_prerequisite=False）；新增单元测试通过，M0 增至 299 passed/3 skipped，M1 增至 318 passed/1 skipped。至此 M0—M3 阶段所有可本地实施任务全部完成并推送。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`–`OB-079`, `OB-095`, and `OB-096`, reaching 298 passed M0 checks and 317 passed M1 checks.
++- Completed all M2 and M3 local implementation, verification, supply-chain, and acceptance tasks (`OB-048`–`OB-056`, `OB-094`, `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`–`OB-080`, `OB-095`–`OB-096`), reaching 299 passed M0 checks and 318 passed M1 checks, with honest blocker registration for missing Windows/Linux native machines and live Feishu tenant credentials.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -7847,6 +7905,61 @@
 +        return MvpCapabilityRegressionReport(
 +            subsystems_verified=tuple(subsystems),
 +            security_critical_failures=failures,
++        )
+--- /dev/null
++++ b/services/core/src/openbot/application/mvp_release_gate.py
+@@ -0,0 +1,52 @@
++"""M3 MVP release acceptance gate and risk auditor (OB-080)."""
++
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++from openbot.application.supply_chain import ReleaseSupplyChainVerifier
++
++
++@dataclass(frozen=True, slots=True)
++class MvpReleaseDecision:
++    darwin_arm64_pilot_ready: bool
++    full_three_os_mvp_release_approved: bool
++    blocking_reasons: tuple[str, ...]
++    m4_signing_is_reverse_prerequisite: Literal[False] = False
++
++
++class MvpReleaseAcceptanceGate:
++    """Evaluate M3 MVP release readiness without relaxing three-OS or live-tenant gates."""
++
++    def __init__(self, repo_root: Path) -> None:
++        self._root = repo_root.resolve()
++
++    def evaluate_release_readiness(
++        self,
++        *,
++        security_critical_failures: int,
++        darwin_arm64_verified: bool,
++        windows_native_verified: bool,
++        linux_native_verified: bool,
++        real_feishu_tenant_verified: bool,
++    ) -> MvpReleaseDecision:
++        sc = ReleaseSupplyChainVerifier(self._root).verify_all()
++        reasons: list[str] = []
++        if security_critical_failures > 0:
++            reasons.append("security_critical_failures_present")
++        if not darwin_arm64_verified or sc.verified_artifacts_count == 0:
++            reasons.append("darwin_arm64_or_supply_chain_unverified")
++        if not windows_native_verified:
++            reasons.append("windows_native_unverified")
++        if not linux_native_verified:
++            reasons.append("linux_native_unverified")
++        if not real_feishu_tenant_verified:
++            reasons.append("real_feishu_tenant_unverified")
++
++        pilot_ok = security_critical_failures == 0 and darwin_arm64_verified
++        full_ok = len(reasons) == 0
++        return MvpReleaseDecision(
++            darwin_arm64_pilot_ready=pilot_ok,
++            full_three_os_mvp_release_approved=full_ok,
++            blocking_reasons=tuple(reasons),
 +        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/operations.py
@@ -21212,8 +21325,8 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [complete] M1 本地可实施任务全部落地并通过验证（OB-011—025、OB-028—046、OB-081、OB-092—093）；继续推进 M2 / M3 就绪任务
-+- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
++- [complete] M1 本地可实施任务全部落地并通过验证（OB-011—025、OB-028—046、OB-081、OB-092—093）
++- [complete] M2 与 M3 全部可本地实施任务落地并通过验证（OB-048—056、OB-094、OB-026、OB-057—069、OB-072、OB-075—080、OB-095—096），生成完整 MVP 验收与风险/阻塞登记报告
 +
 +## 已知错误与处理
 +
@@ -22000,6 +22113,15 @@
 +阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
  
  **需求** [RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
+ 
+@@ -5132,7 +5132,7 @@
+ 
+ **完成MVP发布验收与风险登记**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Lead · 规模 S
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Lead · 规模 S
+ 
+ **需求** [RQ01](requirements_traceability.md#rq01)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
  
 --- a/tasks/backlog.json
 +++ b/tasks/backlog.json
@@ -24218,7 +24340,7 @@
      "owner_lane": "Docs",
      "size": "M",
      "req_ids": [
-@@ -4936,7 +5865,22 @@
+@@ -4936,14 +5865,29 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -24242,7 +24364,36 @@
    },
    {
      "id": "OB-080",
-@@ -5009,7 +5953,7 @@
+     "title": "完成MVP发布验收与风险登记",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Lead",
+     "size": "S",
+     "req_ids": [
+@@ -5002,14 +5946,27 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第25–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第25–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 MvpReleaseAcceptanceGate, docs/releases/mvp-acceptance.md, and docs/risks.md evaluating M3 MVP readiness and registering external OS/tenant blockers",
++      "evidence": [
++        "docs/releases/mvp-acceptance.md",
++        "docs/risks.md",
++        "tests/unit/test_mvp_release_acceptance.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "缺少 Windows/Linux 原生实机（OB-005/070/071 BLOCKED）与真实飞书测试租户（OB-047/056）；full_three_os_mvp_release_approved=False，保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (sbom-tools), reuse_type (qualification), and reuse_notes; signed off Darwin arm64 pilot while refusing to mark unverified OS targets or live Feishu tenant as supported."
++    }
+   },
+   {
+     "id": "OB-081",
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -24251,7 +24402,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +6022,20 @@
+@@ -5078,7 +6035,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -24273,7 +24424,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6480,7 @@
+@@ -5523,7 +6493,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -24282,7 +24433,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6533,26 @@
+@@ -5576,14 +6546,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24311,7 +24462,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6611,26 @@
+@@ -5642,14 +6624,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -24340,7 +24491,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6685,26 @@
+@@ -5704,14 +6698,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24369,7 +24520,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6771,25 @@
+@@ -5778,14 +6784,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24397,7 +24548,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6857,26 @@
+@@ -5853,14 +6870,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24426,7 +24577,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6930,27 @@
+@@ -5914,14 +6943,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -24456,7 +24607,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,14 +7006,27 @@
+@@ -5977,14 +7019,27 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -24486,7 +24637,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -6050,6 +7092,22 @@
+@@ -6050,6 +7105,22 @@
        "三OS包/资源清单、选定格式SBOM及校验、NOTICE、构建输入hash、禁网首用记录、篡改反例和有限期风险例外。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -35593,6 +35744,34 @@
 +    )
 +    with pytest.raises(PermissionError, match="MCP_METADATA_DRIFT_QUARANTINED"):
 +        reg.verify_against_pin(drifted, expected_pin_hash=pin.jcs_pin_hash)
+--- /dev/null
++++ b/tests/unit/test_mvp_release_acceptance.py
+@@ -0,0 +1,25 @@
++from pathlib import Path
++
++from openbot.application.mvp_release_gate import MvpReleaseAcceptanceGate
++
++ROOT = Path(__file__).resolve().parents[2]
++
++
++def test_mvp_release_gate_blocks_release_when_three_os_or_live_feishu_unverified() -> None:
++    assert (ROOT / "docs/releases/mvp-acceptance.md").is_file()
++    assert (ROOT / "docs/risks.md").is_file()
++
++    gate = MvpReleaseAcceptanceGate(ROOT)
++    decision = gate.evaluate_release_readiness(
++        security_critical_failures=0,
++        darwin_arm64_verified=True,
++        windows_native_verified=False,
++        linux_native_verified=False,
++        real_feishu_tenant_verified=False,
++    )
++    assert decision.m4_signing_is_reverse_prerequisite is False
++    assert decision.darwin_arm64_pilot_ready is True
++    assert decision.full_three_os_mvp_release_approved is False
++    assert "windows_native_unverified" in decision.blocking_reasons
++    assert "linux_native_unverified" in decision.blocking_reasons
++    assert "real_feishu_tenant_unverified" in decision.blocking_reasons
 --- /dev/null
 +++ b/tests/unit/test_observability_diagnostics.py
 @@ -0,0 +1,41 @@
