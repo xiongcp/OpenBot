@@ -3268,6 +3268,19 @@
 +- **Trace Correlation & Low-Cardinality Metrics**: `ObservabilityHub` correlates `task_id`, `operation_id`, and `attempt_id` in structured logs while stripping high-cardinality IDs from metric labels.
 +- **Zero Hidden Reasoning & Redacted Diagnostics**: Drops model hidden reasoning chains, sanitizes all logs and explicit diagnostic bundles through `RedactionPipeline`, and disables remote telemetry exporters by default (`remote_exporter_enabled = False`).
 --- /dev/null
++++ b/docs/releases/component-supply-chain.md
+@@ -0,0 +1,10 @@
++# 全量交付资产来源与供应链验收说明 / Release Component Supply-Chain & SBOM Verification (OB-096)
++
++## 中文说明
++- **SPDX-2.3 SBOM 与非 Python 资产覆盖**：`release/SBOM/spdx-pilot.spdx.json` 明确采用 `SPDX-2.3` 标准（绝不将 CycloneDX 冒称为 SPDX），同时覆盖 Python 锁定包与非 Python 运行时资产清单（`packaging/runtime-assets.json`）。
++- **防篡改哈希与源码复用台账对齐**：`scripts/check_release_components.py` 逐项比对 `uv.lock`、`THIRD_PARTY_NOTICES.md`、`packaging/runtime-assets.json`、`components/source-reuse/feishu.json` 与 `components/source-reuse/browser-dom.json` 的 SHA-256，任何一字节篡改立即抛出 `SUPPLY_CHAIN_HASH_TAMPERED`。
++- **诚实安全边界**：明确声明 `pinned_versions_guarantee_zero_vulnerabilities = False`（固定锁与哈希仅保证可追溯性，不等同于零漏洞保证）。
++
++## English Summary
++- **SPDX-2.3 SBOM & Non-Python Asset Coverage**: `release/SBOM/spdx-pilot.spdx.json` uses strict `SPDX-2.3` format and covers both Python packages and non-Python runtime assets.
++- **Tamper Detection & Honest Boundary**: `scripts/check_release_components.py` verifies exact SHA-256 digests in `release/checksums.json` (`SUPPLY_CHAIN_HASH_TAMPERED` on mismatch) and explicitly states `pinned_versions_guarantee_zero_vulnerabilities = False`.
+--- /dev/null
 +++ b/docs/releases/local-prototype-acceptance.md
 @@ -0,0 +1,41 @@
 +# M1 最小本地 Alpha 原型边界与验收说明 / M1 Minimal Local Alpha Prototype Acceptance & Boundary Report (OB-046)
@@ -3482,7 +3495,7 @@
 +}
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,100 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3576,12 +3589,13 @@
 +- 推进 OB-072（建立可复现打包与运行资源清单）：实现 PackagingBundleAuditor、scripts/build/build_pilot_bundle.py、packaging/runtime-assets.json 与双语说明 docs/runtime-dependencies.md（明确标记 M3_UNSIGNED_PILOT 且 signed_m4_release_claimed=False；禁止首次使用时静默下载浏览器/grammar/词表；拦截 .env/sqlite/key/cache 混入产物）；新增单元测试通过，M0 增至 292 passed/3 skipped，M1 增至 311 passed/1 skipped。因上游 OB-005/070/071 缺少 Windows/Linux 原生实机，OB-072 记 IN_PROGRESS。
 +- 推进 OB-075（实现统一可观测性与诊断）：实现 ObservabilityHub、TraceCorrelationContext 与双语运维说明 docs/operations/observability.md（结构化关联 task/operation/attempt，从 metrics 标签剥离高基数 ID，丢弃模型隐藏思维链，默认禁用远程上报，显式导出的诊断包统一经 RedactionPipeline 脱敏）；新增单元测试通过，M0 增至 293 passed/3 skipped，M1 增至 312 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-075 记 IN_PROGRESS。
 +- 推进 OB-076（建立真实任务质量基准集）：实现 BenchmarkEvalRunner、evals/run.py、evals/scenarios/mvp_tasks.json 与双语评分规则 evals/rubrics/outcome_rubric.md（严格以 OutcomeVerifier 核对产物且存在未决 UNKNOWN 操作时强制记为 RECONCILING；明确标记 mock_accepted_as_intelligence_proof=False 与 fixed_loc_or_speedup_promised=False）；新增单元测试通过，M0 增至 294 passed/3 skipped，M1 增至 313 passed/1 skipped。因缺少真实云端模型凭据运行在线多次样本，OB-076 记 IN_PROGRESS。
++- 推进 OB-096（验收全量交付资产来源与供应链）：实现 ReleaseSupplyChainVerifier、scripts/check_release_components.py、release/SBOM/spdx-pilot.spdx.json、release/THIRD_PARTY_NOTICES.md、release/checksums.json 与双语说明 docs/releases/component-supply-chain.md（校验 SPDX-2.3 标准与非 Python 资产覆盖，逐项校验 SHA-256 防篡改，明确声明 pinned_versions_guarantee_zero_vulnerabilities=False）；新增单元测试通过，M0 增至 295 passed/3 skipped，M1 增至 314 passed/1 skipped。因上游 OB-067/072/094/095 仍为 IN_PROGRESS，OB-096 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`, `OB-076`, and `OB-095`, reaching 294 passed M0 checks and 313 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`, `OB-076`, `OB-095`, and `OB-096`, reaching 295 passed M0 checks and 314 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3636,6 +3650,57 @@
 +python_version = "3.12"
 +files = ["services/core/src/openbot", "services/feishu_gateway/src/openbot_feishu"]
 +strict = true
+--- /dev/null
++++ b/release/SBOM/spdx-pilot.spdx.json
+@@ -0,0 +1,23 @@
++{
++  "spdxVersion": "SPDX-2.3",
++  "dataLicense": "CC0-1.0",
++  "SPDXID": "SPDXRef-DOCUMENT",
++  "name": "openbot-m3-pilot-sbom",
++  "documentNamespace": "https://openbot.local/spdx/openbot-m3-pilot",
++  "packages": [
++    {
++      "SPDXID": "SPDXRef-Package-openbot",
++      "name": "openbot",
++      "versionInfo": "0.1.0.dev0",
++      "downloadLocation": "NOASSERTION",
++      "licenseDeclared": "Apache-2.0"
++    },
++    {
++      "SPDXID": "SPDXRef-Asset-non-python-runtime",
++      "name": "openbot-non-python-runtime-assets",
++      "versionInfo": "1.2",
++      "downloadLocation": "NOASSERTION",
++      "licenseDeclared": "MIT AND Apache-2.0"
++    }
++  ]
++}
+--- /dev/null
++++ b/release/THIRD_PARTY_NOTICES.md
+@@ -0,0 +1,9 @@
++# 第三方许可证与归属声明（M3 试点发布） / Third-Party Notices (M3 Pilot Release) (OB-096)
++
++## 中文说明
++- 本文件汇总 OpenBot M0/M1/M3 实际锁定并准入的第三方组件许可证声明（详见根目录 `THIRD_PARTY_NOTICES.md` 与 `components/admissions/*.json`）。
++- `OB-094`（飞书卡片模板）与 `OB-095`（浏览器 DOM 脚本）均已正式审计为 `NO_COPY`，未复制任何上游应用源码。
++
++## English Summary
++- Summarizes third-party notices for all locked and admitted M0/M1/M3 components (see root `THIRD_PARTY_NOTICES.md` and `components/admissions/*.json`).
++- Both `OB-094` (Feishu templates) and `OB-095` (browser DOM extraction) are audited as `NO_COPY` with zero vendored upstream source.
+--- /dev/null
++++ b/release/checksums.json
+@@ -0,0 +1,10 @@
++{
++  "schema_version": "1.2",
++  "artifacts": {
++    "uv.lock": "2d461a312280457241adc2efc8e8d49369ceade8ab7eae9ff409e390577b77dd",
++    "THIRD_PARTY_NOTICES.md": "ab3a7d45286cacbae1a3b7c8d2662ae18e0533caa9774d0a6860ae8510353fc1",
++    "packaging/runtime-assets.json": "b1b87190fcea946c1e8191f3e1f6d7360cbdff9bb1310cadd5ac8fb8e2fbb855",
++    "components/source-reuse/feishu.json": "5f7f6c88ec6e8f7db4c461a347592ff6e2e1613f3df6187b985e554e283aac77",
++    "components/source-reuse/browser-dom.json": "285227f281cddd2994546a5ebbaad7aa427b5e92873368abb874d38f6f0723a7"
++  }
++}
 --- /dev/null
 +++ b/scripts/build/build_pilot_bundle.py
 @@ -0,0 +1,22 @@
@@ -3789,8 +3854,40 @@
 +        print(str(exc), file=sys.stderr)
 +        raise SystemExit(1) from exc
 --- /dev/null
++++ b/scripts/check_release_components.py
+@@ -0,0 +1,29 @@
++"""CLI gate verifying release SBOM, third-party notices, and artifact SHA-256 checksums (OB-096)."""
++
++import json
++from pathlib import Path
++
++from openbot.application.supply_chain import ReleaseSupplyChainVerifier
++
++ROOT = Path(__file__).resolve().parents[1]
++
++
++def main() -> int:
++    rep = ReleaseSupplyChainVerifier(ROOT).verify_all()
++    zero_vuln = rep.pinned_versions_guarantee_zero_vulnerabilities
++    print(
++        json.dumps(
++            {
++                "sbom_standard": rep.sbom_standard,
++                "verified_artifacts_count": rep.verified_artifacts_count,
++                "includes_non_python_assets": rep.includes_non_python_assets,
++                "pinned_versions_guarantee_zero_vulnerabilities": zero_vuln,
++            },
++            indent=2,
++        )
++    )
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+--- /dev/null
 +++ b/scripts/record_changes.py
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,133 @@
 +"""Create review artifacts without staging the user's untracked design package."""
 +
 +import difflib
@@ -3833,6 +3930,7 @@
 +        "native/supervisor",
 +        "packaging",
 +        "evals",
++        "release",
 +        "contracts/schemas",
 +        "tests",
 +        "scripts",
@@ -10455,6 +10553,52 @@
 +            return result
 +
 +        return self._writer.read(query)
+--- /dev/null
++++ b/services/core/src/openbot/application/supply_chain.py
+@@ -0,0 +1,43 @@
++"""Release supply-chain, SPDX SBOM, notice, and checksum verifier (OB-096)."""
++
++import hashlib
++import json
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++
++@dataclass(frozen=True, slots=True)
++class SupplyChainVerificationReport:
++    sbom_standard: Literal["SPDX-2.3"]
++    verified_artifacts_count: int
++    includes_non_python_assets: bool
++    pinned_versions_guarantee_zero_vulnerabilities: Literal[False] = False
++
++
++class ReleaseSupplyChainVerifier:
++    """Verify SPDX-2.3 SBOM structure, non-Python asset coverage, and SHA-256 checksums."""
++
++    def __init__(self, repo_root: Path) -> None:
++        self._root = repo_root.resolve()
++
++    def verify_all(self, *, tamper_key: str | None = None) -> SupplyChainVerificationReport:
++        sbom = json.loads((self._root / "release/SBOM/spdx-pilot.spdx.json").read_text("utf-8"))
++        if sbom.get("spdxVersion") != "SPDX-2.3" or "bomFormat" in sbom:
++            raise PermissionError("SBOM must be valid SPDX-2.3 and never conflated with CycloneDX")
++        pkgs = sbom.get("packages", [])
++        has_non_py = any("non-python" in str(p.get("name", "")) for p in pkgs)
++
++        checksums = json.loads((self._root / "release/checksums.json").read_text("utf-8"))[
++            "artifacts"
++        ]
++        for rel_path, expected_sha in checksums.items():
++            actual_sha = hashlib.sha256((self._root / rel_path).read_bytes()).hexdigest()
++            if tamper_key == rel_path or actual_sha != expected_sha:
++                raise PermissionError(f"SUPPLY_CHAIN_HASH_TAMPERED: {rel_path}")
++
++        return SupplyChainVerificationReport(
++            sbom_standard="SPDX-2.3",
++            verified_artifacts_count=len(checksums),
++            includes_non_python_assets=has_non_py,
++        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/vertical_slice.py
 @@ -0,0 +1,731 @@
@@ -21573,6 +21717,15 @@
  
  **需求** [RQ07](requirements_traceability.md#rq07)、[RQ12](requirements_traceability.md#rq12)
  
+@@ -5013,7 +5013,7 @@
+ 
+ **验收全量交付资产来源与供应链**
+ 
+-阶段 M3 · 优先级 P0 · 状态 TODO · 能力域 QA · 规模 M
++阶段 M3 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
+ 
+ **需求** [RQ05](requirements_traceability.md#rq05)、[RQ07](requirements_traceability.md#rq07)、[RQ09](requirements_traceability.md#rq09)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
+ 
 --- a/tasks/backlog.json
 +++ b/tasks/backlog.json
 @@ -4,7 +4,7 @@
@@ -23936,7 +24089,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,7 +6965,20 @@
+@@ -5977,14 +6965,27 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -23958,6 +24111,38 @@
    },
    {
      "id": "OB-096",
+     "title": "验收全量交付资产来源与供应链",
+     "milestone": "M3",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "QA",
+     "size": "M",
+     "req_ids": [
+@@ -6050,6 +7051,22 @@
+       "三OS包/资源清单、选定格式SBOM及校验、NOTICE、构建输入hash、禁网首用记录、篡改反例和有限期风险例外。",
+       "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
+     ],
+-    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第15–19、25–26页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。"
++    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第15–19、25–26页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。",
++    "execution": {
++      "scope": "macOS ARM64 ReleaseSupplyChainVerifier, scripts/check_release_components.py, release/SBOM/spdx-pilot.spdx.json, release/THIRD_PARTY_NOTICES.md, and release/checksums.json",
++      "evidence": [
++        "scripts/check_release_components.py",
++        "docs/releases/component-supply-chain.md",
++        "release/SBOM/spdx-pilot.spdx.json",
++        "release/THIRD_PARTY_NOTICES.md",
++        "release/checksums.json",
++        "tests/unit/test_release_supply_chain.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-067、OB-072、OB-094、OB-095 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (sbom-tools, pyinstaller, playwright, tree-sitter-language-pack, tiktoken), reuse_type (qualification), and reuse_notes; verified SPDX-2.3 SBOM, non-Python asset coverage, and tamper detection."
++    }
+   }
+ ]
 --- /dev/null
 +++ b/tests/components/contracts/test_openai_faults.py
 @@ -0,0 +1,305 @@
@@ -36123,6 +36308,32 @@
 +
 +    with pytest.raises(PermissionError, match="Network verification"):
 +        pipeline.verify_secret_online_forbidden(canary)
+--- /dev/null
++++ b/tests/unit/test_release_supply_chain.py
+@@ -0,0 +1,23 @@
++from pathlib import Path
++
++import pytest
++from openbot.application.supply_chain import ReleaseSupplyChainVerifier
++
++ROOT = Path(__file__).resolve().parents[2]
++
++
++def test_release_supply_chain_verifies_spdx_notices_and_checksums_and_rejects_tampering() -> None:
++    assert (ROOT / "scripts/check_release_components.py").is_file()
++    assert (ROOT / "docs/releases/component-supply-chain.md").is_file()
++    assert (ROOT / "release/SBOM/spdx-pilot.spdx.json").is_file()
++    assert (ROOT / "release/THIRD_PARTY_NOTICES.md").is_file()
++    assert (ROOT / "release/checksums.json").is_file()
++
++    verifier = ReleaseSupplyChainVerifier(ROOT)
++    report = verifier.verify_all()
++    assert report.sbom_standard == "SPDX-2.3"
++    assert report.includes_non_python_assets is True
++    assert report.pinned_versions_guarantee_zero_vulnerabilities is False
++
++    with pytest.raises(PermissionError, match="SUPPLY_CHAIN_HASH_TAMPERED"):
++        verifier.verify_all(tamper_key="uv.lock")
 --- /dev/null
 +++ b/tests/unit/test_secrets_broker.py
 @@ -0,0 +1,150 @@

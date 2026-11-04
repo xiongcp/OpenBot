@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.2",
+  "artifacts": {
+    "uv.lock": "2d461a312280457241adc2efc8e8d49369ceade8ab7eae9ff409e390577b77dd",
+    "THIRD_PARTY_NOTICES.md": "ab3a7d45286cacbae1a3b7c8d2662ae18e0533caa9774d0a6860ae8510353fc1",
+    "packaging/runtime-assets.json": "b1b87190fcea946c1e8191f3e1f6d7360cbdff9bb1310cadd5ac8fb8e2fbb855",
+    "components/source-reuse/feishu.json": "5f7f6c88ec6e8f7db4c461a347592ff6e2e1613f3df6187b985e554e283aac77",
+    "components/source-reuse/browser-dom.json": "285227f281cddd2994546a5ebbaad7aa427b5e92873368abb874d38f6f0723a7"
+  }
+}

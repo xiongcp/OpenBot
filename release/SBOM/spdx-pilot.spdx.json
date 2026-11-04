@@ -1,0 +1,23 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "openbot-m3-pilot-sbom",
+  "documentNamespace": "https://openbot.local/spdx/openbot-m3-pilot",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-openbot",
+      "name": "openbot",
+      "versionInfo": "0.1.0.dev0",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "Apache-2.0"
+    },
+    {
+      "SPDXID": "SPDXRef-Asset-non-python-runtime",
+      "name": "openbot-non-python-runtime-assets",
+      "versionInfo": "1.2",
+      "downloadLocation": "NOASSERTION",
+      "licenseDeclared": "MIT AND Apache-2.0"
+    }
+  ]
+}

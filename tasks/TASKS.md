@@ -5013,7 +5013,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **验收全量交付资产来源与供应链**
 
-阶段 M3 · 优先级 P0 · 状态 TODO · 能力域 QA · 规模 M
+阶段 M3 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
 
 **需求** [RQ05](requirements_traceability.md#rq05)、[RQ07](requirements_traceability.md#rq07)、[RQ09](requirements_traceability.md#rq09)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
 

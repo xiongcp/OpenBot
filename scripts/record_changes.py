@@ -40,6 +40,7 @@ def run():
         "native/supervisor",
         "packaging",
         "evals",
+        "release",
         "contracts/schemas",
         "tests",
         "scripts",
