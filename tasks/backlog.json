@@ -941,7 +941,7 @@
     "title": "实现任务状态与事件原子提交",
     "milestone": "M1",
     "priority": "P0",
-    "status": "IN_PROGRESS",
+    "status": "VERIFIED",
     "owner_lane": "Runtime",
     "size": "M",
     "req_ids": [
@@ -995,14 +995,16 @@
     ],
     "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第3、20页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
     "execution": {
-      "scope": "Task CAS, atomic event/outbox and replay subset",
+      "scope": "macOS ARM64 durable Task state machine, OutcomeVerifier, cancel/reconcile guards and replay acceptance; upstream three-OS bootstrap not completed",
       "evidence": [
         "docs/evidence/storage.md",
-        "evidence/implementation/m1-storage-tests.log"
+        "evidence/implementation/m1-storage-tests.log",
+        "evidence/implementation/verification.json"
       ],
       "blockers": [
-        "OutcomeVerifier、正式 Operation/Attempt、取消与核对恢复仍未实现；不能宣称所有终态边验收通过。"
-      ]
+        "OB-005 缺 Windows x64 / Linux x64 实际执行；保持 VERIFIED，不越过上游正式门禁。"
+      ],
+      "review": "Read component_refs/reuse_type/reuse_notes; sqlite3 control_owned only; 11x11 transition matrix, OutcomeVerifier, cancel/RECONCILING guards, and real child-process crash tests verified."
     }
   },
   {

@@ -2283,7 +2283,7 @@
 @@ -0,0 +1,13 @@
 +# OB-011—014：持久化验收范围
 +
-+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含提案/审批回归共 49 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
++实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫及提案/审批回归共 54 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 +
 +OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 +
@@ -2291,9 +2291,9 @@
 +
 +OB-013：source_scope 包含 channel/tenant/app/profile，100 次同事件仅一个 Task；不同 app 不互相去重，同 key 改 payload 拒绝。Task/budget/inbox/event/outbox 同事务，outbox 失败全部回滚。真实子进程分别在提交前与提交后 ACK 前 os._exit，重试后五表各一条；未提交不 ACK。模型/入站 body 不得赋 owner 或扩展网络权限。附件入口等待 OB-036，明确不可用。
 +
-+OB-014 当前子集：普通 Task CAS 跃迁、快照、无执行入口的审计回放；同 request_id 跨 Task 冲突在 writer 重启前后保持一致。通用端口拒绝 SUCCEEDED/PARTIAL/CANCELLED 和未核对的恢复，不能冒充 OutcomeVerifier、取消或 recovery；正式 Operation/Attempt、预算与产物验证仍待下游任务，因此该项保持 IN_PROGRESS。
++OB-014：完整覆盖 docs/03 的 11×11 Task 跃迁矩阵与 version CAS、source_scope 请求去重、只读无副作用审计回放与快照；实现 OutcomeVerifier（complete 用例核对 DIAGNOSIS/PATCH/TEST 产物、AVAILABLE 状态、零未决 Operation/Approval/BudgetReservation 及 PARTIAL 缺失项披露）、cancel 用例（无 UNKNOWN/DISPATCHING 时直接 CANCELLED 并撤销待决审批/未派发动作；存在 UNKNOWN/DISPATCHING 时递增 cancel_revision 并驻留 RECONCILING）以及 resume_reconciled 用例（核对未知结果证据与工作区 quarantine 后才允许 RECONCILING -> QUEUED）。真实子进程在 complete 提交前和提交后 ACK 前 os._exit，重查同一 request_id 结果一致且无重复事件/outbox。
 +
-+前三项本机验收可记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
++OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
 --- /dev/null
 +++ b/docs/handoff/2026-11-04-checkpoint.md
 @@ -0,0 +1,66 @@
@@ -2388,7 +2388,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,36 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2424,6 +2424,7 @@
 +- 文件探针 canary 先实际读到了合成工作区私有文件（RED），现将整个工作区白名单缩为源码/包元数据与已锁解释器/venv；4 项探针 GREEN。未读取真实秘密，未扩大公共系统元数据例外。
 +- 独立审批审查发现 canonical Operation ID 与 SQL 主键漏比对；自查发现 schema 异常链可能打印 nonce。两个失败反例均已修复，合成 nonce 的 RED 摘录明确脱敏，正式异常不再带原始值。
 +- 当前完整本机验证：M0 150 passed/3 skipped；M1 169 passed/1 skipped；存储子集 49 passed；容器独立资格 8 passed。lint/format/mypy/组件及原设计/DDL检查通过。未通过 OB-029，未进入 M3 验收。
++- 完成 OB-014 完整 Task 11×11 跃迁矩阵、OutcomeVerifier（DIAGNOSIS/PATCH/TEST 产物与未决项核对）、cancel（UNKNOWN/DISPATCHING 驻留 RECONCILING）与 resume_reconciled 核对恢复守卫，以及 complete 提交前后真实子进程崩溃测试；存储套件增至 54 passed，M0 155 passed/3 skipped，M1 174 passed/1 skipped。OB-014 更新为 VERIFIED。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3430,12 +3431,15 @@
 +        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/state_machine.py
-@@ -0,0 +1,147 @@
-+"""CAS task transitions and projections; replay has no execution callback."""
+@@ -0,0 +1,547 @@
++"""CAS task transitions, OutcomeVerifier completion, cancellation and recovery resume."""
 +
 +import hashlib
++import re
 +import sqlite3
 +import time
++from dataclasses import dataclass
++from typing import Any
 +
 +from openbot.contracts import canonicalize, strict_json
 +from openbot.storage.inbox import InboundContext, authorize, emit_state
@@ -3467,6 +3471,133 @@
 +    "FAILED": frozenset(),
 +    "CANCELLED": frozenset(),
 +}
++_HEX64 = re.compile(r"^[0-9a-f]{64}$")
++_UNRESOLVED_OP_STATES = (
++    "PROPOSED",
++    "AWAITING_APPROVAL",
++    "READY",
++    "CLAIMED",
++    "DISPATCHING",
++    "UNKNOWN",
++)
++
++
++@dataclass(frozen=True, slots=True)
++class OutcomeSubmission:
++    task_kind: str
++    target: str
++    summary: str
++    artifact_ids: tuple[str, ...] = ()
++    source_refs: tuple[str, ...] = ()
++    original_hashes: dict[str, str] | None = None
++    test_command: str | None = None
++    snapshot_ref: str | None = None
++    exit_code: int | None = None
++    log_summary: str | None = None
++    completed_actions: tuple[str, ...] = ()
++    missing_requirements: tuple[str, ...] = ()
++
++    def to_payload(self) -> dict[str, Any]:
++        return {
++            "task_kind": self.task_kind,
++            "target": self.target,
++            "summary": self.summary,
++            "artifact_ids": list(self.artifact_ids),
++            "source_refs": list(self.source_refs),
++            "original_hashes": dict(self.original_hashes or {}),
++            "test_command": self.test_command,
++            "snapshot_ref": self.snapshot_ref,
++            "exit_code": self.exit_code,
++            "log_summary": self.log_summary,
++            "completed_actions": list(self.completed_actions),
++            "missing_requirements": list(self.missing_requirements),
++        }
++
++
++def verify_outcome(
++    db: sqlite3.Connection,
++    context: InboundContext,
++    task_id: str,
++    budget_id: str,
++    submission: OutcomeSubmission,
++) -> dict[str, Any]:
++    if submission.target not in {"SUCCEEDED", "PARTIAL"} or not submission.summary.strip():
++        raise PermissionError("Outcome target or summary is invalid")
++    if submission.target == "SUCCEEDED" and submission.missing_requirements:
++        raise PermissionError("SUCCEEDED outcome cannot have missing requirements")
++    if submission.target == "PARTIAL" and (
++        not submission.missing_requirements
++        or not submission.completed_actions
++        or any(not item.strip() for item in submission.missing_requirements)
++        or any(not item.strip() for item in submission.completed_actions)
++    ):
++        raise PermissionError("PARTIAL outcome requires completed_actions and missing_requirements")
++
++    unresolved_op = db.execute(
++        "SELECT 1 FROM operations WHERE task_id=? AND state IN "
++        "('PROPOSED','AWAITING_APPROVAL','READY','CLAIMED','DISPATCHING','UNKNOWN')",
++        (task_id,),
++    ).fetchone()
++    if unresolved_op is not None:
++        raise PermissionError("Unresolved operation blocks task completion")
++
++    unresolved_approval = db.execute(
++        "SELECT 1 FROM approvals a JOIN operations o ON o.operation_id=a.operation_id "
++        "WHERE o.task_id=? AND a.status IN ('PENDING','APPROVED')",
++        (task_id,),
++    ).fetchone()
++    if unresolved_approval is not None:
++        raise PermissionError("Unresolved approval blocks task completion")
++
++    unresolved_budget = db.execute(
++        "SELECT 1 FROM budget_reservations WHERE budget_id=? AND status IN ('RESERVED','UNKNOWN')",
++        (budget_id,),
++    ).fetchone()
++    if unresolved_budget is not None:
++        raise PermissionError("Unsettled budget reservation blocks task completion")
++
++    for artifact_id in submission.artifact_ids:
++        row = db.execute(
++            "SELECT a.state FROM artifacts a JOIN artifact_refs r ON r.object_id=a.object_id "
++            "WHERE a.object_id=? AND r.owner_id=? AND ("
++            "(r.scope_kind='TASK' AND r.task_id=?) OR "
++            "(r.scope_kind='OPERATION' AND r.operation_id IN "
++            "(SELECT operation_id FROM operations WHERE task_id=?)))",
++            (artifact_id, context.principal_id, task_id, task_id),
++        ).fetchone()
++        if row != ("AVAILABLE",):
++            raise PermissionError(f"Deliverable artifact {artifact_id} is not AVAILABLE for task")
++
++    if submission.task_kind == "DIAGNOSIS":
++        if not submission.source_refs or any(not ref.strip() for ref in submission.source_refs):
++            raise PermissionError("Diagnosis task requires verified source references")
++    elif submission.task_kind == "PATCH":
++        if (
++            not submission.artifact_ids
++            or not submission.original_hashes
++            or any(
++                not path.strip() or not _HEX64.fullmatch(digest)
++                for path, digest in submission.original_hashes.items()
++            )
++        ):
++            raise PermissionError("Patch task requires diff artifact and original file hashes")
++    elif submission.task_kind == "TEST":
++        if (
++            not submission.test_command
++            or not submission.test_command.strip()
++            or not submission.snapshot_ref
++            or not submission.snapshot_ref.strip()
++            or not submission.log_summary
++            or not submission.log_summary.strip()
++            or type(submission.exit_code) is not int
++        ):
++            raise PermissionError("Test task requires command, snapshot, exit_code and log_summary")
++        if submission.target == "SUCCEEDED" and submission.exit_code != 0:
++            raise PermissionError("Non-zero test exit_code cannot mark task SUCCEEDED")
++    else:
++        raise PermissionError("Unsupported task verification kind")
++
++    return submission.to_payload()
 +
 +
 +class TaskStateService:
@@ -3474,14 +3605,39 @@
 +        self._writer = writer
 +
 +    @staticmethod
-+    def _task(db: sqlite3.Connection, context: InboundContext, task_id: str) -> tuple[str, int]:
++    def _task_row(
++        db: sqlite3.Connection, context: InboundContext, task_id: str
++    ) -> tuple[str, int, str, int, int | None, int | None, str | None]:
 +        authorize(db, context)
 +        row = db.execute(
-+            "SELECT owner_id,session_id,state,version FROM tasks WHERE task_id=?", (task_id,)
++            "SELECT owner_id,session_id,state,version,budget_id,cancel_revision,"
++            "cancel_requested_at,finished_at,outcome_json FROM tasks WHERE task_id=?",
++            (task_id,),
 +        ).fetchone()
 +        if not row or row[:2] != (context.principal_id, context.session_id):
 +            raise PermissionError("Task scope mismatch")
-+        return str(row[2]), int(row[3])
++        return (
++            str(row[2]),
++            int(row[3]),
++            str(row[4]),
++            int(row[5]),
++            None if row[6] is None else int(row[6]),
++            None if row[7] is None else int(row[7]),
++            None if row[8] is None else str(row[8]),
++        )
++
++    def _lookup(
++        self, db: sqlite3.Connection, context: InboundContext, task_id: str, request_id: str
++    ) -> LookupResult | None:
++        self._task_row(db, context, task_id)
++        row = db.execute(
++            "SELECT payload_json FROM events WHERE json_extract(payload_json,'$.request_id')=?",
++            (request_id,),
++        ).fetchone()
++        if not row:
++            return None
++        payload = strict_json(row[0])
++        return LookupResult(payload["command_hash"], canonicalize(payload["receipt"]))
 +
 +    def command(
 +        self,
@@ -3497,6 +3653,7 @@
 +        fingerprint = hashlib.sha256(
 +            canonicalize(
 +                {
++                    "kind": "transition",
 +                    "task": task_id,
 +                    "expected": expected_version,
 +                    "target": target,
@@ -3504,23 +3661,16 @@
 +                    "profile": context.profile_id,
 +                    "session": context.session_id,
 +                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
 +                }
 +            )
 +        ).hexdigest()
 +
 +        def lookup(db: sqlite3.Connection) -> LookupResult | None:
-+            self._task(db, context, task_id)
-+            row = db.execute(
-+                "SELECT payload_json FROM events WHERE json_extract(payload_json,'$.request_id')=?",
-+                (request_id,),
-+            ).fetchone()
-+            if not row:
-+                return None
-+            payload = strict_json(row[0])
-+            return LookupResult(payload["command_hash"], canonicalize(payload["receipt"]))
++            return self._lookup(db, context, task_id, request_id)
 +
 +        def apply(db: sqlite3.Connection) -> bytes:
-+            state, version = self._task(db, context, task_id)
++            state, version, *_ = self._task_row(db, context, task_id)
 +            if version != expected_version or target not in TRANSITIONS[state]:
 +                raise RequestConflict("Task version or transition conflict")
 +            if target in {"SUCCEEDED", "PARTIAL", "CANCELLED"}:
@@ -3546,28 +3696,279 @@
 +            )
 +            if cursor.rowcount != 1:
 +                raise RequestConflict("Task version changed")
-+            receipt: dict[str, str | int] = {
++            receipt: dict[str, Any] = {
 +                "task_id": task_id,
 +                "state": target,
 +                "version": version + 1,
 +            }
-+            emit_state(db, context, receipt, request_id, fingerprint, "TASK_STATE_CHANGED", now)
++            event_type = "TASK_FINISHED" if terminal else "TASK_STATE_CHANGED"
++            emit_state(db, context, receipt, request_id, fingerprint, event_type, now)
 +            return canonicalize(receipt)
 +
 +        return WriterCommand(
 +            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
 +        )
 +
++    def complete(
++        self,
++        context: InboundContext,
++        task_id: str,
++        expected_version: int,
++        submission: OutcomeSubmission,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if type(expected_version) is not int or expected_version < 0:
++            raise ValueError("Invalid expected_version")
++        outcome_payload = submission.to_payload()
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "complete",
++                    "task": task_id,
++                    "expected": expected_version,
++                    "outcome": outcome_payload,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, version, budget_id, cancel_rev, *_ = self._task_row(db, context, task_id)
++            if version != expected_version or submission.target not in TRANSITIONS[state]:
++                raise RequestConflict("Task version or completion transition conflict")
++            if cancel_rev > 0 and submission.target == "SUCCEEDED":
++                raise PermissionError("Cancel requested; task cannot be marked SUCCEEDED")
++            verified = verify_outcome(db, context, task_id, budget_id, submission)
++            now = time.time_ns() // 1_000_000
++            cursor = db.execute(
++                "UPDATE tasks SET state=?,version=version+1,outcome_json=?,updated_at=?,"
++                "finished_at=? WHERE task_id=? AND version=?",
++                (
++                    submission.target,
++                    canonicalize(verified).decode(),
++                    now,
++                    now,
++                    task_id,
++                    expected_version,
++                ),
++            )
++            if cursor.rowcount != 1:
++                raise RequestConflict("Task version changed")
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": submission.target,
++                "version": version + 1,
++            }
++            emit_state(db, context, receipt, request_id, fingerprint, "TASK_FINISHED", now)
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
++        )
++
++    def cancel(
++        self,
++        context: InboundContext,
++        task_id: str,
++        expected_version: int,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if type(expected_version) is not int or expected_version < 0:
++            raise ValueError("Invalid expected_version")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "cancel",
++                    "task": task_id,
++                    "expected": expected_version,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, version, _, cancel_rev, cancel_req_at, *_ = self._task_row(db, context, task_id)
++            if version != expected_version or "CANCELLED" not in TRANSITIONS[state]:
++                raise RequestConflict("Task version or cancel transition conflict")
++            now = time.time_ns() // 1_000_000
++            db.execute(
++                "UPDATE approvals SET status='REVOKED',version=version+1 "
++                "WHERE operation_id IN (SELECT operation_id FROM operations WHERE task_id=?) "
++                "AND status IN ('PENDING','APPROVED')",
++                (task_id,),
++            )
++            db.execute(
++                "UPDATE operation_attempts SET status='CANCELLED',version=version+1,finished_at=? "
++                "WHERE operation_id IN (SELECT operation_id FROM operations WHERE task_id=?) "
++                "AND status='CLAIMED'",
++                (now, task_id),
++            )
++            db.execute(
++                "UPDATE operations SET state='CANCELLED',version=version+1,updated_at=?,"
++                "completed_at=? WHERE task_id=? "
++                "AND state IN ('PROPOSED','AWAITING_APPROVAL','READY','CLAIMED')",
++                (now, now, task_id),
++            )
++            unknown = db.execute(
++                "SELECT 1 FROM operations WHERE task_id=? AND state IN ('UNKNOWN','DISPATCHING')",
++                (task_id,),
++            ).fetchone()
++            if unknown is not None:
++                if state != "RECONCILING" and "RECONCILING" not in TRANSITIONS[state]:
++                    raise PermissionError("Unresolved external effect blocks cancellation")
++                target = "RECONCILING"
++                finished_at: int | None = None
++                event_type = "TASK_STATE_CHANGED"
++            else:
++                target = "CANCELLED"
++                finished_at = now
++                event_type = "TASK_FINISHED"
++
++            new_cancel_rev = cancel_rev + 1
++            req_at = cancel_req_at if cancel_req_at is not None else now
++            cursor = db.execute(
++                "UPDATE tasks SET state=?,version=version+1,cancel_revision=?,"
++                "cancel_requested_at=?,updated_at=?,finished_at=? WHERE task_id=? AND version=?",
++                (target, new_cancel_rev, req_at, now, finished_at, task_id, expected_version),
++            )
++            if cursor.rowcount != 1:
++                raise RequestConflict("Task version changed")
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": target,
++                "version": version + 1,
++                "cancel_revision": new_cancel_rev,
++            }
++            emit_state(db, context, receipt, request_id, fingerprint, event_type, now)
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "cancel", deadline_monotonic_ms, apply, lookup
++        )
++
++    def resume_reconciled(
++        self,
++        context: InboundContext,
++        task_id: str,
++        expected_version: int,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if type(expected_version) is not int or expected_version < 0:
++            raise ValueError("Invalid expected_version")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "resume_reconciled",
++                    "task": task_id,
++                    "expected": expected_version,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, version, budget_id, cancel_rev, *_ = self._task_row(db, context, task_id)
++            if version != expected_version or state != "RECONCILING":
++                raise RequestConflict("Task is not in RECONCILING at expected version")
++            if cancel_rev > 0:
++                raise PermissionError(
++                    "Cancel requested; reconciled task must complete cancellation"
++                )
++            unresolved = db.execute(
++                "SELECT 1 FROM operations WHERE task_id=? AND ("
++                "state IN ('PROPOSED','AWAITING_APPROVAL','CLAIMED','DISPATCHING','UNKNOWN') OR "
++                "(unknown_reason IS NOT NULL AND resolution_evidence_ref IS NULL))",
++                (task_id,),
++            ).fetchone()
++            if unresolved is not None:
++                raise PermissionError("Unresolved or unverified operation outcome blocks resume")
++            unknown_budget = db.execute(
++                "SELECT 1 FROM budget_reservations WHERE budget_id=? AND status='UNKNOWN'",
++                (budget_id,),
++            ).fetchone()
++            if unknown_budget is not None:
++                raise PermissionError("Unreconciled budget reservation blocks resume")
++            quarantined = db.execute(
++                "SELECT 1 FROM operations WHERE workspace_id=? "
++                "AND state IN ('UNKNOWN','DISPATCHING')",
++                (context.workspace_id,),
++            ).fetchone()
++            if quarantined is not None:
++                raise PermissionError("Workspace quarantine active for unresolved external effect")
++            now = time.time_ns() // 1_000_000
++            cursor = db.execute(
++                "UPDATE tasks SET state='QUEUED',version=version+1,updated_at=? "
++                "WHERE task_id=? AND version=?",
++                (now, task_id, expected_version),
++            )
++            if cursor.rowcount != 1:
++                raise RequestConflict("Task version changed")
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": "QUEUED",
++                "version": version + 1,
++            }
++            emit_state(db, context, receipt, request_id, fingerprint, "TASK_STATE_CHANGED", now)
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
++        )
++
 +    def snapshot(self, context: InboundContext, task_id: str) -> dict[str, object]:
 +        def query(db: sqlite3.Connection) -> dict[str, object]:
-+            state, version = self._task(db, context, task_id)
-+            return {"task_id": task_id, "state": state, "version": version}
++            state, version, _, cancel_rev, cancel_req_at, finished_at, outcome_json = (
++                self._task_row(db, context, task_id)
++            )
++            unresolved = [
++                str(r[0])
++                for r in db.execute(
++                    "SELECT operation_id FROM operations WHERE task_id=? AND state IN "
++                    "('PROPOSED','AWAITING_APPROVAL','READY','CLAIMED','DISPATCHING','UNKNOWN') "
++                    "ORDER BY ordinal",
++                    (task_id,),
++                )
++            ]
++            return {
++                "task_id": task_id,
++                "state": state,
++                "version": version,
++                "cancel_revision": cancel_rev,
++                "cancel_requested_at_ms": cancel_req_at,
++                "finished_at_ms": finished_at,
++                "outcome": None if outcome_json is None else strict_json(outcome_json),
++                "unresolved_operation_ids": unresolved,
++            }
 +
 +        return self._writer.read(query)
 +
 +    def replay(self, context: InboundContext, task_id: str) -> list[dict[str, object]]:
 +        def query(db: sqlite3.Connection) -> list[dict[str, object]]:
-+            self._task(db, context, task_id)
++            self._task_row(db, context, task_id)
 +            result: list[dict[str, object]] = []
 +            for row in db.execute(
 +                "SELECT seq,event_type,aggregate_version FROM events "
@@ -5347,8 +5748,8 @@
 +- [complete] 只读盘点与 M0 第一批本地实现；三 OS 实测待环境
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
-+- [complete] OB-011/012/013 本机持久化验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-014/017/018 内部状态/提案/决定子集；正式终态、claim/dispatch/recovery 未实现
++- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
++- [in_progress] OB-017/018 内部提案/决定子集；正式策略引擎 OB-016 与 claim/dispatch/recovery 未实现
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -5517,7 +5918,7 @@
  **实现任务状态与事件原子提交**
  
 -阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Runtime · 规模 M
-+阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
++阶段 M1 · 优先级 P0 · 状态 VERIFIED · 能力域 Runtime · 规模 M
  
  **需求** [RQ02](requirements_traceability.md#rq02)、[RQ03](requirements_traceability.md#rq03)
  
@@ -5958,30 +6359,32 @@
      "milestone": "M1",
      "priority": "P0",
 -    "status": "TODO",
-+    "status": "IN_PROGRESS",
++    "status": "VERIFIED",
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -847,7 +993,17 @@
+@@ -847,7 +993,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
      ],
 -    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第3、20页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
 +    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第3、20页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
 +    "execution": {
-+      "scope": "Task CAS, atomic event/outbox and replay subset",
++      "scope": "macOS ARM64 durable Task state machine, OutcomeVerifier, cancel/reconcile guards and replay acceptance; upstream three-OS bootstrap not completed",
 +      "evidence": [
 +        "docs/evidence/storage.md",
-+        "evidence/implementation/m1-storage-tests.log"
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
 +      ],
 +      "blockers": [
-+        "OutcomeVerifier、正式 Operation/Attempt、取消与核对恢复仍未实现；不能宣称所有终态边验收通过。"
-+      ]
++        "OB-005 缺 Windows x64 / Linux x64 实际执行；保持 VERIFIED，不越过上游正式门禁。"
++      ],
++      "review": "Read component_refs/reuse_type/reuse_notes; sqlite3 control_owned only; 11x11 transition matrix, OutcomeVerifier, cancel/RECONCILING guards, and real child-process crash tests verified."
 +    }
    },
    {
      "id": "OB-015",
-@@ -967,7 +1123,7 @@
+@@ -967,7 +1125,7 @@
      "title": "实现动作意图与执行attempt日志",
      "milestone": "M1",
      "priority": "P0",
@@ -5990,7 +6393,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1018,14 +1174,28 @@
+@@ -1018,14 +1176,28 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "提供Operation/Attempt/dispatch/provider幂等键/grant关联快照，证明CONSUMED单向性与两次短事务的检查点。"
      ],
@@ -6021,7 +6424,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1081,7 +1251,21 @@
+@@ -1081,7 +1253,21 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
      ],
@@ -6044,7 +6447,7 @@
    },
    {
      "id": "OB-019",
-@@ -2851,7 +3035,7 @@
+@@ -2851,7 +3037,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -6053,7 +6456,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3092,19 @@
+@@ -2908,7 +3094,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -6074,7 +6477,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4475,7 @@
+@@ -4279,7 +4477,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -6083,7 +6486,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4533,26 @@
+@@ -4337,14 +4535,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -6112,7 +6515,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4609,19 @@
+@@ -4401,7 +4611,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -6133,7 +6536,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5743,7 @@
+@@ -5523,7 +5745,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -6142,7 +6545,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5796,26 @@
+@@ -5576,14 +5798,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -6171,7 +6574,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +5874,26 @@
+@@ -5642,14 +5876,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -6200,7 +6603,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +5948,26 @@
+@@ -5704,14 +5950,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -6229,7 +6632,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6034,25 @@
+@@ -5778,14 +6036,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -6257,7 +6660,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6120,19 @@
+@@ -5853,7 +6122,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -7946,7 +8349,7 @@
 +    assert writer.read(lambda db: db.execute("SELECT count(*) FROM operations").fetchone()[0]) == 0
 --- /dev/null
 +++ b/tests/integration/storage/test_inbox_state.py
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,711 @@
 +import json
 +import sqlite3
 +import subprocess
@@ -7955,7 +8358,11 @@
 +from dataclasses import replace
 +
 +import pytest
-+from openbot.application.state_machine import TaskStateService
++from openbot.application.state_machine import (
++    TRANSITIONS,
++    OutcomeSubmission,
++    TaskStateService,
++)
 +from openbot.contracts import SchemaRegistry
 +from openbot.storage.inbox import InboundContext, Inbox
 +from openbot.storage.migrate import connect, load_migrations, migrate
@@ -8188,6 +8595,472 @@
 +                lambda db, name=table: db.execute("SELECT count(*) FROM " + name).fetchone()[0]
 +            )
 +            assert count == 1
++
++
++def _seed_artifact(
++    path,
++    object_id: str,
++    task_id: str,
++    owner_id: str = "pri_test1",
++    state: str = "AVAILABLE",
++    sha256: str = "b" * 64,
++) -> None:
++    db = connect(path)
++    try:
++        db.execute(
++            "INSERT INTO artifacts("
++            "object_id,object_key,sha256,mime,bytes,classification,state,created_at) "
++            "VALUES(?,?,?,'text/plain',32,'WORKSPACE',?,1000)",
++            (object_id, f"key-{object_id}", sha256, state),
++        )
++        db.execute(
++            "INSERT INTO artifact_refs("
++            "ref_id,object_id,owner_id,scope_kind,task_id,purpose,created_at) "
++            "VALUES(?,?,?,'TASK',?,'deliverable',1000)",
++            (f"ref_{object_id}", object_id, owner_id, task_id),
++        )
++    finally:
++        db.close()
++
++
++def _seed_operation(
++    path,
++    operation_id: str,
++    task_id: str,
++    ordinal: int,
++    state: str,
++    unknown_reason: str | None = None,
++    resolution_evidence_ref: str | None = None,
++) -> None:
++    db = connect(path)
++    try:
++        if not db.execute("SELECT 1 FROM tool_registry WHERE tool_id='fs.read'").fetchone():
++            db.execute(
++                "INSERT INTO tool_registry VALUES("
++                "'fs.read','1.0.0',?,NULL,'builtin','{\"name\":\"fs.read\"}','ACTIVE',1000)",
++                ("c" * 64,),
++            )
++        completed_at = (
++            1500
++            if state in {"SUCCEEDED", "FAILED", "REJECTED", "EXPIRED", "REVOKED", "CANCELLED"}
++            else None
++        )
++        db.execute(
++            "INSERT INTO operations(operation_id,task_id,ordinal,requested_by,workspace_id,"
++            "workspace_generation,tool_id,tool_version,tool_manifest_digest,canonical_args_json,"
++            "resource_snapshot_json,destination_json,data_class,authorization_kind,policy_version,"
++            "identity_epoch,authorization_expires_at,binding_hash,retry_class,state,unknown_reason,"
++            "resolution_evidence_ref,created_at,updated_at,completed_at,proposal_canonical_json) "
++            "VALUES(?,?,?,'pri_test1','wsp_test1',1,'fs.read','1.0.0',?,'{}','{}','{}',"
++            "'WORKSPACE','POLICY_ALLOW',1,1,9000,?,'SAFE_READ',?,?,?,1000,1500,?,'{}')",
++            (
++                operation_id,
++                task_id,
++                ordinal,
++                "c" * 64,
++                f"{ordinal:064x}",
++                state,
++                unknown_reason,
++                resolution_evidence_ref,
++                completed_at,
++            ),
++        )
++    finally:
++        db.close()
++
++
++def test_all_task_transition_matrix_edges_and_cross_surface_dedupe(system):
++    path, context, writer, inbox = system
++    service = TaskStateService(writer)
++    states = list(TRANSITIONS)
++    assert len(states) == 11
++
++    for src in states:
++        for dst in states:
++            task = json.loads(
++                inbox.submit(context, f"evt-{src}-{dst}", payload(), deadline()).result(timeout=5)
++            )["task_id"]
++            db = connect(path)
++            try:
++                finished = 1200 if src in {"SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"} else None
++                db.execute(
++                    "UPDATE tasks SET state=?,version=version+1,updated_at=1200,finished_at=? "
++                    "WHERE task_id=?",
++                    (src, finished, task),
++                )
++            finally:
++                db.close()
++
++            if dst not in TRANSITIONS[src]:
++                with pytest.raises(RequestConflict):
++                    writer.submit(
++                        service.command(
++                            context, task, 1, dst, f"req-illegal-{src}-{dst}", deadline()
++                        )
++                    ).result(timeout=5)
++                assert service.snapshot(context, task)["state"] == src
++            elif dst in {"SUCCEEDED", "PARTIAL", "CANCELLED"} or (
++                src == "RECONCILING" and dst == "QUEUED"
++            ):
++                with pytest.raises(PermissionError):
++                    writer.submit(
++                        service.command(
++                            context, task, 1, dst, f"req-guarded-{src}-{dst}", deadline()
++                        )
++                    ).result(timeout=5)
++                assert service.snapshot(context, task)["state"] == src
++            else:
++                res = json.loads(
++                    writer.submit(
++                        service.command(context, task, 1, dst, f"req-ok-{src}-{dst}", deadline())
++                    ).result(timeout=5)
++                )
++                assert res["state"] == dst and res["version"] == 2
++
++    # Same request_id from another client surface must conflict rather than replay
++    t_surface = json.loads(
++        inbox.submit(context, "evt-surface-scope", payload(), deadline()).result(timeout=5)
++    )["task_id"]
++    writer.submit(
++        service.command(context, t_surface, 0, "RUNNING", "req-surface-shared", deadline())
++    ).result(timeout=5)
++    with pytest.raises(RequestConflict):
++        writer.submit(
++            service.command(
++                replace(context, app_id="app2"),
++                t_surface,
++                0,
++                "RUNNING",
++                "req-surface-shared",
++                deadline(),
++            )
++        ).result(timeout=5)
++
++
++def test_outcome_verifier_enforces_artifacts_kind_checks_and_unresolved_guards(system):
++    path, context, writer, inbox = system
++    service = TaskStateService(writer)
++
++    # 1. Diagnosis task: model final text without source_refs or with staging artifact is rejected
++    t_diag = json.loads(
++        inbox.submit(context, "evt-diag", payload("diagnose issue"), deadline()).result(timeout=5)
++    )["task_id"]
++    writer.submit(service.command(context, t_diag, 0, "RUNNING", "run-diag", deadline())).result(
++        timeout=5
++    )
++    with pytest.raises(PermissionError):
++        writer.submit(
++            service.complete(
++                context,
++                t_diag,
++                1,
++                OutcomeSubmission(
++                    task_kind="DIAGNOSIS",
++                    target="SUCCEEDED",
++                    summary="model says done",
++                    source_refs=(),
++                ),
++                "complete-diag-empty",
++                deadline(),
++            )
++        ).result(timeout=5)
++
++    _seed_artifact(path, "art_staging1", t_diag, state="STAGING")
++    with pytest.raises(PermissionError):
++        writer.submit(
++            service.complete(
++                context,
++                t_diag,
++                1,
++                OutcomeSubmission(
++                    task_kind="DIAGNOSIS",
++                    target="SUCCEEDED",
++                    summary="with staging artifact",
++                    source_refs=("docs/03_runtime_recovery.md#L80",),
++                    artifact_ids=("art_staging1",),
++                ),
++                "complete-diag-staging",
++                deadline(),
++            )
++        ).result(timeout=5)
++
++    _seed_artifact(path, "art_avail1", t_diag, state="AVAILABLE")
++    done_diag = json.loads(
++        writer.submit(
++            service.complete(
++                context,
++                t_diag,
++                1,
++                OutcomeSubmission(
++                    task_kind="DIAGNOSIS",
++                    target="SUCCEEDED",
++                    summary="verified diagnosis",
++                    source_refs=("docs/03_runtime_recovery.md#L80",),
++                    artifact_ids=("art_avail1",),
++                ),
++                "complete-diag-ok",
++                deadline(),
++            )
++        ).result(timeout=5)
++    )
++    assert done_diag["state"] == "SUCCEEDED" and done_diag["version"] == 2
++    assert service.replay(context, t_diag)[-1]["event_type"] == "TASK_FINISHED"
++
++    # 2. Patch & Test task checks + unresolved operation/budget guards + PARTIAL outcome
++    t_patch = json.loads(
++        inbox.submit(context, "evt-patch", payload("patch and test"), deadline()).result(timeout=5)
++    )["task_id"]
++    writer.submit(service.command(context, t_patch, 0, "RUNNING", "run-patch", deadline())).result(
++        timeout=5
++    )
++    _seed_artifact(path, "art_diff1", t_patch, state="AVAILABLE")
++
++    # Non-zero exit code cannot mark TEST task SUCCEEDED
++    with pytest.raises(PermissionError):
++        writer.submit(
++            service.complete(
++                context,
++                t_patch,
++                1,
++                OutcomeSubmission(
++                    task_kind="TEST",
++                    target="SUCCEEDED",
++                    summary="test failed",
++                    artifact_ids=("art_diff1",),
++                    test_command="pytest -q",
++                    snapshot_ref="snap_1",
++                    exit_code=1,
++                    log_summary="1 failed",
++                ),
++                "complete-test-nonzero",
++                deadline(),
++            )
++        ).result(timeout=5)
++
++    # Unresolved budget reservation blocks SUCCEEDED and PARTIAL
++    db = connect(path)
++    budget_id = db.execute("SELECT budget_id FROM tasks WHERE task_id=?", (t_patch,)).fetchone()[0]
++    db.execute(
++        "INSERT INTO budget_reservations(reservation_id,budget_id,call_ref,kind,status,"
++        "reserved_amount_micros,reserved_tokens,created_at) "
++        "VALUES('res_1',?,'call_1','MODEL','RESERVED',100,50,1000)",
++        (budget_id,),
++    )
++    db.close()
++    with pytest.raises(PermissionError):
++        writer.submit(
++            service.complete(
++                context,
++                t_patch,
++                1,
++                OutcomeSubmission(
++                    task_kind="PATCH",
++                    target="SUCCEEDED",
++                    summary="patch ready",
++                    artifact_ids=("art_diff1",),
++                    original_hashes={"services/core/src/openbot/cli.py": "d" * 64},
++                ),
++                "complete-patch-reserved-budget",
++                deadline(),
++            )
++        ).result(timeout=5)
++
++    # Release budget reservation, then test PARTIAL completion with explicit missing_requirements
++    db = connect(path)
++    db.execute("UPDATE budget_reservations SET status='RELEASED' WHERE reservation_id='res_1'")
++    db.close()
++    partial = json.loads(
++        writer.submit(
++            service.complete(
++                context,
++                t_patch,
++                1,
++                OutcomeSubmission(
++                    task_kind="PATCH",
++                    target="PARTIAL",
++                    summary="patch generated, integration pending",
++                    artifact_ids=("art_diff1",),
++                    original_hashes={"services/core/src/openbot/cli.py": "d" * 64},
++                    completed_actions=("diff_generated",),
++                    missing_requirements=("windows_smoke_test",),
++                ),
++                "complete-patch-partial",
++                deadline(),
++            )
++        ).result(timeout=5)
++    )
++    assert partial["state"] == "PARTIAL" and partial["version"] == 2
++    snap = service.snapshot(context, t_patch)
++    assert snap["outcome"]["missing_requirements"] == ["windows_smoke_test"]
++
++
++def test_cancel_holds_in_reconciling_while_unknown_exists_and_recovery_resumes_queued(system):
++    path, context, writer, inbox = system
++    service = TaskStateService(writer)
++
++    # Task 1: RUNNING with an UNKNOWN operation -> cancel must hold in RECONCILING, not CANCELLED
++    t_rec = json.loads(
++        inbox.submit(context, "evt-cancel-unknown", payload(), deadline()).result(timeout=5)
++    )["task_id"]
++    writer.submit(service.command(context, t_rec, 0, "RUNNING", "run-rec", deadline())).result(
++        timeout=5
++    )
++    _seed_operation(path, "op_unknown_1", t_rec, 1, "UNKNOWN", unknown_reason="timeout_after_send")
++    _seed_operation(path, "op_ready_2", t_rec, 2, "READY")
++
++    held = json.loads(
++        writer.submit(service.cancel(context, t_rec, 1, "cancel-with-unknown", deadline())).result(
++            timeout=5
++        )
++    )
++    assert held["state"] == "RECONCILING"
++    assert held["cancel_revision"] == 1
++    db = connect(path, readonly=True)
++    try:
++        # Non-dispatched READY operation was cancelled immediately, UNKNOWN stays UNKNOWN
++        assert (
++            db.execute("SELECT state FROM operations WHERE operation_id='op_ready_2'").fetchone()[0]
++            == "CANCELLED"
++        )
++        assert (
++            db.execute("SELECT state FROM operations WHERE operation_id='op_unknown_1'").fetchone()[
++                0
++            ]
++            == "UNKNOWN"
++        )
++    finally:
++        db.close()
++
++    # While cancel_revision > 0 or UNKNOWN remains, resume_reconciled to QUEUED is forbidden
++    with pytest.raises(PermissionError):
++        writer.submit(
++            service.resume_reconciled(context, t_rec, held["version"], "resume-blocked", deadline())
++        ).result(timeout=5)
++
++    # Resolve UNKNOWN operation with evidence, then cancel completes RECONCILING -> CANCELLED
++    db = connect(path)
++    db.execute(
++        "UPDATE operations SET state='FAILED',version=version+1,resolution_evidence_ref='ev_1',"
++        "completed_at=2000,updated_at=2000 WHERE operation_id='op_unknown_1'"
++    )
++    db.close()
++    cancelled = json.loads(
++        writer.submit(
++            service.cancel(context, t_rec, held["version"], "cancel-after-reconcile", deadline())
++        ).result(timeout=5)
++    )
++    assert cancelled["state"] == "CANCELLED"
++
++    # Task 2: RECONCILING without cancel -> resume_reconciled transitions to QUEUED after resolution
++    t_res = json.loads(
++        inbox.submit(context, "evt-resume-reconciled", payload(), deadline()).result(timeout=5)
++    )["task_id"]
++    writer.submit(service.command(context, t_res, 0, "RUNNING", "run-res", deadline())).result(
++        timeout=5
++    )
++    _seed_operation(path, "op_unknown_2", t_res, 1, "UNKNOWN", unknown_reason="stream_dropped")
++    writer.submit(
++        service.command(context, t_res, 1, "RECONCILING", "enter-reconciling", deadline())
++    ).result(timeout=5)
++    with pytest.raises(PermissionError):
++        writer.submit(
++            service.resume_reconciled(context, t_res, 2, "resume-premature", deadline())
++        ).result(timeout=5)
++
++    db = connect(path)
++    db.execute(
++        "UPDATE operations SET state='SUCCEEDED',version=version+1,resolution_evidence_ref='ev_2',"
++        "completed_at=2100,updated_at=2100 WHERE operation_id='op_unknown_2'"
++    )
++    db.close()
++    resumed = json.loads(
++        writer.submit(
++            service.resume_reconciled(context, t_res, 2, "resume-verified", deadline())
++        ).result(timeout=5)
++    )
++    assert resumed["state"] == "QUEUED" and resumed["version"] == 3
++
++
++@pytest.mark.parametrize("point", ["before_commit", "after_commit_before_ack"])
++def test_state_completion_crash_boundary_is_atomic_and_idempotent(system, point):
++    path, context, writer, inbox = system
++    task_id = json.loads(
++        inbox.submit(context, f"evt-state-crash-{point}", payload(), deadline()).result(timeout=5)
++    )["task_id"]
++    service = TaskStateService(writer)
++    writer.submit(
++        service.command(context, task_id, 0, "RUNNING", f"run-{point}", deadline())
++    ).result(timeout=5)
++    _seed_artifact(path, f"art_{point}", task_id, state="AVAILABLE")
++    writer.close()
++
++    code = r"""
++import os, sys, time
++from pathlib import Path
++from openbot.application.state_machine import OutcomeSubmission, TaskStateService
++from openbot.storage.inbox import InboundContext
++from openbot.storage.writer import Writer
++import openbot.application.state_machine as module
++context = InboundContext(
++    "pro_test1", "pri_test1", 1, "fake", "tenant1", "app1", "ses_test1", "wsp_test1")
++if sys.argv[3] == "before_commit":
++    original = module.emit_state
++    def crash(*args, **kwargs):
++        original(*args, **kwargs)
++        os._exit(78)
++    module.emit_state = crash
++writer = Writer(Path(sys.argv[1]))
++service = TaskStateService(writer)
++sub = OutcomeSubmission(
++    task_kind="DIAGNOSIS",
++    target="SUCCEEDED",
++    summary="verified diagnosis",
++    source_refs=("docs/03_runtime_recovery.md#L80",),
++    artifact_ids=(f"art_{sys.argv[3]}",),
++)
++dl = int(time.monotonic() * 1000) + 5000
++writer.submit(
++    service.complete(context, sys.argv[2], 1, sub, "req-crash-complete", dl)
++).result(timeout=5)
++os._exit(78)
++"""
++    result = subprocess.run(
++        [sys.executable, "-c", code, str(path), task_id, point],
++        cwd=ROOT,
++        capture_output=True,
++        timeout=10,
++    )
++    assert result.returncode == 78, result.stderr.decode()
++
++    with Writer(path) as recovered:
++        rec_service = TaskStateService(recovered)
++        snap_before = rec_service.snapshot(context, task_id)
++        if point == "before_commit":
++            assert snap_before["state"] == "RUNNING" and snap_before["version"] == 1
++        else:
++            assert snap_before["state"] == "SUCCEEDED" and snap_before["version"] == 2
++
++        sub = OutcomeSubmission(
++            task_kind="DIAGNOSIS",
++            target="SUCCEEDED",
++            summary="verified diagnosis",
++            source_refs=("docs/03_runtime_recovery.md#L80",),
++            artifact_ids=(f"art_{point}",),
++        )
++        first = recovered.submit(
++            rec_service.complete(context, task_id, 1, sub, "req-crash-complete", deadline())
++        ).result(timeout=5)
++        second = recovered.submit(
++            rec_service.complete(context, task_id, 1, sub, "req-crash-complete", deadline())
++        ).result(timeout=5)
++        assert first == second
++        events = rec_service.replay(context, task_id)
++        assert [e["event_type"] for e in events] == [
++            "TASK_QUEUED",
++            "TASK_STATE_CHANGED",
++            "TASK_FINISHED",
++        ]
++        assert [e["version"] for e in events] == [0, 1, 2]
 --- /dev/null
 +++ b/tests/integration/storage/test_migrations.py
 @@ -0,0 +1,172 @@

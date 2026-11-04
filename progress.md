@@ -33,3 +33,4 @@
 - 文件探针 canary 先实际读到了合成工作区私有文件（RED），现将整个工作区白名单缩为源码/包元数据与已锁解释器/venv；4 项探针 GREEN。未读取真实秘密，未扩大公共系统元数据例外。
 - 独立审批审查发现 canonical Operation ID 与 SQL 主键漏比对；自查发现 schema 异常链可能打印 nonce。两个失败反例均已修复，合成 nonce 的 RED 摘录明确脱敏，正式异常不再带原始值。
 - 当前完整本机验证：M0 150 passed/3 skipped；M1 169 passed/1 skipped；存储子集 49 passed；容器独立资格 8 passed。lint/format/mypy/组件及原设计/DDL检查通过。未通过 OB-029，未进入 M3 验收。
+- 完成 OB-014 完整 Task 11×11 跃迁矩阵、OutcomeVerifier（DIAGNOSIS/PATCH/TEST 产物与未决项核对）、cancel（UNKNOWN/DISPATCHING 驻留 RECONCILING）与 resume_reconciled 核对恢复守卫，以及 complete 提交前后真实子进程崩溃测试；存储套件增至 54 passed，M0 155 passed/3 skipped，M1 174 passed/1 skipped。OB-014 更新为 VERIFIED。

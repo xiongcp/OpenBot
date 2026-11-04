@@ -23,8 +23,8 @@
 - [complete] 只读盘点与 M0 第一批本地实现；三 OS 实测待环境
 - [complete] 标准合同、故障夹具与协议 PoC 本地验证
 - [in_progress] M1 SDK / 隔离先行验证和正式集成
-- [complete] OB-011/012/013 本机持久化验收；上游三 OS 门禁未闭合，保留 VERIFIED
-- [in_progress] OB-014/017/018 内部状态/提案/决定子集；正式终态、claim/dispatch/recovery 未实现
+- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
+- [in_progress] OB-017/018 内部提案/决定子集；正式策略引擎 OB-016 与 claim/dispatch/recovery 未实现
 - [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 
 ## 已知错误与处理

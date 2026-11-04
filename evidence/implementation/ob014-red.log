@@ -1,0 +1,16 @@
+
+==================================== ERRORS ====================================
+________ ERROR collecting tests/integration/storage/test_inbox_state.py ________
+ImportError while importing test module '/Users/Zhuanz/Documents/OpenBot/tests/integration/storage/test_inbox_state.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+.python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/storage/test_inbox_state.py:9: in <module>
+    from openbot.application.state_machine import (
+E   ImportError: cannot import name 'OutcomeSubmission' from 'openbot.application.state_machine' (/Users/Zhuanz/Documents/OpenBot/services/core/src/openbot/application/state_machine.py)
+=========================== short test summary info ============================
+ERROR tests/integration/storage/test_inbox_state.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.09s
