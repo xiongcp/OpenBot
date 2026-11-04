@@ -4150,7 +4150,7 @@
     "title": "实现专用浏览器profile与会话锁",
     "milestone": "M3",
     "priority": "P1",
-    "status": "TODO",
+    "status": "IN_PROGRESS",
     "owner_lane": "Platform",
     "size": "M",
     "req_ids": [
@@ -4208,7 +4208,19 @@
       "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
       "Playwright/browser build与资产hash、sandbox配置/实际启动证据、OS/backend资格与profile锁记录。"
     ],
-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、17–18、24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
+    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、17–18、24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
+    "execution": {
+      "scope": "macOS ARM64 BrowserProfileSessionManager enforcing dedicated user_data_dir, profile locks, Chromium sandbox + outer isolation, no CDP attach/cookie decryption, and cookie redaction",
+      "evidence": [
+        "docs/evidence/approvals.md",
+        "tests/unit/test_browser_session.py",
+        "evidence/implementation/verification.json"
+      ],
+      "blockers": [
+        "上游 OB-016、OB-031、OB-037、OB-039、OB-042、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
+      ],
+      "review": "Read component_refs (playwright), reuse_type (dependency_adapter), and reuse_notes; rejected --no-sandbox, user Chrome profiles, CDP attach, and cookie decryption."
+    }
   },
   {
     "id": "OB-058",

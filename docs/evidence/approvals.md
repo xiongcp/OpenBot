@@ -117,6 +117,10 @@
 实现（OB-056）：新增 `services/feishu_gateway/src/openbot_feishu/e2e_harness.py`（`FeishuM2EndToEndHarness`、`FeishuM2VerificationReport`）、`tests/integration/feishu/test_feishu_e2e_harness.py` 与中英双语 `docs/demos/m3.md`：
 1. 受控飞书端到端主流程与 6 故障场景验证：闭环串联安全配对、WebSocket 入站持久化后 ACK、普通审批卡构造与真实 operator 审批 callback CAS，并验证断网重连、daemon 重启、重复 callback、已取消任务旧卡、撤销 owner 与双消费者阻断；诚实标记 `real_feishu_tenant_verified=False`。
 
+实现（OB-057）：新增 `services/core/src/openbot/tools/executors/browser/session.py`（`BrowserProfileSessionManager`、`BrowserSessionSpec`、`BrowserIsolationAttestation`）与 `tests/unit/test_browser_session.py`：
+1. OpenBot 专用 profile 目录与独占锁：拒绝使用用户日常 Chrome 目录、拒绝解密系统 cookies、拒绝连接任意 CDP 端口；同一 profile 并发申请抛出 `BROWSER_PROFILE_LOCKED`。
+2. Chromium 沙箱与外层隔离双重门禁：拦截 `--no-sandbox`、`--disable-setuid-sandbox`、`--disable-web-security` 等降级参数；导出 Artifact 元数据时仅保留 cookie 名称并剥离全部 cookie 敏感值。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -138,6 +142,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_health.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_dead_letter.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_session.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -215,3 +220,5 @@
   1. Restricts dead-letter listing to the active owner, redelivers `DEAD`/`EXPIRED` notifications without re-running business operations (`business_operation_reexecuted=False`), and refuses to discard or blindly retry `UNKNOWN` side effects (`UNKNOWN_REQUIRES_RECONCILE`).
 - **OB-056 (`IN_PROGRESS`)**: Controlled M2 Feishu end-to-end harness (`services/feishu_gateway/src/openbot_feishu/e2e_harness.py`, `tests/integration/feishu/test_feishu_e2e_harness.py`, and `docs/demos/m3.md`, 1 passed):
   1. Verifies the M2 Feishu main flow and 6 failure scenarios (`disconnect_and_jittered_reconnect`, `daemon_restart_recovery`, `duplicate_approval_callback`, `stale_card_on_cancelled_task`, `revoked_owner_rejected`, `dual_consumer_spawn_blocked`) while honestly reporting `real_feishu_tenant_verified=False` pending a live test tenant.
+- **OB-057 (`IN_PROGRESS`)**: Dedicated browser profile and session lock manager (`services/core/src/openbot/tools/executors/browser/session.py` and `tests/unit/test_browser_session.py`, 1 passed):
+  1. Enforces OpenBot-dedicated `user_data_dir`, profile mutex locks (`BROWSER_PROFILE_LOCKED`), and both Chromium sandbox and outer isolation (`--no-sandbox`, CDP attach, and system cookie decryption forbidden); strips cookie values from Artifact exports.
