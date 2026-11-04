@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿与发送工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft/Send Tools, Egress, Secrets, and Redaction
+# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤与认证本地控制 API / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, and Authenticated Local Control API
 
 ## 中文说明
 
@@ -66,6 +66,11 @@
 2. 独立外发授权与适配门禁（`execute_approved_send`）：拒绝将普通 `owner_progress` 通知授权复用为第三方发送授权；在 M2 真实平台适配器通过验证前（`transport.qualified=False`）直接拒绝并返回 `CAPABILITY_UNAVAILABLE`；派发前再次核验 `caller_recipient_id`、最新草稿哈希与 `EgressGuard`。
 3. 成功后断连进入 `UNKNOWN` 与禁止自动重发：经 `claim` -> `begin_dispatch` 两次短事务后在事务外调用 `transport.send_message`；若发送中断连或回执丢失，将 `operation_attempts` 与 `operations` 置为 `UNKNOWN`、关联 Task 置为 `RECONCILING` 并保留资源 quarantine；后续恢复（`RecoveryService.recover_operation`）对 `RECONCILE_ONLY` 绝不签发重试凭据，防止重复发送外部消息。
 
+实现（OB-081）：新增 `services/core/src/openbot/adapters/local_api/server.py`（`LocalControlApiServer`、`ScopedTokenStore`、`ApiRequest`、`ApiResponse`）与 `tests/contracts/local_api/test_local_api_contracts.py`、`tests/security/local_api/test_local_api_security.py`：
+1. Loopback、Host/Origin、Proxy 头拦截、Profile 绑定与分域 Token：强制 `client_ip in {'127.0.0.1', '::1'}`，任何携带 `X-Forwarded-For`、`X-Real-IP`、`Forwarded` 的代理伪造请求直接返回 `403 PROXY_HEADER_FORBIDDEN`；强制校验本地 `Host` 与受控 `Origin`（阻断跨源网页与 DNS rebinding）；划分 `owner_cli`、`feishu_gateway`（内部网关独立 scope，调用本地 challenge 端点返回 `403 CHALLENGE_OWNER_SCOPE_ONLY`）与 `webview_readonly`（写请求返回 `403 READONLY_SCOPE_FORBIDDEN`）三类 Token。
+2. 完整控制端点与安全预览/核对规则：提供 `/v1/health`、`/v1/tasks`（含 `Idempotency-Key` 冲突 `409`）、`/v1/tasks/{id}/cancel`、`/v1/tasks/{id}/resume`、`/v1/approvals/{id}/preview`（永不暴露 `SECRET` 或原始 `nonce`）、`/v1/approvals/{id}/challenge`（仅限有效 `PENDING` 且 `owner_cli`）、`/v1/approvals/{id}/decide`、`/v1/operations/{id}`（含 `Operation.version`）、`/v1/operations/{id}/evidence`（只接收内联受限字节，拒绝 `host_path`）与 `/v1/operations/{id}/reconcile`（拒绝客户端指定 `target_state` 或 `revive_consumed_grant`）。
+3. SSE 事件流游标与保留期校验（`/v1/tasks/{id}/events`）：当 `after_seq` 与 `Last-Event-ID` 同时存在且冲突时返回 `400 SSE_CURSOR_CONFLICT`；当游标早于保留期下界（`after_seq < min_retained_event_seq`）时返回 `410 CURSOR_EXPIRED_FETCH_SNAPSHOT`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -73,10 +78,11 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-028/029 垂直切片完整闭合。
 
 ## English Summary
 
@@ -119,3 +125,6 @@
 - **OB-044 (`IN_PROGRESS`)**: Controlled `message.send` use case and transport port (`services/core/src/openbot/tools/messages/send.py` and `tests/integration/storage/test_message_send.py`, 1 passed):
   1. `propose_send` & `execute_approved_send`: Binds `draft_artifact_id`, `draft_sha256`, `account_id`, and stable `recipient_id` (`RECONCILE_ONLY`); rejects reusing ordinary `owner_progress` notification grants for third-party sends, rejects recipient or draft-hash drift, and fails closed with `CAPABILITY_UNAVAILABLE` when the real channel adapter is not yet qualified (`transport.qualified=False`).
   2. Disconnect handling: Runs two-phase `claim -> begin_dispatch` before calling `transport.send_message` outside the transaction; connection drops after send transition the Operation to `UNKNOWN` and Task to `RECONCILING` while retaining resource quarantine and refusing automatic re-send.
+- **OB-081 (`IN_PROGRESS`)**: Authenticated loopback HTTP and SSE control API (`services/core/src/openbot/adapters/local_api/server.py`, `tests/contracts/local_api/`, and `tests/security/local_api/`, 2 passed):
+  1. Loopback, Host/Origin, proxy header, profile, and scoped token enforcement: Rejects non-loopback IPs, `X-Forwarded-For` proxy headers, external `Origin`/`Host` headers, wrong `X-OpenBot-Profile`, `feishu_gateway` access to `/challenge`, and `webview_readonly` mutations.
+  2. Control endpoints & SSE cursors: Implements `/v1/health`, `/v1/tasks`, `/v1/tasks/{id}/cancel`, `/v1/tasks/{id}/resume`, `/v1/approvals/{id}/preview` (never exposing `SECRET` or `nonce`), `/v1/approvals/{id}/challenge`, `/v1/approvals/{id}/decide`, `/v1/operations/{id}` (with `version`), `/v1/operations/{id}/evidence` (inline content only, rejecting `host_path`), `/v1/operations/{id}/reconcile` (rejecting client-supplied `target_state` or `revive_consumed_grant`), and `/v1/tasks/{id}/events` (`400` on `after_seq`/`Last-Event-ID` conflict, `410` on expired cursor).

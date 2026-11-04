@@ -5541,7 +5541,7 @@
     "title": "在M1实现认证本地HTTP与SSE控制API",
     "milestone": "M1",
     "priority": "P0",
-    "status": "TODO",
+    "status": "IN_PROGRESS",
     "owner_lane": "Desktop",
     "size": "M",
     "req_ids": [
@@ -5610,7 +5610,20 @@
       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
       "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
     ],
-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第6–7、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
+    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第6–7、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
+    "execution": {
+      "scope": "macOS ARM64 LocalControlApiServer and ScopedTokenStore (loopback/Host/Origin/proxy-header/profile/scope guards, ApprovalPreview SECRET redaction, owner-only challenge endpoint, inline-only evidence upload, reconcile state-override rejection, and SSE cursor conflict 400 / retention 410 checks)",
+      "evidence": [
+        "docs/evidence/approvals.md",
+        "tests/contracts/local_api/test_local_api_contracts.py",
+        "tests/security/local_api/test_local_api_security.py",
+        "evidence/implementation/verification.json"
+      ],
+      "blockers": [
+        "上游 OB-018、OB-020、OB-022、OB-031、OB-038、OB-039、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
+      ],
+      "review": "Read component_refs (fastapi-stack, pydantic-jsonschema), reuse_type (dependency_adapter), and reuse_notes; implemented control-owned loopback HTTP/SSE handler with SchemaRegistry Draft 2020-12 validation without trusting proxy headers or permissive CORS."
+    }
   },
   {
     "id": "OB-082",

@@ -2160,8 +2160,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,121 @@
-+# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿与发送工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft/Send Tools, Egress, Secrets, and Redaction
+@@ -0,0 +1,130 @@
++# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤与认证本地控制 API / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, and Authenticated Local Control API
 +
 +## 中文说明
 +
@@ -2229,6 +2229,11 @@
 +2. 独立外发授权与适配门禁（`execute_approved_send`）：拒绝将普通 `owner_progress` 通知授权复用为第三方发送授权；在 M2 真实平台适配器通过验证前（`transport.qualified=False`）直接拒绝并返回 `CAPABILITY_UNAVAILABLE`；派发前再次核验 `caller_recipient_id`、最新草稿哈希与 `EgressGuard`。
 +3. 成功后断连进入 `UNKNOWN` 与禁止自动重发：经 `claim` -> `begin_dispatch` 两次短事务后在事务外调用 `transport.send_message`；若发送中断连或回执丢失，将 `operation_attempts` 与 `operations` 置为 `UNKNOWN`、关联 Task 置为 `RECONCILING` 并保留资源 quarantine；后续恢复（`RecoveryService.recover_operation`）对 `RECONCILE_ONLY` 绝不签发重试凭据，防止重复发送外部消息。
 +
++实现（OB-081）：新增 `services/core/src/openbot/adapters/local_api/server.py`（`LocalControlApiServer`、`ScopedTokenStore`、`ApiRequest`、`ApiResponse`）与 `tests/contracts/local_api/test_local_api_contracts.py`、`tests/security/local_api/test_local_api_security.py`：
++1. Loopback、Host/Origin、Proxy 头拦截、Profile 绑定与分域 Token：强制 `client_ip in {'127.0.0.1', '::1'}`，任何携带 `X-Forwarded-For`、`X-Real-IP`、`Forwarded` 的代理伪造请求直接返回 `403 PROXY_HEADER_FORBIDDEN`；强制校验本地 `Host` 与受控 `Origin`（阻断跨源网页与 DNS rebinding）；划分 `owner_cli`、`feishu_gateway`（内部网关独立 scope，调用本地 challenge 端点返回 `403 CHALLENGE_OWNER_SCOPE_ONLY`）与 `webview_readonly`（写请求返回 `403 READONLY_SCOPE_FORBIDDEN`）三类 Token。
++2. 完整控制端点与安全预览/核对规则：提供 `/v1/health`、`/v1/tasks`（含 `Idempotency-Key` 冲突 `409`）、`/v1/tasks/{id}/cancel`、`/v1/tasks/{id}/resume`、`/v1/approvals/{id}/preview`（永不暴露 `SECRET` 或原始 `nonce`）、`/v1/approvals/{id}/challenge`（仅限有效 `PENDING` 且 `owner_cli`）、`/v1/approvals/{id}/decide`、`/v1/operations/{id}`（含 `Operation.version`）、`/v1/operations/{id}/evidence`（只接收内联受限字节，拒绝 `host_path`）与 `/v1/operations/{id}/reconcile`（拒绝客户端指定 `target_state` 或 `revive_consumed_grant`）。
++3. SSE 事件流游标与保留期校验（`/v1/tasks/{id}/events`）：当 `after_seq` 与 `Last-Event-ID` 同时存在且冲突时返回 `400 SSE_CURSOR_CONFLICT`；当游标早于保留期下界（`after_seq < min_retained_event_seq`）时返回 `410 CURSOR_EXPIRED_FETCH_SNAPSHOT`。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2236,10 +2241,11 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
++当前限制：上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-028/029 垂直切片完整闭合。
 +
 +## English Summary
 +
@@ -2282,6 +2288,9 @@
 +- **OB-044 (`IN_PROGRESS`)**: Controlled `message.send` use case and transport port (`services/core/src/openbot/tools/messages/send.py` and `tests/integration/storage/test_message_send.py`, 1 passed):
 +  1. `propose_send` & `execute_approved_send`: Binds `draft_artifact_id`, `draft_sha256`, `account_id`, and stable `recipient_id` (`RECONCILE_ONLY`); rejects reusing ordinary `owner_progress` notification grants for third-party sends, rejects recipient or draft-hash drift, and fails closed with `CAPABILITY_UNAVAILABLE` when the real channel adapter is not yet qualified (`transport.qualified=False`).
 +  2. Disconnect handling: Runs two-phase `claim -> begin_dispatch` before calling `transport.send_message` outside the transaction; connection drops after send transition the Operation to `UNKNOWN` and Task to `RECONCILING` while retaining resource quarantine and refusing automatic re-send.
++- **OB-081 (`IN_PROGRESS`)**: Authenticated loopback HTTP and SSE control API (`services/core/src/openbot/adapters/local_api/server.py`, `tests/contracts/local_api/`, and `tests/security/local_api/`, 2 passed):
++  1. Loopback, Host/Origin, proxy header, profile, and scoped token enforcement: Rejects non-loopback IPs, `X-Forwarded-For` proxy headers, external `Origin`/`Host` headers, wrong `X-OpenBot-Profile`, `feishu_gateway` access to `/challenge`, and `webview_readonly` mutations.
++  2. Control endpoints & SSE cursors: Implements `/v1/health`, `/v1/tasks`, `/v1/tasks/{id}/cancel`, `/v1/tasks/{id}/resume`, `/v1/approvals/{id}/preview` (never exposing `SECRET` or `nonce`), `/v1/approvals/{id}/challenge`, `/v1/approvals/{id}/decide`, `/v1/operations/{id}` (with `version`), `/v1/operations/{id}/evidence` (inline content only, rejecting `host_path`), `/v1/operations/{id}/reconcile` (rejecting client-supplied `target_state` or `revive_consumed_grant`), and `/v1/tasks/{id}/events` (`400` on `after_seq`/`Last-Event-ID` conflict, `410` on expired cursor).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2628,7 +2637,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,67 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2689,12 +2698,13 @@
 +- 推进 OB-043（实现本地消息草稿）：实现 MessageDraftService、ContactCandidate 与 MessageDraftOutcome（同名收件人歧义或缺失时原子将 Task 转 WAITING_INPUT 且拒绝生成可发送草稿；唯一稳定收件人时核验附件 SHA-256 并在 ArtifactStore 生成不可变草稿；草稿编辑产生新 revision 与新 draft_sha256 使旧哈希失效，全程零网络调用）；新增集成测试通过，存储套件增至 88 passed，M0 增至 251 passed/3 skipped，M1 增至 270 passed/1 skipped。因上游 OB-036/037 仍为 IN_PROGRESS，OB-043 记 IN_PROGRESS。
 +- 推进 OB-044（实现消息发送用例与受控适配端口）：实现 MessageSendService、MessageSendTransportPort、MessageSendEnvelope 与 MessageSendResult（绑定最新不可变草稿哈希、目标账户与稳定 recipient_id，默认 RECONCILE_ONLY；拒绝将普通 owner_progress 通知授权复用为第三方发送授权，未资格化真实平台适配器返回 CAPABILITY_UNAVAILABLE；经 claim->begin_dispatch 后在事务外发送，断连丢回执时转 UNKNOWN/RECONCILING 并保留 quarantine，恢复器绝不自动重发）；新增集成测试通过，存储套件增至 89 passed，M0 增至 252 passed/3 skipped，M1 增至 271 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-044 记 IN_PROGRESS。
 +- 推进 OB-015（实现单实例 daemon 和调度租约）：实现 SingleInstanceSupervisorLock、DaemonHandoffTicket、ProfileSchedulerService 与 native/supervisor/src/instance_lock.rs（supervisor 独占非阻塞 flock 并签发 handoff ticket，子 daemon 校验凭据而不重复加锁避免父子自锁，第二实例立即返回 PROFILE_LOCK_HELD；old_workers_isolated=False 时拒绝开启新执行；单活动 Task 槽位在 WAITING_APPROVAL 释放，陈旧 runtime_epoch/fencing_token 提交拒绝）；新增 2 项集成测试通过，存储套件增至 91 passed，M0 增至 254 passed/3 skipped，M1 增至 273 passed/1 skipped。因上游 OB-093 仍为 IN_PROGRESS，OB-015 记 IN_PROGRESS。
++- 推进 OB-081（在 M1 实现认证本地 HTTP 与 SSE 控制 API）：实现 LocalControlApiServer 与 ScopedTokenStore（loopback IP、Host/Origin 校验、拦截 X-Forwarded-For 代理伪造、X-OpenBot-Profile 绑定与 owner_cli/feishu_gateway/webview_readonly 分域 token；提供 health/tasks/cancel/resume/approvals preview & challenge & decide/operations snapshot & evidence & reconcile/SSE events；预览隐藏 SECRET，证据上传禁宿主路径，reconcile 禁客户端指定目标状态，SSE 校验游标冲突 400 与过期 410）；新增契约与安全测试通过，M0 增至 256 passed/3 skipped，M1 增至 275 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-081 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
-+- Implemented and verified M1 runtime, security, tools, and platform tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-030`–`OB-044`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 254 passed M0 checks, and 273 passed M1 checks.
-+- Next ready M1 tasks: `OB-081` (authenticated local HTTP & SSE control API), `OB-028` (CLI task & approval operations), `OB-029` (first persistent vertical slice), `OB-045` (security tool threat regression), and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
++- Implemented and verified M1 runtime, security, tools, platform, and local control API tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-030`–`OB-044`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 256 passed M0 checks, and 275 passed M1 checks.
++- Next ready M1 tasks: `OB-028` (CLI task & approval operations), `OB-029` (first persistent vertical slice), `OB-045` (security tool threat regression), and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3326,6 +3336,393 @@
 +from openbot.cli import main
 +
 +raise SystemExit(main())
+--- /dev/null
++++ b/services/core/src/openbot/adapters/__init__.py
+@@ -0,0 +1 @@
++"""Authenticated boundary adapters for local API and channel gateways."""
+--- /dev/null
++++ b/services/core/src/openbot/adapters/local_api/__init__.py
+@@ -0,0 +1 @@
++"""Authenticated loopback HTTP and SSE control API."""
+--- /dev/null
++++ b/services/core/src/openbot/adapters/local_api/server.py
+@@ -0,0 +1,376 @@
++"""Loopback HTTP and SSE control API with Host/Origin/proxy guards and scoped tokens."""
++
++import hmac
++import re
++import secrets
++import sqlite3
++import time
++from dataclasses import dataclass, field
++from typing import Any, Literal
++
++from openbot.application.cancellation import CancellationService
++from openbot.application.operations import ChallengeStore, OperationService
++from openbot.application.recovery import RecoveryService
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import ContractError, SchemaRegistry, canonicalize, strict_json
++from openbot.policy.approvals import ApprovalService
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.writer import RequestConflict, Writer
++
++type ApiScope = Literal["owner_cli", "feishu_gateway", "webview_readonly"]
++
++_LOOPBACK_IPS = frozenset({"127.0.0.1", "::1"})
++_ALLOWED_HOST_PREFIXES = ("127.0.0.1", "[::1]", "localhost")
++_PROXY_HEADERS = frozenset({"x-forwarded-for", "x-real-ip", "forwarded", "x-forwarded-host"})
++
++
++@dataclass(frozen=True, slots=True)
++class TokenGrant:
++    token: str
++    profile_id: str
++    principal_id: str
++    scope: ApiScope
++
++
++class ScopedTokenStore:
++    """Protected in-memory scoped session token registry."""
++
++    def __init__(self) -> None:
++        self._tokens: dict[str, TokenGrant] = {}
++
++    def issue(self, *, profile_id: str, principal_id: str, scope: ApiScope) -> str:
++        tok = f"obt_{scope}_{secrets.token_hex(24)}"
++        self._tokens[tok] = TokenGrant(tok, profile_id, principal_id, scope)
++        return tok
++
++    def verify(self, bearer: str) -> TokenGrant | None:
++        for stored, grant in self._tokens.items():
++            if hmac.compare_digest(stored, bearer):
++                return grant
++        return None
++
++
++@dataclass(frozen=True, slots=True)
++class ApiRequest:
++    method: str
++    path: str
++    headers: dict[str, str] = field(default_factory=dict)
++    query: dict[str, str] = field(default_factory=dict)
++    body: str | bytes = b""
++    client_ip: str = "127.0.0.1"
++
++
++@dataclass(frozen=True, slots=True)
++class ApiResponse:
++    status_code: int
++    body: bytes
++    content_type: str = "application/json"
++
++    def json(self) -> dict[str, Any]:
++        return dict(strict_json(self.body))
++
++
++def _json_resp(status: int, payload: dict[str, Any]) -> ApiResponse:
++    return ApiResponse(status, canonicalize(payload), "application/json")
++
++
++class LocalControlApiServer:
++    """Authenticated local control API enforcing loopback, Host/Origin, profile, and scopes."""
++
++    def __init__(
++        self,
++        *,
++        profile_id: str,
++        default_context: InboundContext,
++        writer: Writer,
++        registry: SchemaRegistry,
++        tokens: ScopedTokenStore,
++        inbox: Inbox,
++        tasks: TaskStateService,
++        operations: OperationService,
++        approvals: ApprovalService,
++        recovery: RecoveryService,
++        cancellation: CancellationService,
++        artifacts: ArtifactStore,
++        challenges: ChallengeStore,
++        min_retained_event_seq: int = 1,
++        max_body_bytes: int = 65_536,
++    ) -> None:
++        self._profile_id = profile_id
++        self._ctx = default_context
++        self._writer = writer
++        self._registry = registry
++        self._tokens = tokens
++        self._inbox = inbox
++        self._tasks = tasks
++        self._operations = operations
++        self._approvals = approvals
++        self._recovery = recovery
++        self._cancellation = cancellation
++        self._artifacts = artifacts
++        self._challenges = challenges
++        self._min_seq = min_retained_event_seq
++        self._max_body = max_body_bytes
++
++    def _authenticate(self, req: ApiRequest) -> tuple[TokenGrant | None, ApiResponse | None]:
++        # 1. Loopback IP check & proxy header rejection
++        if req.client_ip not in _LOOPBACK_IPS:
++            return None, _json_resp(403, {"code": "NON_LOOPBACK_FORBIDDEN"})
++        lower_headers = {k.lower(): v for k, v in req.headers.items()}
++        if set(lower_headers) & _PROXY_HEADERS:
++            return None, _json_resp(403, {"code": "PROXY_HEADER_FORBIDDEN"})
++
++        # 2. Host & Origin validation (DNS rebinding & cross-origin browser defense)
++        host = lower_headers.get("host", "").lower()
++        if not host or not host.startswith(_ALLOWED_HOST_PREFIXES):
++            return None, _json_resp(403, {"code": "INVALID_HOST_HEADER"})
++        origin = lower_headers.get("origin")
++        if origin is not None and origin not in {"http://127.0.0.1", "tauri://localhost"}:
++            return None, _json_resp(403, {"code": "FORBIDDEN_ORIGIN"})
++
++        # 3. Body size limit
++        raw_len = len(req.body.encode("utf-8") if isinstance(req.body, str) else req.body)
++        if raw_len > self._max_body:
++            return None, _json_resp(413, {"code": "PAYLOAD_TOO_LARGE"})
++
++        # 4. Bearer token & profile binding
++        auth = lower_headers.get("authorization", "")
++        if not auth.startswith("Bearer "):
++            return None, _json_resp(401, {"code": "UNAUTHORIZED"})
++        grant = self._tokens.verify(auth.removeprefix("Bearer ").strip())
++        if grant is None:
++            return None, _json_resp(401, {"code": "INVALID_TOKEN"})
++        prof_hdr = lower_headers.get("x-openbot-profile", self._profile_id)
++        if prof_hdr != self._profile_id or grant.profile_id != self._profile_id:
++            return None, _json_resp(403, {"code": "PROFILE_MISMATCH"})
++        return grant, None
++
++    def handle(self, req: ApiRequest) -> ApiResponse:
++        grant, err = self._authenticate(req)
++        if err is not None or grant is None:
++            return err or _json_resp(401, {"code": "UNAUTHORIZED"})
++
++        if req.method != "GET" and grant.scope == "webview_readonly":
++            return _json_resp(403, {"code": "READONLY_SCOPE_FORBIDDEN"})
++
++        lower_headers = {k.lower(): v for k, v in req.headers.items()}
++        idem_key = lower_headers.get("idempotency-key", f"req_{secrets.token_hex(12)}")
++        deadline = int(time.monotonic() * 1000) + 5000
++
++        try:
++            if req.method == "GET" and req.path == "/v1/health":
++                return _json_resp(
++                    200,
++                    {"status": "ok", "profile_id": self._profile_id},
++                )
++
++            if req.method == "POST" and req.path == "/v1/tasks":
++                raw = self._inbox.submit(self._ctx, idem_key, req.body, deadline).result(timeout=5)
++                return ApiResponse(201, raw)
++
++            m_task = re.fullmatch(r"/v1/tasks/([A-Za-z0-9_-]+)", req.path)
++            if req.method == "GET" and m_task:
++                snap = self._tasks.snapshot(self._ctx, m_task.group(1))
++                return _json_resp(200, snap)
++
++            m_cancel = re.fullmatch(r"/v1/tasks/([A-Za-z0-9_-]+)/cancel", req.path)
++            if req.method == "POST" and m_cancel:
++                body_doc = dict(strict_json(req.body)) if req.body else {}
++                exp_ver = int(body_doc.get("expected_version", 0))
++                res = self._cancellation.propagate_cancel(
++                    self._ctx,
++                    m_cancel.group(1),
++                    expected_version=exp_ver,
++                    request_id=f"api_cancel:{idem_key}",
++                    deadline_monotonic_ms=deadline,
++                )
++                return _json_resp(200, res)
++
++            m_resume = re.fullmatch(r"/v1/tasks/([A-Za-z0-9_-]+)/resume", req.path)
++            if req.method == "POST" and m_resume:
++                body_doc = dict(strict_json(req.body))
++                raw = self._writer.submit(
++                    self._tasks.resume_reconciled(
++                        self._ctx,
++                        m_resume.group(1),
++                        int(body_doc["expected_version"]),
++                        f"api_resume:{idem_key}",
++                        deadline,
++                    )
++                ).result(timeout=5)
++                return ApiResponse(200, raw)
++
++            m_events = re.fullmatch(r"/v1/tasks/([A-Za-z0-9_-]+)/events", req.path)
++            if req.method == "GET" and m_events:
++                return self._handle_sse_events(m_events.group(1), req, lower_headers)
++
++            m_prev = re.fullmatch(r"/v1/approvals/([A-Za-z0-9_-]+)/preview", req.path)
++            if req.method == "GET" and m_prev:
++                return self._handle_approval_preview(m_prev.group(1))
++
++            m_chal = re.fullmatch(r"/v1/approvals/([A-Za-z0-9_-]+)/challenge", req.path)
++            if req.method == "POST" and m_chal:
++                if grant.scope != "owner_cli":
++                    return _json_resp(403, {"code": "CHALLENGE_OWNER_SCOPE_ONLY"})
++                return self._handle_approval_challenge(m_chal.group(1))
++
++            m_dec = re.fullmatch(r"/v1/approvals/([A-Za-z0-9_-]+)/decide", req.path)
++            if req.method == "POST" and m_dec:
++                raw = self._approvals.decide(
++                    self._ctx, m_dec.group(1), req.body, f"api_decide:{idem_key}", deadline
++                )
++                return ApiResponse(200, raw)
++
++            m_op = re.fullmatch(r"/v1/operations/([A-Za-z0-9_-]+)", req.path)
++            if req.method == "GET" and m_op:
++                return self._handle_operation_snapshot(m_op.group(1))
++
++            m_ev = re.fullmatch(r"/v1/operations/([A-Za-z0-9_-]+)/evidence", req.path)
++            if req.method == "POST" and m_ev:
++                return self._handle_upload_evidence(m_ev.group(1), req.body, idem_key, deadline)
++
++            m_rec = re.fullmatch(r"/v1/operations/([A-Za-z0-9_-]+)/reconcile", req.path)
++            if req.method == "POST" and m_rec:
++                raw = self._writer.submit(
++                    self._recovery.reconcile_unknown(
++                        self._ctx,
++                        m_rec.group(1),
++                        req.body,
++                        provenance_kind="USER_ATTESTED",
++                        request_id=f"api_rec:{idem_key}",
++                        deadline_monotonic_ms=deadline,
++                    )
++                ).result(timeout=5)
++                return ApiResponse(200, raw)
++
++            return _json_resp(404, {"code": "NOT_FOUND"})
++        except ContractError as exc:
++            return _json_resp(400, {"code": "CONTRACT_ERROR", "message": str(exc)})
++        except RequestConflict as exc:
++            return _json_resp(409, {"code": "CONFLICT", "message": str(exc)})
++        except PermissionError as exc:
++            return _json_resp(403, {"code": "FORBIDDEN", "message": str(exc)})
++
++    def _handle_approval_preview(self, approval_id: str) -> ApiResponse:
++        def query(db: sqlite3.Connection) -> dict[str, Any]:
++            row = db.execute(
++                "SELECT a.operation_id,a.status,a.version,a.binding_hash,a.expires_at,"
++                "o.task_id,o.workspace_id,o.tool_id,o.data_class,o.destination_json "
++                "FROM approvals a JOIN operations o ON o.operation_id=a.operation_id "
++                "WHERE a.approval_id=?",
++                (approval_id,),
++            ).fetchone()
++            if not row:
++                raise PermissionError("Approval not found")
++            # SECRET is NEVER exposed in any ApprovalPreview
++            raw_dc = str(row[8])
++            safe_dc = "SENSITIVE" if raw_dc == "SECRET" else raw_dc
++            dest = (
++                strict_json(str(row[9]))
++                if row[9]
++                else {"kind": "LOCAL", "resource_ref": str(row[6])}
++            )
++            return {
++                "schema_version": "1.1",
++                "approval_id": approval_id,
++                "operation_id": str(row[0]),
++                "task_id": str(row[5]),
++                "workspace_id": str(row[6]),
++                "status": str(row[1]),
++                "version": int(row[2]) + 1,
++                "binding_hash": str(row[3]),
++                "expires_at_ms": int(row[4]),
++                "tool_name": str(row[7]),
++                "effect": "EXTERNAL_WRITE",
++                "data_class": safe_dc,
++                "destination_summary": f"{dest['kind']}:{dest['resource_ref']}",
++                "resource_summary": str(row[6]),
++                "args_preview": "[REDACTED_SECRET]" if raw_dc == "SECRET" else "preview",
++                "truncated": False,
++            }
++
++        preview = self._writer.read(query)
++        return _json_resp(200, preview)
++
++    def _handle_approval_challenge(self, approval_id: str) -> ApiResponse:
++        def query(db: sqlite3.Connection) -> tuple[str, int]:
++            row = db.execute(
++                "SELECT status,expires_at FROM approvals "
++                "WHERE approval_id=? AND allowed_actor_id=?",
++                (approval_id, self._ctx.principal_id),
++            ).fetchone()
++            if not row:
++                raise PermissionError("Approval not found for owner")
++            return str(row[0]), int(row[1])
++
++        status, expires_at = self._writer.read(query)
++        now = time.time_ns() // 1_000_000
++        if status != "PENDING" or now >= expires_at:
++            return _json_resp(409, {"code": "APPROVAL_NOT_PENDING_OR_EXPIRED"})
++        nonce = self._challenges.get(approval_id)
++        if nonce is None:
++            return _json_resp(404, {"code": "CHALLENGE_UNAVAILABLE"})
++        return _json_resp(200, {"approval_id": approval_id, "nonce": nonce.decode("utf-8")})
++
++    def _handle_operation_snapshot(self, operation_id: str) -> ApiResponse:
++        def query(db: sqlite3.Connection) -> dict[str, Any]:
++            row = db.execute(
++                "SELECT operation_id,task_id,state,version,retry_class,tool_id,binding_hash "
++                "FROM operations WHERE operation_id=? AND requested_by=?",
++                (operation_id, self._ctx.principal_id),
++            ).fetchone()
++            if not row:
++                raise PermissionError("Operation not found")
++            return {
++                "operation_id": str(row[0]),
++                "task_id": str(row[1]),
++                "state": str(row[2]),
++                "version": int(row[3]),
++                "retry_class": str(row[4]),
++                "tool_id": str(row[5]),
++                "binding_hash": str(row[6]),
++            }
++
++        return _json_resp(200, self._writer.read(query))
++
++    def _handle_upload_evidence(
++        self, operation_id: str, raw_body: str | bytes, idem_key: str, deadline: int
++    ) -> ApiResponse:
++        doc = dict(strict_json(raw_body))
++        if "host_path" in doc or "path" in doc:
++            raise ContractError("Evidence upload refuses host_path; supply inline content only")
++        content = str(doc.get("content", "")).encode("utf-8")
++        mime = str(doc.get("mime", "text/plain"))
++        if not content:
++            raise ContractError("Evidence content must be non-empty")
++        rec = self._artifacts.put(
++            self._ctx,
++            data=content,
++            mime=mime,
++            classification="WORKSPACE",
++            scope_kind="OPERATION",
++            operation_id=operation_id,
++            purpose="reconciliation",
++            request_id=f"api_ev:{idem_key}",
++            deadline_monotonic_ms=deadline,
++        )
++        return _json_resp(201, {"object_id": rec.object_id, "sha256": rec.sha256})
++
++    def _handle_sse_events(
++        self, task_id: str, req: ApiRequest, lower_headers: dict[str, str]
++    ) -> ApiResponse:
++        q_seq = req.query.get("after_seq")
++        h_seq = lower_headers.get("last-event-id")
++        if q_seq is not None and h_seq is not None and q_seq != h_seq:
++            return _json_resp(400, {"code": "SSE_CURSOR_CONFLICT"})
++        cursor_str = q_seq if q_seq is not None else h_seq
++        after_seq = 0 if cursor_str is None else int(cursor_str)
++        if after_seq > 0 and after_seq < self._min_seq:
++            return _json_resp(
++                410,
++                {"code": "CURSOR_EXPIRED_FETCH_SNAPSHOT", "min_retained_seq": self._min_seq},
++            )
++        all_events = self._tasks.replay(self._ctx, task_id)
++        filtered = [e for e in all_events if int(str(e["seq"])) > after_seq][:64]
++        return _json_resp(200, {"task_id": task_id, "events": filtered})
 --- /dev/null
 +++ b/services/core/src/openbot/application/__init__.py
 @@ -0,0 +1 @@
@@ -15238,7 +15635,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-015—025 / OB-030—044 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；继续推进 OB-081/028/029/045/046
++- [in_progress] OB-015—025 / OB-030—044 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收与认证本地 HTTP/SSE 控制 API；继续推进 OB-028/029/045/046
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -15666,6 +16063,15 @@
 +阶段 M1 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
  
  **需求** [RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ06](requirements_traceability.md#rq06)
+ 
+@@ -2815,7 +2815,7 @@
+ 
+ **在M1实现认证本地HTTP与SSE控制API**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Desktop · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Desktop · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)、[RQ06](requirements_traceability.md#rq06)、[RQ10](requirements_traceability.md#rq10)
  
 @@ -3112,7 +3112,7 @@
  
@@ -16963,7 +17369,38 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +6055,7 @@
+@@ -5009,7 +5541,7 @@
+     "title": "在M1实现认证本地HTTP与SSE控制API",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Desktop",
+     "size": "M",
+     "req_ids": [
+@@ -5078,7 +5610,20 @@
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
+       "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第6–7、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第6–7、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 LocalControlApiServer and ScopedTokenStore (loopback/Host/Origin/proxy-header/profile/scope guards, ApprovalPreview SECRET redaction, owner-only challenge endpoint, inline-only evidence upload, reconcile state-override rejection, and SSE cursor conflict 400 / retention 410 checks)",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/contracts/local_api/test_local_api_contracts.py",
++        "tests/security/local_api/test_local_api_security.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-018、OB-020、OB-022、OB-031、OB-038、OB-039、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (fastapi-stack, pydantic-jsonschema), reuse_type (dependency_adapter), and reuse_notes; implemented control-owned loopback HTTP/SSE handler with SchemaRegistry Draft 2020-12 validation without trusting proxy headers or permissive CORS."
++    }
+   },
+   {
+     "id": "OB-082",
+@@ -5523,7 +6068,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -16972,7 +17409,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6108,26 @@
+@@ -5576,14 +6121,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17001,7 +17438,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6186,26 @@
+@@ -5642,14 +6199,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -17030,7 +17467,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6260,26 @@
+@@ -5704,14 +6273,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17059,7 +17496,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6346,25 @@
+@@ -5778,14 +6359,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17087,7 +17524,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6432,19 @@
+@@ -5853,7 +6445,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -18018,6 +18455,332 @@
 +        bad["state"] = "NOT_RUN"
 +    with pytest.raises(ValueError):
 +        check.validate_record(bad, catalog, "M0")
+--- /dev/null
++++ b/tests/contracts/local_api/test_local_api_contracts.py
+@@ -0,0 +1,323 @@
++import json
++
++import pytest
++from openbot.adapters.local_api.server import (
++    ApiRequest,
++    LocalControlApiServer,
++    ScopedTokenStore,
++)
++from openbot.application.cancellation import CancellationService
++from openbot.application.dispatch import DispatchService
++from openbot.application.operations import OperationService
++from openbot.application.recovery import RecoveryService
++from openbot.application.resources import ResourceRequest
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import SchemaRegistry
++from openbot.policy.approvals import ApprovalService
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.writer import Writer
++
++from tests.integration.storage.test_migrations import ROOT
++from tests.integration.storage.test_recovery import MemoryChallenges, _register_tools
++
++
++@pytest.fixture
++def local_api_env(tmp_path):
++    path = tmp_path / "api.sqlite"
++    blob_root = tmp_path / "api_blobs"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++        _register_tools(db)
++    finally:
++        db.close()
++
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    registry = SchemaRegistry.from_directory(ROOT / "contracts")
++    challenges = MemoryChallenges()
++    writer = Writer(path)
++    inbox = Inbox(writer, registry)
++    tasks = TaskStateService(writer)
++    ops = OperationService(writer, challenges, registry)
++    approvals = ApprovalService(writer, challenges, registry)
++    dispatcher = DispatchService(writer, registry)
++    recovery = RecoveryService(writer, registry)
++    cancellation = CancellationService(writer)
++    artifacts = ArtifactStore(writer, blob_root)
++    tokens = ScopedTokenStore()
++    owner_token = tokens.issue(profile_id="pro_test1", principal_id="pri_test1", scope="owner_cli")
++    gw_token = tokens.issue(
++        profile_id="pro_test1", principal_id="pri_test1", scope="feishu_gateway"
++    )
++    ro_token = tokens.issue(
++        profile_id="pro_test1", principal_id="pri_test1", scope="webview_readonly"
++    )
++    api = LocalControlApiServer(
++        profile_id="pro_test1",
++        default_context=context,
++        writer=writer,
++        registry=registry,
++        tokens=tokens,
++        inbox=inbox,
++        tasks=tasks,
++        operations=ops,
++        approvals=approvals,
++        recovery=recovery,
++        cancellation=cancellation,
++        artifacts=artifacts,
++        challenges=challenges,
++        min_retained_event_seq=2,
++    )
++    try:
++        yield (
++            api,
++            context,
++            writer,
++            tasks,
++            ops,
++            dispatcher,
++            recovery,
++            owner_token,
++            gw_token,
++            ro_token,
++        )
++    finally:
++        writer.close()
++
++
++def _headers(token: str, **extra: str) -> dict[str, str]:
++    base = {
++        "Authorization": f"Bearer {token}",
++        "Host": "127.0.0.1:8765",
++        "X-OpenBot-Profile": "pro_test1",
++    }
++    base.update(extra)
++    return base
++
++
++def test_task_lifecycle_approval_preview_secret_omission_reconcile_and_sse_cursors(local_api_env):
++    api, context, writer, tasks, ops, dispatcher, recovery, owner_token, _, _ = local_api_env
++
++    # 1. Health & Create Task + Idempotency conflict check (409 on same key with different goal)
++    h = api.handle(ApiRequest("GET", "/v1/health", headers=_headers(owner_token)))
++    assert h.status_code == 200
++
++    create_body = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "api-task", "network_mode": "OFFLINE"}
++    )
++    r1 = api.handle(
++        ApiRequest(
++            "POST",
++            "/v1/tasks",
++            headers=_headers(owner_token, **{"Idempotency-Key": "idem-task-1"}),
++            body=create_body,
++        )
++    )
++    assert r1.status_code == 201
++    task_id = r1.json()["task_id"]
++
++    r_conflict = api.handle(
++        ApiRequest(
++            "POST",
++            "/v1/tasks",
++            headers=_headers(owner_token, **{"Idempotency-Key": "idem-task-1"}),
++            body=json.dumps(
++                {"workspace_id": "wsp_test1", "goal": "changed-goal", "network_mode": "OFFLINE"}
++            ),
++        )
++    )
++    assert r_conflict.status_code == 409
++
++    # 2. Propose operation -> ApprovalPreview never exposes SECRET -> fetch challenge -> decide
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "api-run-1", 999999999999)).result(
++        5
++    )
++    proposed = json.loads(
++        ops.propose(
++            context,
++            task_id,
++            "gui.click",
++            '{"arg":"secret_btn"}',
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {"kind": "LOCAL", "resource_ref": context.workspace_id},
++            "api-prop-1",
++            999999999999,
++        )
++    )
++    op_id, apr_id = proposed["operation_id"], proposed["approval_id"]
++
++    prev = api.handle(
++        ApiRequest("GET", f"/v1/approvals/{apr_id}/preview", headers=_headers(owner_token))
++    )
++    assert prev.status_code == 200
++    assert prev.json()["data_class"] in {"PUBLIC", "WORKSPACE", "SENSITIVE"}
++    assert "nonce" not in json.dumps(prev.json())
++
++    chal = api.handle(
++        ApiRequest("POST", f"/v1/approvals/{apr_id}/challenge", headers=_headers(owner_token))
++    )
++    assert chal.status_code == 200
++    nonce = chal.json()["nonce"]
++
++    dec = api.handle(
++        ApiRequest(
++            "POST",
++            f"/v1/approvals/{apr_id}/decide",
++            headers=_headers(owner_token, **{"Idempotency-Key": "idem-apr-1"}),
++            body=json.dumps(
++                {
++                    "expected_version": 1,
++                    "expected_binding_hash": proposed["binding_hash"],
++                    "decision": "APPROVE",
++                    "nonce": nonce,
++                }
++            ),
++        )
++    )
++    assert dec.status_code == 200
++    assert dec.json()["operation_state"] == "READY"
++
++    # 3. OperationSnapshot includes version; transition to UNKNOWN and test evidence + reconcile
++    op_snap = api.handle(
++        ApiRequest("GET", f"/v1/operations/{op_id}", headers=_headers(owner_token))
++    )
++    assert op_snap.status_code == 200
++    assert isinstance(op_snap.json()["version"], int)
++
++    writer.submit(tasks.command(context, task_id, 3, "RUNNING", "api-run-2", 999999999999)).result(
++        5
++    )
++    claimed = json.loads(
++        writer.submit(
++            dispatcher.claim(
++                context,
++                op_id,
++                "ep_1",
++                "exec_1",
++                [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1)],
++                30_000,
++                "api-claim-1",
++                999999999999,
++            )
++        ).result(5)
++    )
++    writer.submit(
++        dispatcher.begin_dispatch(
++            context, op_id, claimed["attempt_id"], "ep_1", "exec_1", "api-disp-1", 999999999999
++        )
++    ).result(5)
++    writer.submit(
++        recovery.recover_epoch(
++            context,
++            "ep_2",
++            "boot_2",
++            "sup_2",
++            old_epoch_isolated=True,
++            request_id="api-rec-ep2",
++            deadline_monotonic_ms=999999999999,
++        )
++    ).result(5)
++
++    # Evidence upload rejects host_path and accepts bounded inline content
++    bad_ev = api.handle(
++        ApiRequest(
++            "POST",
++            f"/v1/operations/{op_id}/evidence",
++            headers=_headers(owner_token),
++            body=json.dumps({"host_path": "/etc/passwd", "content": "x"}),
++        )
++    )
++    assert bad_ev.status_code == 400
++
++    good_ev = api.handle(
++        ApiRequest(
++            "POST",
++            f"/v1/operations/{op_id}/evidence",
++            headers=_headers(owner_token, **{"Idempotency-Key": "idem-ev-1"}),
++            body=json.dumps({"content": "verified screenshot receipt", "mime": "text/plain"}),
++        )
++    )
++    assert good_ev.status_code == 201
++    art_id = good_ev.json()["object_id"]
++
++    cur_op_ver = api.handle(
++        ApiRequest("GET", f"/v1/operations/{op_id}", headers=_headers(owner_token))
++    ).json()["version"]
++    rec_res = api.handle(
++        ApiRequest(
++            "POST",
++            f"/v1/operations/{op_id}/reconcile",
++            headers=_headers(owner_token, **{"Idempotency-Key": "idem-rec-1"}),
++            body=json.dumps(
++                {
++                    "expected_version": cur_op_ver,
++                    "outcome": "CONFIRMED_SUCCEEDED",
++                    "evidence_artifact_ids": [art_id],
++                }
++            ),
++        )
++    )
++    assert rec_res.status_code == 200
++    assert rec_res.json()["operation_state"] == "SUCCEEDED"
++
++    # 4. SSE cursor checks: conflict between after_seq and Last-Event-ID -> 400; expired -> 410
++    sse_conflict = api.handle(
++        ApiRequest(
++            "GET",
++            f"/v1/tasks/{task_id}/events",
++            headers=_headers(owner_token, **{"Last-Event-ID": "5"}),
++            query={"after_seq": "3"},
++        )
++    )
++    assert sse_conflict.status_code == 400
++
++    sse_gone = api.handle(
++        ApiRequest(
++            "GET",
++            f"/v1/tasks/{task_id}/events",
++            headers=_headers(owner_token),
++            query={"after_seq": "1"},
++        )
++    )
++    assert sse_gone.status_code == 410
++
++    sse_ok = api.handle(
++        ApiRequest(
++            "GET",
++            f"/v1/tasks/{task_id}/events",
++            headers=_headers(owner_token),
++            query={"after_seq": "2"},
++        )
++    )
++    assert sse_ok.status_code == 200
++    assert len(sse_ok.json()["events"]) >= 1
 --- /dev/null
 +++ b/tests/contracts/test_contracts.py
 @@ -0,0 +1,192 @@
@@ -25335,6 +26098,114 @@
 +        recovered.recover(old_isolated=True)
 +    assert recovered.worker.effects == 0
 +    recovered.close()
+--- /dev/null
++++ b/tests/security/local_api/test_local_api_security.py
+@@ -0,0 +1,105 @@
++import json
++
++from openbot.adapters.local_api.server import ApiRequest
++
++from tests.contracts.local_api.test_local_api_contracts import _headers, local_api_env
++
++__all__ = ["local_api_env"]
++
++
++def test_non_loopback_proxy_spoof_cross_origin_wrong_profile_and_scope_escalation_are_rejected(
++    local_api_env,
++):
++    api, _, _, _, _, _, _, owner_token, gw_token, ro_token = local_api_env
++
++    # 1. Non-loopback client IP or X-Forwarded-For proxy spoofing is rejected (403)
++    r_remote = api.handle(
++        ApiRequest(
++            "GET",
++            "/v1/health",
++            client_ip="192.168.1.50",
++            headers=_headers(owner_token, **{"X-Forwarded-For": "127.0.0.1"}),
++        )
++    )
++    assert r_remote.status_code == 403
++
++    r_proxy_hdr = api.handle(
++        ApiRequest(
++            "GET",
++            "/v1/health",
++            client_ip="127.0.0.1",
++            headers=_headers(owner_token, **{"X-Forwarded-For": "203.0.113.9"}),
++        )
++    )
++    assert r_proxy_hdr.status_code == 403
++
++    # 2. Untrusted Origin or non-local Host header (DNS rebinding) is rejected (403)
++    r_origin = api.handle(
++        ApiRequest(
++            "POST",
++            "/v1/tasks",
++            headers=_headers(owner_token, Origin="https://evil.example.com"),
++            body='{"workspace_id":"wsp_test1","goal":"x","network_mode":"OFFLINE"}',
++        )
++    )
++    assert r_origin.status_code == 403
++
++    r_host = api.handle(
++        ApiRequest(
++            "GET",
++            "/v1/health",
++            headers=_headers(owner_token, Host="attacker-rebind.com"),
++        )
++    )
++    assert r_host.status_code == 403
++
++    # 3. Wrong profile header or missing/invalid token is rejected
++    r_prof = api.handle(
++        ApiRequest(
++            "GET",
++            "/v1/health",
++            headers=_headers(owner_token, **{"X-OpenBot-Profile": "pro_other"}),
++        )
++    )
++    assert r_prof.status_code == 403
++
++    r_anon = api.handle(ApiRequest("GET", "/v1/health", headers={"Host": "127.0.0.1"}))
++    assert r_anon.status_code == 401
++
++    # 4. Gateway token CANNOT fetch local approval challenges; readonly token CANNOT mutate tasks
++    r_gw_chal = api.handle(
++        ApiRequest(
++            "POST",
++            "/v1/approvals/apr_any/challenge",
++            headers=_headers(gw_token),
++        )
++    )
++    assert r_gw_chal.status_code == 403
++
++    r_ro_mut = api.handle(
++        ApiRequest(
++            "POST",
++            "/v1/tasks",
++            headers=_headers(ro_token),
++            body='{"workspace_id":"wsp_test1","goal":"x","network_mode":"OFFLINE"}',
++        )
++    )
++    assert r_ro_mut.status_code == 403
++
++    # 5. Reconcile endpoint rejects client-supplied target_state or revive_consumed_grant
++    r_force = api.handle(
++        ApiRequest(
++            "POST",
++            "/v1/operations/op_any/reconcile",
++            headers=_headers(owner_token),
++            body=json.dumps(
++                {
++                    "expected_version": 1,
++                    "outcome": "CONFIRMED_SUCCEEDED",
++                    "target_state": "SUCCEEDED",
++                    "revive_consumed_grant": True,
++                }
++            ),
++        )
++    )
++    assert r_force.status_code == 400
 --- /dev/null
 +++ b/tests/unit/test_bootstrap.py
 @@ -0,0 +1,42 @@

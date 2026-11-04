@@ -1,0 +1,27 @@
+
+==================================== ERRORS ====================================
+____ ERROR collecting tests/contracts/local_api/test_local_api_contracts.py ____
+ImportError while importing test module '/Users/admin-1234/work/OpenBot/tests/contracts/local_api/test_local_api_contracts.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/contracts/local_api/test_local_api_contracts.py:5: in <module>
+    from openbot.adapters.local_api.server import (
+E   ModuleNotFoundError: No module named 'openbot.adapters'
+_____ ERROR collecting tests/security/local_api/test_local_api_security.py _____
+ImportError while importing test module '/Users/admin-1234/work/OpenBot/tests/security/local_api/test_local_api_security.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/security/local_api/test_local_api_security.py:3: in <module>
+    from openbot.adapters.local_api.server import ApiRequest
+E   ModuleNotFoundError: No module named 'openbot.adapters'
+=========================== short test summary info ============================
+ERROR tests/contracts/local_api/test_local_api_contracts.py
+ERROR tests/security/local_api/test_local_api_security.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in 0.07s
