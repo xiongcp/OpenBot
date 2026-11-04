@@ -75,9 +75,10 @@
 - 推进 OB-056（飞书端到端真实验收）：实现 FeishuM2EndToEndHarness、双语演示说明 docs/demos/m3.md 与集成测试 tests/integration/feishu/test_feishu_e2e_harness.py（闭环验证配对、WebSocket 入站、普通审批卡与 callback CAS 主流程及断网重连、重启、重复 callback、取消旧卡、撤销 owner、双消费者拦截 6 个故障场景；因缺少真实飞书测试租户，诚实标记 real_feishu_tenant_verified=False，OB-056 记 IN_PROGRESS）；M0 增至 276 passed/3 skipped，M1 增至 295 passed/1 skipped。至此 M2 阶段全部可本地实现任务均已落地验证，接下来推进 M3 任务。
 - 推进 OB-026（实现 Ollama 或第二 Provider）：实现 OllamaLocalProviderAdapter 与 LocalModelEndpointAttestation（同时核验模型权重哈希、runner 无外网出口证明、禁用 localhost 云转发与联网搜索插件、禁止运行期拉取模型；不支持工具的模型明确返回 CAPABILITY_UNAVAILABLE_NO_TOOL_SUPPORT，本地失败时 cloud_fallback_attempted=False 绝不云回退）；新增单元测试通过，M0 增至 277 passed/3 skipped，M1 增至 296 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-026 记 IN_PROGRESS。
 - 推进 OB-057（实现专用浏览器 profile 与会话锁）：实现 BrowserProfileSessionManager、BrowserSessionSpec 与 BrowserIsolationAttestation（强制专用 user_data_dir 与 profile 独占锁，拒绝复制日常 Chrome profile、解密 cookies、连接任意 CDP 端口或添加 --no-sandbox；Artifact 导出自动剥离敏感 cookie 值）；新增单元测试通过，M0 增至 278 passed/3 skipped，M1 增至 297 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-057 记 IN_PROGRESS。
+- 推进 OB-058（实现浏览器网络与下载策略）：实现 BrowserNetworkPolicyEnforcer 与 BrowserNetworkBoundaryConfig（统一拦截导航/重定向/iframe/subrequest 的 file://、loopback、内网与 169.254.169.254 元数据地址；禁止仅靠 Page.route 声称完整隔离，强制禁用 Service Worker 或校验外层网络命名空间；净化下载路径穿越并拦截未批准文件上传）；新增单元测试通过，M0 增至 279 passed/3 skipped，M1 增至 298 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-058 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026` and `OB-057`, reaching 278 passed M0 checks and 297 passed M1 checks.
+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`, and `OB-058`, reaching 279 passed M0 checks and 298 passed M1 checks.

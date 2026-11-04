@@ -121,6 +121,10 @@
 1. OpenBot 专用 profile 目录与独占锁：拒绝使用用户日常 Chrome 目录、拒绝解密系统 cookies、拒绝连接任意 CDP 端口；同一 profile 并发申请抛出 `BROWSER_PROFILE_LOCKED`。
 2. Chromium 沙箱与外层隔离双重门禁：拦截 `--no-sandbox`、`--disable-setuid-sandbox`、`--disable-web-security` 等降级参数；导出 Artifact 元数据时仅保留 cookie 名称并剥离全部 cookie 敏感值。
 
+实现（OB-058）：新增 `services/core/src/openbot/tools/executors/browser/network_policy.py`（`BrowserNetworkPolicyEnforcer`、`BrowserNetworkBoundaryConfig`）与 `tests/unit/test_browser_network_policy.py`：
+1. 导航/重定向/iframe/subrequest 与 Service Worker 防旁路：阻断 `file://`、内网/loopback 与云元数据地址（`169.254.169.254`）；明确声明 `page_route_alone_is_complete_isolation=False`，未禁用 Service Worker 且无外层网络隔离时直接拒绝启动（`SERVICE_WORKER_BYPASS_RISK`）。
+2. 下载路径净化与受批上传门禁：下载文件名剥离路径穿越并限制在隔离检疫目录内，未获批准的本地文件上传直接抛出 `UNAPPROVED_UPLOAD_FILE`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -143,6 +147,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_dead_letter.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_session.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_network_policy.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -222,3 +227,5 @@
   1. Verifies the M2 Feishu main flow and 6 failure scenarios (`disconnect_and_jittered_reconnect`, `daemon_restart_recovery`, `duplicate_approval_callback`, `stale_card_on_cancelled_task`, `revoked_owner_rejected`, `dual_consumer_spawn_blocked`) while honestly reporting `real_feishu_tenant_verified=False` pending a live test tenant.
 - **OB-057 (`IN_PROGRESS`)**: Dedicated browser profile and session lock manager (`services/core/src/openbot/tools/executors/browser/session.py` and `tests/unit/test_browser_session.py`, 1 passed):
   1. Enforces OpenBot-dedicated `user_data_dir`, profile mutex locks (`BROWSER_PROFILE_LOCKED`), and both Chromium sandbox and outer isolation (`--no-sandbox`, CDP attach, and system cookie decryption forbidden); strips cookie values from Artifact exports.
+- **OB-058 (`IN_PROGRESS`)**: Browser network, Service Worker, download, and upload policy (`services/core/src/openbot/tools/executors/browser/network_policy.py` and `tests/unit/test_browser_network_policy.py`, 1 passed):
+  1. Blocks `file://`, loopback, private-IP, and cloud metadata (`169.254.169.254`) navigation/redirects/subrequests, requires Service Worker blocking or verified outer network isolation (`page_route_alone_is_complete_isolation=False`), sanitizes download paths into quarantine, and blocks unapproved file uploads.

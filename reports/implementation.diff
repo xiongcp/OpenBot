@@ -2294,7 +2294,7 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,231 @@
 +# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
@@ -2418,6 +2418,10 @@
 +1. OpenBot 专用 profile 目录与独占锁：拒绝使用用户日常 Chrome 目录、拒绝解密系统 cookies、拒绝连接任意 CDP 端口；同一 profile 并发申请抛出 `BROWSER_PROFILE_LOCKED`。
 +2. Chromium 沙箱与外层隔离双重门禁：拦截 `--no-sandbox`、`--disable-setuid-sandbox`、`--disable-web-security` 等降级参数；导出 Artifact 元数据时仅保留 cookie 名称并剥离全部 cookie 敏感值。
 +
++实现（OB-058）：新增 `services/core/src/openbot/tools/executors/browser/network_policy.py`（`BrowserNetworkPolicyEnforcer`、`BrowserNetworkBoundaryConfig`）与 `tests/unit/test_browser_network_policy.py`：
++1. 导航/重定向/iframe/subrequest 与 Service Worker 防旁路：阻断 `file://`、内网/loopback 与云元数据地址（`169.254.169.254`）；明确声明 `page_route_alone_is_complete_isolation=False`，未禁用 Service Worker 且无外层网络隔离时直接拒绝启动（`SERVICE_WORKER_BYPASS_RISK`）。
++2. 下载路径净化与受批上传门禁：下载文件名剥离路径穿越并限制在隔离检疫目录内，未获批准的本地文件上传直接抛出 `UNAPPROVED_UPLOAD_FILE`。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2440,6 +2444,7 @@
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_dead_letter.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_session.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_network_policy.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
@@ -2519,6 +2524,8 @@
 +  1. Verifies the M2 Feishu main flow and 6 failure scenarios (`disconnect_and_jittered_reconnect`, `daemon_restart_recovery`, `duplicate_approval_callback`, `stale_card_on_cancelled_task`, `revoked_owner_rejected`, `dual_consumer_spawn_blocked`) while honestly reporting `real_feishu_tenant_verified=False` pending a live test tenant.
 +- **OB-057 (`IN_PROGRESS`)**: Dedicated browser profile and session lock manager (`services/core/src/openbot/tools/executors/browser/session.py` and `tests/unit/test_browser_session.py`, 1 passed):
 +  1. Enforces OpenBot-dedicated `user_data_dir`, profile mutex locks (`BROWSER_PROFILE_LOCKED`), and both Chromium sandbox and outer isolation (`--no-sandbox`, CDP attach, and system cookie decryption forbidden); strips cookie values from Artifact exports.
++- **OB-058 (`IN_PROGRESS`)**: Browser network, Service Worker, download, and upload policy (`services/core/src/openbot/tools/executors/browser/network_policy.py` and `tests/unit/test_browser_network_policy.py`, 1 passed):
++  1. Blocks `file://`, loopback, private-IP, and cloud metadata (`169.254.169.254`) navigation/redirects/subrequests, requires Service Worker blocking or verified outer network isolation (`page_route_alone_is_complete_isolation=False`), sanitizes download paths into quarantine, and blocks unapproved file uploads.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2971,7 +2978,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,84 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3049,12 +3056,13 @@
 +- 推进 OB-056（飞书端到端真实验收）：实现 FeishuM2EndToEndHarness、双语演示说明 docs/demos/m3.md 与集成测试 tests/integration/feishu/test_feishu_e2e_harness.py（闭环验证配对、WebSocket 入站、普通审批卡与 callback CAS 主流程及断网重连、重启、重复 callback、取消旧卡、撤销 owner、双消费者拦截 6 个故障场景；因缺少真实飞书测试租户，诚实标记 real_feishu_tenant_verified=False，OB-056 记 IN_PROGRESS）；M0 增至 276 passed/3 skipped，M1 增至 295 passed/1 skipped。至此 M2 阶段全部可本地实现任务均已落地验证，接下来推进 M3 任务。
 +- 推进 OB-026（实现 Ollama 或第二 Provider）：实现 OllamaLocalProviderAdapter 与 LocalModelEndpointAttestation（同时核验模型权重哈希、runner 无外网出口证明、禁用 localhost 云转发与联网搜索插件、禁止运行期拉取模型；不支持工具的模型明确返回 CAPABILITY_UNAVAILABLE_NO_TOOL_SUPPORT，本地失败时 cloud_fallback_attempted=False 绝不云回退）；新增单元测试通过，M0 增至 277 passed/3 skipped，M1 增至 296 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-026 记 IN_PROGRESS。
 +- 推进 OB-057（实现专用浏览器 profile 与会话锁）：实现 BrowserProfileSessionManager、BrowserSessionSpec 与 BrowserIsolationAttestation（强制专用 user_data_dir 与 profile 独占锁，拒绝复制日常 Chrome profile、解密 cookies、连接任意 CDP 端口或添加 --no-sandbox；Artifact 导出自动剥离敏感 cookie 值）；新增单元测试通过，M0 增至 278 passed/3 skipped，M1 增至 297 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-057 记 IN_PROGRESS。
++- 推进 OB-058（实现浏览器网络与下载策略）：实现 BrowserNetworkPolicyEnforcer 与 BrowserNetworkBoundaryConfig（统一拦截导航/重定向/iframe/subrequest 的 file://、loopback、内网与 169.254.169.254 元数据地址；禁止仅靠 Page.route 声称完整隔离，强制禁用 Service Worker 或校验外层网络命名空间；净化下载路径穿越并拦截未批准文件上传）；新增单元测试通过，M0 增至 279 passed/3 skipped，M1 增至 298 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-058 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026` and `OB-057`, reaching 278 passed M0 checks and 297 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`, and `OB-058`, reaching 279 passed M0 checks and 298 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -15363,6 +15371,79 @@
 @@ -0,0 +1 @@
 +"""Dedicated browser profile, session locking, and network/download policy (M3)."""
 --- /dev/null
++++ b/services/core/src/openbot/tools/executors/browser/network_policy.py
+@@ -0,0 +1,70 @@
++"""Browser network, redirect, Service Worker, download, and upload policy (OB-058)."""
++
++import re
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Literal
++from urllib.parse import urlparse
++
++_FORBIDDEN_HOSTS = frozenset(
++    {
++        "127.0.0.1",
++        "::1",
++        "localhost",
++        "0.0.0.0",
++        "169.254.169.254",
++        "metadata.google.internal",
++    }
++)
++
++
++@dataclass(frozen=True, slots=True)
++class BrowserNetworkBoundaryConfig:
++    allowed_hosts: frozenset[str]
++    service_workers_blocked: bool
++    outer_network_namespace_verified: bool
++    download_quarantine_dir: Path
++    approved_upload_paths: frozenset[str]
++
++
++class BrowserNetworkPolicyEnforcer:
++    """Enforce browser navigation/redirect/download/upload guards and Service Worker blocking."""
++
++    page_route_alone_is_complete_isolation: Literal[False] = False
++
++    def __init__(self, config: BrowserNetworkBoundaryConfig) -> None:
++        # BrowserContext.route / Page.route cannot intercept all Service Worker traffic!
++        if not config.service_workers_blocked and not config.outer_network_namespace_verified:
++            raise PermissionError(
++                "SERVICE_WORKER_BYPASS_RISK: block Service Workers or verify outer isolation"
++            )
++        self._cfg = config
++        self._dl_dir = config.download_quarantine_dir.resolve()
++        self._dl_dir.mkdir(parents=True, exist_ok=True)
++
++    def check_request(self, *, request_kind: str, url: str) -> dict[str, Any]:
++        parsed = urlparse(url)
++        scheme = (parsed.scheme or "").lower()
++        host = (parsed.hostname or "").lower()
++        if scheme not in {"https", "http"}:
++            raise PermissionError(f"Forbidden URL scheme '{scheme}' in {request_kind}")
++        if not host or host in _FORBIDDEN_HOSTS or host.startswith(("10.", "192.168.", "169.254.")):
++            raise PermissionError(f"Forbidden internal/metadata host '{host}' in {request_kind}")
++        if host not in self._cfg.allowed_hosts:
++            raise PermissionError(f"Host '{host}' not in browser allowlist for {request_kind}")
++        return {"allowed": True, "request_kind": request_kind, "host": host}
++
++    def validate_download_target(self, *, suggested_filename: str) -> Path:
++        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(suggested_filename).name).lstrip(".")
++        if not safe_name:
++            safe_name = "download.bin"
++        target = (self._dl_dir / safe_name).resolve()
++        if target.parent != self._dl_dir:
++            raise PermissionError("Download target escaped quarantine directory")
++        return target
++
++    def validate_upload_path(self, path: Path) -> Path:
++        resolved = str(path.resolve())
++        if resolved not in self._cfg.approved_upload_paths:
++            raise PermissionError(f"UNAPPROVED_UPLOAD_FILE: {resolved}")
++        return Path(resolved)
+--- /dev/null
 +++ b/services/core/src/openbot/tools/executors/browser/session.py
 @@ -0,0 +1,107 @@
 +"""Dedicated browser profile lock, Chromium sandbox guard, and cookie redaction (OB-057)."""
@@ -19511,6 +19592,15 @@
  
  **需求** [RQ06](requirements_traceability.md#rq06)、[RQ09](requirements_traceability.md#rq09)
  
+@@ -3859,7 +3859,7 @@
+ 
+ **实现浏览器网络与下载策略**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Security · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ06](requirements_traceability.md#rq06)、[RQ09](requirements_traceability.md#rq09)
+ 
 @@ -4319,7 +4319,7 @@
  
  **建立Windows原生运行门禁**
@@ -21157,7 +21247,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -3527,7 +4208,19 @@
+@@ -3527,14 +4208,26 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "Playwright/browser build与资产hash、sandbox配置/实际启动证据、OS/backend资格与profile锁记录。"
      ],
@@ -21178,7 +21268,36 @@
    },
    {
      "id": "OB-058",
-@@ -4279,7 +4972,7 @@
+     "title": "实现浏览器网络与下载策略",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Security",
+     "size": "M",
+     "req_ids": [
+@@ -3588,7 +4281,19 @@
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
+       "Service Worker拒绝/独立边界策略、实际请求目标与下载/upload反例。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 BrowserNetworkPolicyEnforcer blocking file/loopback/metadata URLs, requiring Service Worker blocking or outer network namespace, sanitizing downloads, and blocking unapproved uploads",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_browser_network_policy.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-032、OB-036、OB-037、OB-041、OB-057 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (playwright), reuse_type (dependency_adapter), and reuse_notes; enforced Service Worker blocking and declared page_route_alone_is_complete_isolation=False."
++    }
+   },
+   {
+     "id": "OB-059",
+@@ -4279,7 +4984,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -21187,7 +21306,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +5030,26 @@
+@@ -4337,14 +5042,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -21216,7 +21335,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5106,19 @@
+@@ -4401,7 +5118,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -21237,7 +21356,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5726,7 @@
+@@ -5009,7 +5738,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -21246,7 +21365,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5795,20 @@
+@@ -5078,7 +5807,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -21268,7 +21387,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6253,7 @@
+@@ -5523,7 +6265,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -21277,7 +21396,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6306,26 @@
+@@ -5576,14 +6318,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21306,7 +21425,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6384,26 @@
+@@ -5642,14 +6396,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -21335,7 +21454,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6458,26 @@
+@@ -5704,14 +6470,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21364,7 +21483,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6544,25 @@
+@@ -5778,14 +6556,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21392,7 +21511,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6630,26 @@
+@@ -5853,14 +6642,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21421,7 +21540,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,7 +6703,20 @@
+@@ -5914,7 +6715,20 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -31149,6 +31268,69 @@
 +        health = json.loads(result.stdout)
 +        self.assertFalse(health["daemon_running"])
 +        self.assertEqual(health["isolation"], "CAPABILITY_UNAVAILABLE")
+--- /dev/null
++++ b/tests/unit/test_browser_network_policy.py
+@@ -0,0 +1,60 @@
++from pathlib import Path
++
++import pytest
++from openbot.tools.executors.browser.network_policy import (
++    BrowserNetworkBoundaryConfig,
++    BrowserNetworkPolicyEnforcer,
++)
++
++
++def test_browser_network_policy_blocks_ssrf_redirects_service_workers_and_unapproved_uploads(
++    tmp_path: Path,
++) -> None:
++    dl_dir = tmp_path / "downloads"
++    enforcer = BrowserNetworkPolicyEnforcer(
++        BrowserNetworkBoundaryConfig(
++            allowed_hosts=frozenset({"docs.example.com"}),
++            service_workers_blocked=True,
++            outer_network_namespace_verified=True,
++            download_quarantine_dir=dl_dir,
++            approved_upload_paths=frozenset({str((tmp_path / "approved.txt").resolve())}),
++        )
++    )
++    assert enforcer.page_route_alone_is_complete_isolation is False
++
++    # 1. Enabling Service Workers without outer network isolation is rejected
++    with pytest.raises(PermissionError, match="SERVICE_WORKER_BYPASS_RISK"):
++        BrowserNetworkPolicyEnforcer(
++            BrowserNetworkBoundaryConfig(
++                allowed_hosts=frozenset({"docs.example.com"}),
++                service_workers_blocked=False,
++                outer_network_namespace_verified=False,
++                download_quarantine_dir=dl_dir,
++                approved_upload_paths=frozenset(),
++            )
++        )
++
++    # 2. Navigation, redirect, iframe, and subrequest to file/localhost/metadata are blocked
++    for kind, bad_url in (
++        ("navigation", "file:///etc/passwd"),
++        ("redirect", "http://127.0.0.1:8080/admin"),
++        ("subrequest", "http://169.254.169.254/latest/meta-data/"),
++        ("iframe", "https://evil.example.org/frame"),
++    ):
++        with pytest.raises(PermissionError):
++            enforcer.check_request(request_kind=kind, url=bad_url)
++
++    assert (
++        enforcer.check_request(request_kind="navigation", url="https://docs.example.com/guide")[
++            "allowed"
++        ]
++        is True
++    )
++
++    # 3. Download filename traversal is sanitized into quarantine dir; unapproved upload is blocked
++    safe_dl = enforcer.validate_download_target(suggested_filename="../../.bashrc")
++    assert safe_dl.parent == dl_dir.resolve()
++    assert ".." not in safe_dl.name
++
++    with pytest.raises(PermissionError, match="UNAPPROVED_UPLOAD_FILE"):
++        enforcer.validate_upload_path(tmp_path / "secret.key")
 --- /dev/null
 +++ b/tests/unit/test_browser_session.py
 @@ -0,0 +1,96 @@

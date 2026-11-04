@@ -1,0 +1,16 @@
+
+==================================== ERRORS ====================================
+__________ ERROR collecting tests/unit/test_browser_network_policy.py __________
+ImportError while importing test module '/Users/admin-1234/work/OpenBot/tests/unit/test_browser_network_policy.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_browser_network_policy.py:4: in <module>
+    from openbot.tools.executors.browser.network_policy import (
+E   ModuleNotFoundError: No module named 'openbot.tools.executors.browser.network_policy'
+=========================== short test summary info ============================
+ERROR tests/unit/test_browser_network_policy.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.06s
