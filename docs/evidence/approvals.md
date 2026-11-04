@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI 与首条持久化垂直切片 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, and First Persistent Vertical Slice
+# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—045 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、首条持久化垂直切片与安全威胁回归 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, First Persistent Vertical Slice, and Security Threat Regression
 
 ## 中文说明
 
@@ -79,6 +79,9 @@
 1. 真实本地受限效果闭环（`run_local_restricted_effect_slice`）：在 `OFFLINE` 模式下串联 CLI → 认证本地控制 API → 持久 Task → 工作区文件补丁提案（`WorkspacePatchTool` + `ArtifactStore` SHA-256 冻结）→ CLI 审批（`CONSUMED` 一次性消费）→ `claim`/`begin_dispatch` → 真实工作区文件修改、受监管子进程回收（`ProcessSupervisorService`）与持久 Outbox 投递（`OutboxService`）。
 2. 五个崩溃点与重复输入验证（`run_fault_crash_scenario`）：覆盖 `before_claim`、`after_claim_before_dispatch`（一次性 `RecoveryTicket` 恢复）、`after_dispatch_before_effect`、`after_effect_before_receipt`（`UNKNOWN`/`RECONCILING` 零盲目重放 + CLI 核对恢复）与 `after_complete_before_outbox_ack`，并校验重复 CLI 请求 ID 幂等稳定。
 
+实现（OB-045）：新增 `services/core/src/openbot/policy/threat_regression.py`（`M1ThreatRegressionSuite`）、`tests/security/test_m1_threat_regression.py` 与中英双语 `docs/demos/m2.md`：
+1. 7 类安全与恢复威胁回归语料直接针对真实守卫断言 `total_unauthorized_side_effects == 0`：JCS 深层变异与重复键拒绝、路径穿越与符号链接逃逸阻断、ripgrep/Git 危险配置与预处理器剥离、工作区内 grammar 二进制与运行期下载阻断、跨分域密钥读取与命令行参数泄露阻断、`/bin/sh -c` 宿主 shell 包装拒绝与输出洪泛截断、残留子进程 PID 强制触发 `quarantine_required=True` 与 `new_dispatch_allowed=False`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -89,10 +92,11 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q --tb=short`（6 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/security/test_m1_threat_regression.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
+当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/045/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
 
 ## English Summary
 
@@ -144,3 +148,5 @@
 - **OB-029 (`IN_PROGRESS`)**: First persistent vertical slice (`services/core/src/openbot/application/vertical_slice.py`, `tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py`, and `docs/demos/m1.md`, 6 passed):
   1. Real local restricted workspace patch, Artifact SHA-256 verification, supervised worker reclaim, and durable Outbox delivery closed loop in `OFFLINE` mode via CLI and authenticated Local Control API.
   2. Five crash injection points (`before_claim`, `after_claim_before_dispatch`, `after_dispatch_before_effect`, `after_effect_before_receipt`, `after_complete_before_outbox_ack`) and duplicate CLI idempotency verification with zero blind replay.
+- **OB-045 (`IN_PROGRESS`)**: M1 security tool threat regression corpus (`services/core/src/openbot/policy/threat_regression.py`, `tests/security/test_m1_threat_regression.py`, and `docs/demos/m2.md`, 1 passed):
+  1. Verifies 7 threat families (JCS deep mutation/duplicate keys, path traversal/symlink escape, ripgrep/Git config injection, parser workspace binary/runtime download rejection, secret compartment/argv leak blocking and offline redaction, shell wrapper rejection and output flood truncation, and residual worker PID quarantine) with `total_unauthorized_side_effects == 0`.

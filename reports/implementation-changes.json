@@ -142,6 +142,12 @@
       "included_in_patch": true
     },
     {
+      "path": "docs/demos/m2.md",
+      "before_sha256": null,
+      "after_sha256": "a7fe1dc76dc0c4057e3f50ad397b64366f3f0ede03ac3ab2c6ab64aa8fc6574e",
+      "included_in_patch": true
+    },
+    {
       "path": "docs/dependency-evidence.md",
       "before_sha256": null,
       "after_sha256": "7b2c3de76850da3dd318483eacd5f28ab140a4d4fa5940254fe33a1c034bce40",
@@ -150,7 +156,7 @@
     {
       "path": "docs/evidence/approvals.md",
       "before_sha256": null,
-      "after_sha256": "26ed5b990008f4f1bc7830420f4c79468c34af16b35b0032596773fec1e58e4f",
+      "after_sha256": "6bb9e39eee714a7aa21dc589cb7c6cb28644381bcf94119046a842e2ff109389",
       "included_in_patch": true
     },
     {
@@ -246,7 +252,7 @@
     {
       "path": "evidence/implementation/database-design.log",
       "before_sha256": null,
-      "after_sha256": "424ba2a34ccd0c12d1b7e4607944be12d026f04c02ae9eb12dcae68732f4f2e4",
+      "after_sha256": "87791b69548d5d821498da2058fe6ad261e4655047e73d4c8073db87e70cb31e",
       "included_in_patch": false
     },
     {
@@ -258,7 +264,7 @@
     {
       "path": "evidence/implementation/design.log",
       "before_sha256": null,
-      "after_sha256": "56d96e6abbe83ad25a21415002671398256a1dbfc17b2f3bbf661383f6f14a21",
+      "after_sha256": "6708d16deaebec4f9c97dcffb003f40e899c9e410b983a079eb0f0aee3cae0e9",
       "included_in_patch": false
     },
     {
@@ -270,7 +276,7 @@
     {
       "path": "evidence/implementation/format.log",
       "before_sha256": null,
-      "after_sha256": "67e4bf8f396fefa7f8830b9533fb5eb02129af09cf3d399e36ec9c6d6b248625",
+      "after_sha256": "c5a4909ec8a84e44730b4256783b14051126fb075707f5b49a7464277251ff97",
       "included_in_patch": false
     },
     {
@@ -540,7 +546,7 @@
     {
       "path": "evidence/implementation/m1-database-design.log",
       "before_sha256": null,
-      "after_sha256": "427cdb47f9d88f02f76c8752c665f3f69f7a89e61205e128e3da460d205890be",
+      "after_sha256": "b6a2ea91c73f407c47d18cb25caeec981457a349e4e569f2bded82414ee16a81",
       "included_in_patch": false
     },
     {
@@ -552,13 +558,13 @@
     {
       "path": "evidence/implementation/m1-design.log",
       "before_sha256": null,
-      "after_sha256": "56d96e6abbe83ad25a21415002671398256a1dbfc17b2f3bbf661383f6f14a21",
+      "after_sha256": "6708d16deaebec4f9c97dcffb003f40e899c9e410b983a079eb0f0aee3cae0e9",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-format.log",
       "before_sha256": null,
-      "after_sha256": "67e4bf8f396fefa7f8830b9533fb5eb02129af09cf3d399e36ec9c6d6b248625",
+      "after_sha256": "c5a4909ec8a84e44730b4256783b14051126fb075707f5b49a7464277251ff97",
       "included_in_patch": false
     },
     {
@@ -588,19 +594,19 @@
     {
       "path": "evidence/implementation/m1-types.log",
       "before_sha256": null,
-      "after_sha256": "61bd8cb9959645a85c4ae3dffd6695b2b000164bf38ab0bdef0fc9ba4a4072b6",
+      "after_sha256": "b85ebe13f9e1d95db5aea5d2a2cb068ea397cb6d345a2925a7599753d574c762",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "8bc8828f76d7da75e46da69f6333275a43c305c9f8d7c3621c7df995c8a822cd",
+      "after_sha256": "6c418b63e1c3667184f9854229f240d388379b71c3a4dc54a41cd1b2c9f91354",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-verification.json",
       "before_sha256": null,
-      "after_sha256": "d5464d8d7135a3bc4c0225ed6d1cf40a4c9b5300f6aa6eee6fd6c77c1bd4a330",
+      "after_sha256": "0d6ad24b3b829cfc6a5c9498d04a4b0369d09f5757928024d5da68e2e9a0894f",
       "included_in_patch": false
     },
     {
@@ -784,6 +790,12 @@
       "included_in_patch": false
     },
     {
+      "path": "evidence/implementation/ob045-red.log",
+      "before_sha256": null,
+      "after_sha256": "12c7d8e00c8312f580b3ddbe7d38779cf976fbd42d97fe818a3be80debf35178",
+      "included_in_patch": false
+    },
+    {
       "path": "evidence/implementation/ob081-red.log",
       "before_sha256": null,
       "after_sha256": "c23201d2bcdba609185dd7af5df6674259dff1dc014b944e2388dad7f9ba231d",
@@ -810,19 +822,19 @@
     {
       "path": "evidence/implementation/types.log",
       "before_sha256": null,
-      "after_sha256": "61bd8cb9959645a85c4ae3dffd6695b2b000164bf38ab0bdef0fc9ba4a4072b6",
+      "after_sha256": "b85ebe13f9e1d95db5aea5d2a2cb068ea397cb6d345a2925a7599753d574c762",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "e7c1438c530477a5fc9c358501fcbfd695a2bfd16d70f027c8fe53953d940387",
+      "after_sha256": "2aa1cb1c3782b156a99dce0186a8b3ca23ca7868af925be826b07bbc5a718082",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/verification.json",
       "before_sha256": null,
-      "after_sha256": "bf4e7a5285842682b04083e4d5abed034151983431494d2e7c8810b8c33a5ee1",
+      "after_sha256": "4c1867caac9bfcb5acf1fb4033d6cefe68100c45ce7b5f9b3c480cedcdeabf52",
       "included_in_patch": false
     },
     {
@@ -834,7 +846,7 @@
     {
       "path": "progress.md",
       "before_sha256": null,
-      "after_sha256": "f73b3af68f775e8deb638907ba677ea312f9c3d1cd4d46b9a82ed9a550e2ef58",
+      "after_sha256": "03bdf9daa7ae95345b056b40c2f76acf81fcde4145378f4f4bdbbc4e063ef188",
       "included_in_patch": true
     },
     {
@@ -1102,6 +1114,12 @@
       "included_in_patch": true
     },
     {
+      "path": "services/core/src/openbot/policy/threat_regression.py",
+      "before_sha256": null,
+      "after_sha256": "8524b46306977513f52ccf216580eece9b0e5a9301e5c17726ba02c227a9b100",
+      "included_in_patch": true
+    },
+    {
       "path": "services/core/src/openbot/providers/__init__.py",
       "before_sha256": null,
       "after_sha256": "88a9f87f686c562992d5d5a0431de5f40781f82c03b9a43ab650a4dbc90d5c44",
@@ -1242,19 +1260,19 @@
     {
       "path": "task_plan.md",
       "before_sha256": null,
-      "after_sha256": "72a77b2df2aecf3aadacb283d5a426912f50ba15a827759826d96c346903fea4",
+      "after_sha256": "7d93ed7dc8371157c48f0b7ac445bbfd356bf1e452179f5ed37c3f913e6e287b",
       "included_in_patch": true
     },
     {
       "path": "tasks/TASKS.md",
       "before_sha256": "62011244f45e5fc158ac1528b2bf737a2bd80c937751744c1059e6899a7c43ae",
-      "after_sha256": "4c85c848b575e22a5f454214ba781e0eb31bc2a94c2c5517118896fe7312cdbe",
+      "after_sha256": "fac47f4001d261a837be965336d68d6b86d7982df4ca8fbf675b8590a7fc6a21",
       "included_in_patch": true
     },
     {
       "path": "tasks/backlog.json",
       "before_sha256": "343bc2c906a0f19539db16609498bf63f796069c75995944833089a6ae550e20",
-      "after_sha256": "ef23458d2d4b750ffcf81659341e0d5f70431332fe4bef1a3bd585e90e7a97d8",
+      "after_sha256": "22c3cf3e29a01f94927c9cf6bd0bad2e8841a06e32daecb72e0536068b3d22bf",
       "included_in_patch": true
     },
     {
@@ -1489,6 +1507,12 @@
       "path": "tests/security/local_api/test_local_api_security.py",
       "before_sha256": null,
       "after_sha256": "da2d91877239b4c5b81f83fd9152b2384bca745b2683861feb85803c2cf4fb8a",
+      "included_in_patch": true
+    },
+    {
+      "path": "tests/security/test_m1_threat_regression.py",
+      "before_sha256": null,
+      "after_sha256": "cca890427b3db34869b4dda3654286c27c0b2128896c1500ca7a6f8ac6271bf1",
       "included_in_patch": true
     },
     {

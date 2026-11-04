@@ -2179,6 +2179,42 @@
 +### 3. Reproducible Command
 +- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q` (`6 passed`)
 --- /dev/null
++++ b/docs/demos/m2.md
+@@ -0,0 +1,33 @@
++# M1 安全工具威胁回归与 M2 准入边界说明 / M1 Security Tool Threat Regression & M2 Entry Gate (OB-045)
++
++## 中文说明
++
++### 1. 威胁回归语料与零未授权副作用断言
++`services/core/src/openbot/policy/threat_regression.py`（`M1ThreatRegressionSuite`）与 `tests/security/test_m1_threat_regression.py` 在 M1 门禁中直接对真实文件守卫、JCS 序列化、进程协议、秘密代理和进程树监管执行 7 类攻击与故障回归，断言 `total_unauthorized_side_effects == 0`：
++1. `jcs_deep_mutation_and_duplicate_key`：Pydantic/Python 嵌套对象在 JCS 冻结后发生深层变异时立即检出哈希不一致；重复 JSON 键在解析入口直接抛出 `ContractError`。
++2. `path_traversal_and_symlink_escape`：`../` 越界、指向工作区外的符号链接以及 `.git/hooks/*` 路径读取均被 `WorkspaceFileGuard` 阻断。
++3. `rg_and_git_malicious_config_injection`：`build_pinned_ripgrep_command` 强制注入 `--no-config`、`--no-pre`、`--no-follow` 并剥离 `RIPGREP_CONFIG_PATH`、`GIT_CONFIG_GLOBAL`、`LD_PRELOAD`。
++4. `parser_runtime_download_and_crash_isolation`：`PinnedGrammarRegistry` 拒绝加载位于工作区内的 grammar 二进制，对未离线安装的语言返回 `CAPABILITY_UNAVAILABLE`，绝不运行期联网下载。
++5. `secret_leak_and_offline_scanner_enforcement`：`SecretBroker` 拒绝 `model_prompt` 等非授权上下文读取密钥；`RedactionPipeline` 离线剥离密钥且 `network_verification_enabled = False`。
++6. `output_flood_truncation_and_shell_metachar_rejection`：`ProcessExecutionPlan` 拒绝 `/bin/sh -c` 等宿主 shell 包装；`ControlledProcessExecutor` 对超出 `max_output_bytes` 的输出流式截断并标记 `output_truncated = True`。
++7. `unisolated_worker_residual_blocks_new_dispatch`：当进程树回收发现残留子进程 PID 时，`ProcessSupervisorService` 强制返回 `quarantine_required = True` 且 `new_dispatch_allowed = False`。
++
++### 2. 可复现验证命令
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/security/test_m1_threat_regression.py -q`（1 passed）
++
++---
++
++## English Summary
++
++### 1. Threat Regression Corpus & Zero Unauthorized Side-Effect Assertions
++`services/core/src/openbot/policy/threat_regression.py` (`M1ThreatRegressionSuite`) and `tests/security/test_m1_threat_regression.py` verify 7 security and recovery invariants directly against real guards in M1 (`total_unauthorized_side_effects == 0`):
++1. `jcs_deep_mutation_and_duplicate_key`: Detects post-canonicalization deep mutations and rejects duplicate JSON keys with `ContractError`.
++2. `path_traversal_and_symlink_escape`: Blocks `../` traversal, symlink escape outside the workspace, and `.git/hooks/*` access.
++3. `rg_and_git_malicious_config_injection`: Forces `--no-config`, `--no-pre`, `--no-follow` and strips `RIPGREP_CONFIG_PATH`, `GIT_CONFIG_GLOBAL`, and `LD_PRELOAD`.
++4. `parser_runtime_download_and_crash_isolation`: Rejects workspace-resident grammar binaries and fails closed with `CAPABILITY_UNAVAILABLE` without runtime downloads.
++5. `secret_leak_and_offline_scanner_enforcement`: Blocks `model_prompt` secret resolution and redacts secrets offline with `network_verification_enabled = False`.
++6. `output_flood_truncation_and_shell_metachar_rejection`: Rejects `/bin/sh -c` wrappers and truncates output floods at `max_output_bytes`.
++7. `unisolated_worker_residual_blocks_new_dispatch`: Enforces `quarantine_required = True` and `new_dispatch_allowed = False` when residual worker PIDs remain.
++
++### 2. Reproducible Command
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/security/test_m1_threat_regression.py -q` (`1 passed`)
+--- /dev/null
 +++ b/docs/dependency-evidence.md
 @@ -0,0 +1,13 @@
 +# OB-004 / OB-089：阶段依赖证据
@@ -2196,8 +2232,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,146 @@
-+# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI 与首条持久化垂直切片 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, and First Persistent Vertical Slice
+@@ -0,0 +1,152 @@
++# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—045 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、首条持久化垂直切片与安全威胁回归 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, First Persistent Vertical Slice, and Security Threat Regression
 +
 +## 中文说明
 +
@@ -2278,6 +2314,9 @@
 +1. 真实本地受限效果闭环（`run_local_restricted_effect_slice`）：在 `OFFLINE` 模式下串联 CLI → 认证本地控制 API → 持久 Task → 工作区文件补丁提案（`WorkspacePatchTool` + `ArtifactStore` SHA-256 冻结）→ CLI 审批（`CONSUMED` 一次性消费）→ `claim`/`begin_dispatch` → 真实工作区文件修改、受监管子进程回收（`ProcessSupervisorService`）与持久 Outbox 投递（`OutboxService`）。
 +2. 五个崩溃点与重复输入验证（`run_fault_crash_scenario`）：覆盖 `before_claim`、`after_claim_before_dispatch`（一次性 `RecoveryTicket` 恢复）、`after_dispatch_before_effect`、`after_effect_before_receipt`（`UNKNOWN`/`RECONCILING` 零盲目重放 + CLI 核对恢复）与 `after_complete_before_outbox_ack`，并校验重复 CLI 请求 ID 幂等稳定。
 +
++实现（OB-045）：新增 `services/core/src/openbot/policy/threat_regression.py`（`M1ThreatRegressionSuite`）、`tests/security/test_m1_threat_regression.py` 与中英双语 `docs/demos/m2.md`：
++1. 7 类安全与恢复威胁回归语料直接针对真实守卫断言 `total_unauthorized_side_effects == 0`：JCS 深层变异与重复键拒绝、路径穿越与符号链接逃逸阻断、ripgrep/Git 危险配置与预处理器剥离、工作区内 grammar 二进制与运行期下载阻断、跨分域密钥读取与命令行参数泄露阻断、`/bin/sh -c` 宿主 shell 包装拒绝与输出洪泛截断、残留子进程 PID 强制触发 `quarantine_required=True` 与 `new_dispatch_allowed=False`。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2288,10 +2327,11 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q --tb=short`（6 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/security/test_m1_threat_regression.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
++当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/045/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
 +
 +## English Summary
 +
@@ -2343,6 +2383,8 @@
 +- **OB-029 (`IN_PROGRESS`)**: First persistent vertical slice (`services/core/src/openbot/application/vertical_slice.py`, `tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py`, and `docs/demos/m1.md`, 6 passed):
 +  1. Real local restricted workspace patch, Artifact SHA-256 verification, supervised worker reclaim, and durable Outbox delivery closed loop in `OFFLINE` mode via CLI and authenticated Local Control API.
 +  2. Five crash injection points (`before_claim`, `after_claim_before_dispatch`, `after_dispatch_before_effect`, `after_effect_before_receipt`, `after_complete_before_outbox_ack`) and duplicate CLI idempotency verification with zero blind replay.
++- **OB-045 (`IN_PROGRESS`)**: M1 security tool threat regression corpus (`services/core/src/openbot/policy/threat_regression.py`, `tests/security/test_m1_threat_regression.py`, and `docs/demos/m2.md`, 1 passed):
++  1. Verifies 7 threat families (JCS deep mutation/duplicate keys, path traversal/symlink escape, ripgrep/Git config injection, parser workspace binary/runtime download rejection, secret compartment/argv leak blocking and offline redaction, shell wrapper rejection and output flood truncation, and residual worker PID quarantine) with `total_unauthorized_side_effects == 0`.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2689,7 +2731,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,70 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2753,12 +2795,13 @@
 +- 推进 OB-081（在 M1 实现认证本地 HTTP 与 SSE 控制 API）：实现 LocalControlApiServer 与 ScopedTokenStore（loopback IP、Host/Origin 校验、拦截 X-Forwarded-For 代理伪造、X-OpenBot-Profile 绑定与 owner_cli/feishu_gateway/webview_readonly 分域 token；提供 health/tasks/cancel/resume/approvals preview & challenge & decide/operations snapshot & evidence & reconcile/SSE events；预览隐藏 SECRET，证据上传禁宿主路径，reconcile 禁客户端指定目标状态，SSE 校验游标冲突 400 与过期 410）；新增契约与安全测试通过，M0 增至 256 passed/3 skipped，M1 增至 275 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-081 记 IN_PROGRESS。
 +- 推进 OB-028（提供 CLI 任务和审批操作）：实现 CliApiSession、run_cli_command 与 sanitize_terminal_text（通过认证本地 API 执行 task create/show/cancel/resume、approval preview/decide 与 operation reconcile，零 SQLite 旁路；拦截 --ignore-and-rerun/--force-success/--revive-consumed 返回码 6；剥离 ANSI CSI/OSC 与富文本标签；无 daemon 返回码 2，等待超时返回码 5 且声明 action_guaranteed_not_executed=false）；新增 2 项集成测试通过，M0 增至 258 passed/3 skipped，M1 增至 277 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-028 记 IN_PROGRESS。
 +- 推进 OB-029（交付首条持久化垂直切片）：实现 M1VerticalSliceHarness、双语演示说明 docs/demos/m1.md 与 6 项垂直切片集成测试（在 OFFLINE 模式下串联 CLI -> 认证本地 API -> 持久 Task -> 工作区补丁与 Artifact SHA-256 -> CLI 审批 -> claim/begin_dispatch -> 真实本地文件修改、受监管子进程回收与持久 Outbox 投递；覆盖 5 个崩溃点与重复 CLI 请求幂等，零盲目重放，且不伪称真实生产服务已调用）；M0 增至 264 passed/3 skipped，M1 增至 283 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-029 记 IN_PROGRESS。
++- 推进 OB-045（交付安全工具威胁回归）：实现 M1ThreatRegressionSuite、双语说明 docs/demos/m2.md 与安全回归测试 tests/security/test_m1_threat_regression.py（覆盖 JCS 深层变异与重复键、路径穿越与符号链接逃逸、ripgrep/Git 危险配置剥离、parser 离线二进制校验、跨分域密钥与命令行参数泄露阻断、宿主 shell 拒绝与输出洪泛截断、残留子进程 PID 强制隔离检疫 7 类攻击与故障语料，断言 total_unauthorized_side_effects == 0）；M0 增至 265 passed/3 skipped，M1 增至 284 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-045 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
-+- Implemented and verified M1 runtime, security, tools, platform, local control API, CLI, and first persistent vertical slice on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-044`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 264 passed M0 checks, and 283 passed M1 checks.
-+- Next ready M1 tasks: `OB-045` (security tool threat regression) and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
++- Implemented and verified M1 runtime, security, tools, platform, local control API, CLI, first persistent vertical slice, and security threat regression on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-045`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 265 passed M0 checks, and 284 passed M1 checks.
++- Next ready M1 task: `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -12208,6 +12251,286 @@
 +        clean_env["OPENBOT_SECRET_HANDLE_ID"] = handle_id
 +    return ChildSpawnSecretSpec(argv=argv, env=clean_env, mounts=mounts)
 --- /dev/null
++++ b/services/core/src/openbot/policy/threat_regression.py
+@@ -0,0 +1,277 @@
++"""M1 security tool threat regression corpus verifying zero unauthorized side effects (OB-045)."""
++
++import hashlib
++from dataclasses import dataclass
++from pathlib import Path
++
++from openbot.contracts import ContractError, canonicalize, strict_json
++from openbot.observability.redaction import RedactionPipeline
++from openbot.policy.secrets.broker import SecretBroker, build_minimal_child_spawn_spec
++from openbot.tools.executors.process import (
++    ControlledProcessExecutor,
++    ProcessExecutionPlan,
++    ProcessResourceLimits,
++    RawWorkerOutcome,
++)
++from openbot.tools.executors.supervision_port import ProcessSupervisorService
++from openbot.tools.filesystem_guard import WorkspaceFileGuard
++from openbot.tools.workspace.read import build_pinned_ripgrep_command
++from openbot.tools.workspace.validation import (
++    IsolatedParserWorker,
++    PinnedGrammarAsset,
++    PinnedGrammarRegistry,
++)
++
++
++@dataclass(frozen=True, slots=True)
++class ThreatRegressionReport:
++    cases_verified: tuple[str, ...]
++    total_unauthorized_side_effects: int
++    all_blocked: bool
++
++
++class _FloodWorker:
++    def run_isolated(self, plan: ProcessExecutionPlan) -> RawWorkerOutcome:
++        del plan
++        return RawWorkerOutcome(
++            client_pid=1001,
++            container_id="cnt_flood_1",
++            exit_code=0,
++            signal=None,
++            timed_out=False,
++            cancelled=False,
++            container_confirmed_stopped=True,
++            stdout_chunks=(b"A" * 2048, b"B" * 2048),
++            stderr_chunks=(),
++        )
++
++
++class _KeychainMemBackend:
++    backend_id: str = "macos.Keychain"
++
++    def __init__(self, initial: dict[str, bytes]) -> None:
++        self._store = dict(initial)
++
++    def get_secret(self, secret_ref: str) -> bytes:
++        return self._store[secret_ref]
++
++    def set_secret(self, secret_ref: str, value: bytes) -> None:
++        self._store[secret_ref] = value
++
++    def delete_secret(self, secret_ref: str) -> None:
++        self._store.pop(secret_ref, None)
++
++
++class M1ThreatRegressionSuite:
++    """Execute the M1 security and recovery threat regression corpus against real guards."""
++
++    def __init__(self, base_dir: Path) -> None:
++        self._base = base_dir
++
++    def run_all(self) -> ThreatRegressionReport:
++        unauthorized_effects = 0
++        verified: list[str] = []
++
++        # 1. JCS deep mutation & duplicate key rejection
++        nested = {"outer": {"items": [1, 2, 3]}}
++        frozen_bytes = canonicalize(nested)
++        nested["outer"]["items"].append(999)
++        if canonicalize(nested) == frozen_bytes:
++            unauthorized_effects += 1
++        dup_blocked = False
++        try:
++            strict_json('{"a":1,"a":2}')
++        except ContractError:
++            dup_blocked = True
++        if not dup_blocked:
++            unauthorized_effects += 1
++        verified.append("jcs_deep_mutation_and_duplicate_key")
++
++        # 2. Path traversal & symlink escape
++        ws = self._base / "ws_threat"
++        outside = self._base / "outside_secret.txt"
++        ws.mkdir(parents=True, exist_ok=True)
++        outside.write_text("TOP_SECRET", encoding="utf-8")
++        (ws / "escape_link.txt").symlink_to(outside)
++        guard = WorkspaceFileGuard(ws)
++        for bad_path in ("../outside_secret.txt", "escape_link.txt", ".git/hooks/pre-commit"):
++            escaped = False
++            try:
++                guard.read_bytes(bad_path)
++                escaped = True
++            except PermissionError:
++                pass
++            if escaped:
++                unauthorized_effects += 1
++        verified.append("path_traversal_and_symlink_escape")
++
++        # 3. Ripgrep & Git malicious config/preprocessor injection
++        rg_bin = self._base / "pinned_rg"
++        rg_bin.write_bytes(b"#!/bin/sh\nexit 0\n")
++        rg_sha = hashlib.sha256(rg_bin.read_bytes()).hexdigest()
++        spec = build_pinned_ripgrep_command(
++            rg_binary=rg_bin,
++            expected_sha256=rg_sha,
++            workspace_root=ws,
++            pattern="--pre=/bin/sh",
++            ambient_env={
++                "RIPGREP_CONFIG_PATH": "/tmp/evil_rgrc",
++                "GIT_CONFIG_GLOBAL": "/tmp/evil_gitconfig",
++                "LD_PRELOAD": "/tmp/evil.so",
++                "PATH": "/usr/bin",
++            },
++        )
++        if "--no-config" not in spec.argv or "--no-pre" not in spec.argv:
++            unauthorized_effects += 1
++        if "RIPGREP_CONFIG_PATH" in spec.env or "LD_PRELOAD" in spec.env:
++            unauthorized_effects += 1
++        verified.append("rg_and_git_malicious_config_injection")
++
++        # 4. Parser runtime download & workspace binary rejection
++        ws_grammar = ws / "evil_grammar.wasm"
++        ws_grammar.write_bytes(b"wasm")
++        ws_grammar_blocked = False
++        try:
++            PinnedGrammarRegistry(
++                workspace_root=ws,
++                assets={
++                    ".py": PinnedGrammarAsset(
++                        language="python",
++                        asset_path=ws_grammar,
++                        expected_sha256=hashlib.sha256(b"wasm").hexdigest(),
++                    )
++                },
++            )
++        except PermissionError:
++            ws_grammar_blocked = True
++        if not ws_grammar_blocked:
++            unauthorized_effects += 1
++
++        safe_grammar = self._base / "safe_python.grammar"
++        safe_grammar.write_bytes(b"pinned_grammar_v1")
++        reg = PinnedGrammarRegistry(
++            workspace_root=ws,
++            assets={
++                ".py": PinnedGrammarAsset(
++                    language="python",
++                    asset_path=safe_grammar,
++                    expected_sha256=hashlib.sha256(b"pinned_grammar_v1").hexdigest(),
++                )
++            },
++        )
++        parser = IsolatedParserWorker(reg)
++        missing_ext_blocked = False
++        try:
++            parser.parse("file.rs", b"fn main() {}")
++        except ValueError:
++            missing_ext_blocked = True
++        if not missing_ext_blocked:
++            unauthorized_effects += 1
++        verified.append("parser_runtime_download_and_crash_isolation")
++
++        # 5. Secret leak & offline scanner enforcement
++        secret_val = "sk-live-supersecretvalue999999"
++        broker = SecretBroker(
++            _KeychainMemBackend({"keychain:provider:openai:key1": secret_val.encode("utf-8")})
++        )
++        broker.resolve_for_model_provider("keychain:provider:openai:key1", "openai")
++        cross_compartment_blocked = False
++        try:
++            broker.resolve_for_feishu_gateway("keychain:provider:openai:key1")
++        except PermissionError:
++            cross_compartment_blocked = True
++        argv_leak_blocked = False
++        try:
++            build_minimal_child_spawn_spec(
++                argv=("/usr/bin/python3", f"--key={secret_val}"),
++                isolated_workdir=ws,
++                host_home=self._base / "fake_home",
++                mounts=(),
++                broker=broker,
++            )
++        except PermissionError:
++            argv_leak_blocked = True
++        if not cross_compartment_blocked or not argv_leak_blocked:
++            unauthorized_effects += 1
++        redactor = RedactionPipeline(registered_secrets=(secret_val,))
++        red_res = redactor.sanitize_sink(
++            sink="stdout", text=f" leaked {secret_val} ", data_class="WORKSPACE"
++        )
++        if secret_val in red_res.sanitized_text or redactor.contract().network_verification_enabled:
++            unauthorized_effects += 1
++        verified.append("secret_leak_and_offline_scanner_enforcement")
++
++        # 6. Output flood truncation & shell metacharacter / wrapper rejection
++        shell_blocked = False
++        try:
++            ProcessExecutionPlan(
++                operation_id="op_1",
++                attempt_id="att_1",
++                dispatch_id="dsp_1",
++                action_label="test",
++                executable="/bin/sh",
++                argv=("/bin/sh", "-c", "echo pwned"),
++                workspace_snapshot_digest="a" * 64,
++                execution_backend="ISOLATED_CONTAINER",
++                image_digest="sha256:" + "b" * 64,
++                network_mode="NONE",
++                isolated_home="/tmp/h",
++                isolated_tmpdir="/tmp/t",
++                env={},
++                limits=ProcessResourceLimits(max_output_bytes=512),
++            ).validate()
++        except PermissionError:
++            shell_blocked = True
++        if not shell_blocked:
++            unauthorized_effects += 1
++
++        exec_engine = ControlledProcessExecutor(
++            worker=_FloodWorker(),
++            isolation_backend_qualified=True,
++            redactor=redactor,
++        )
++        flood_plan = ProcessExecutionPlan(
++            operation_id="op_1",
++            attempt_id="att_1",
++            dispatch_id="dsp_1",
++            action_label="test",
++            executable="/usr/bin/python3",
++            argv=("/usr/bin/python3", "-m", "pytest"),
++            workspace_snapshot_digest="a" * 64,
++            execution_backend="ISOLATED_CONTAINER",
++            image_digest="sha256:" + "b" * 64,
++            network_mode="NONE",
++            isolated_home="/tmp/h",
++            isolated_tmpdir="/tmp/t",
++            env={},
++            limits=ProcessResourceLimits(max_output_bytes=512),
++        )
++        flood_res = exec_engine.execute(flood_plan)
++        if not flood_res.output_truncated or len(flood_res.stdout.encode("utf-8")) > 512:
++            unauthorized_effects += 1
++        verified.append("output_flood_truncation_and_shell_metachar_rejection")
++
++        # 7. Unisolated worker residual blocks new dispatch
++        sup = ProcessSupervisorService(runtime_epoch="ep_1")
++        sup.register_worker(
++            worker_id="wrk_res_1",
++            operation_id="op_1",
++            attempt_id="att_1",
++            pid=999991,
++            pgid=999991,
++            process_start_token="tok_res_1",
++        )
++        reclaim = sup.reclaim_worker(
++            "wrk_res_1",
++            current_start_token="tok_res_1",
++            simulated_residual_pids=(999992,),
++        )
++        if not reclaim.quarantine_required or reclaim.new_dispatch_allowed:
++            unauthorized_effects += 1
++        verified.append("unisolated_worker_residual_blocks_new_dispatch")
++
++        return ThreatRegressionReport(
++            cases_verified=tuple(verified),
++            total_unauthorized_side_effects=unauthorized_effects,
++            all_blocked=(unauthorized_effects == 0),
++        )
+--- /dev/null
 +++ b/services/core/src/openbot/providers/__init__.py
 @@ -0,0 +1 @@
 +"""Optional transport adapters; importing this package does not load an SDK."""
@@ -16710,7 +17033,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-015—025 / OB-028—044 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收、认证本地 HTTP/SSE 控制 API、CLI 任务审批入口与 M1 首条持久化垂直切片；继续推进 OB-045/046
++- [in_progress] OB-015—025 / OB-028—045 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收、认证本地 HTTP/SSE 控制 API、CLI 任务审批入口、M1 首条持久化垂直切片与安全工具威胁回归；继续推进 OB-046
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -17165,6 +17488,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
  
  **需求** [RQ02](requirements_traceability.md#rq02)、[RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ10](requirements_traceability.md#rq10)、[RQ12](requirements_traceability.md#rq12)
+ 
+@@ -2994,7 +2994,7 @@
+ 
+ **交付安全工具威胁回归**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 QA · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
+ 
+ **需求** [RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)、[RQ06](requirements_traceability.md#rq06)、[RQ12](requirements_traceability.md#rq12)
  
 @@ -3112,7 +3112,7 @@
  
@@ -18410,7 +18742,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2708,7 +3216,20 @@
+@@ -2708,14 +3216,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -18432,7 +18764,37 @@
    },
    {
      "id": "OB-045",
-@@ -2851,7 +3372,7 @@
+     "title": "交付安全工具威胁回归",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "QA",
+     "size": "M",
+     "req_ids": [
+@@ -2780,7 +3301,20 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第7–14、20–23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第7–14、20–23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 M1ThreatRegressionSuite covering 7 security/recovery threat families with real file/process/secret/JCS/rg/parser/supervision assertions and total_unauthorized_side_effects == 0",
++      "evidence": [
++        "docs/demos/m2.md",
++        "docs/evidence/approvals.md",
++        "tests/security/test_m1_threat_regression.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-029、OB-031、OB-032、OB-034、OB-037、OB-039、OB-041、OB-042 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (rfc8785, ripgrep, git-worktree, detect-secrets), reuse_type (qualification), and reuse_notes; verified actual file, process, secret, JCS, rg, parser, and residual-worker boundaries."
++    }
+   },
+   {
+     "id": "OB-046",
+@@ -2851,7 +3385,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -18441,7 +18803,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3429,19 @@
+@@ -2908,7 +3442,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -18462,7 +18824,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4812,7 @@
+@@ -4279,7 +4825,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -18471,7 +18833,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4870,26 @@
+@@ -4337,14 +4883,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -18500,7 +18862,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4946,19 @@
+@@ -4401,7 +4959,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -18521,7 +18883,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5566,7 @@
+@@ -5009,7 +5579,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -18530,7 +18892,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5635,20 @@
+@@ -5078,7 +5648,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -18552,7 +18914,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6093,7 @@
+@@ -5523,7 +6106,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -18561,7 +18923,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6146,26 @@
+@@ -5576,14 +6159,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -18590,7 +18952,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6224,26 @@
+@@ -5642,14 +6237,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -18619,7 +18981,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6298,26 @@
+@@ -5704,14 +6311,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -18648,7 +19010,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6384,25 @@
+@@ -5778,14 +6397,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -18676,7 +19038,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6470,19 @@
+@@ -5853,7 +6483,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -27702,6 +28064,30 @@
 +        )
 +    )
 +    assert r_force.status_code == 400
+--- /dev/null
++++ b/tests/security/test_m1_threat_regression.py
+@@ -0,0 +1,21 @@
++from pathlib import Path
++
++from openbot.policy.threat_regression import M1ThreatRegressionSuite
++
++
++def test_m1_security_tool_threat_regression_corpus_blocks_all_unauthorized_side_effects(
++    tmp_path: Path,
++) -> None:
++    suite = M1ThreatRegressionSuite(tmp_path)
++    report = suite.run_all()
++    assert report.total_unauthorized_side_effects == 0
++    assert report.all_blocked is True
++    assert set(report.cases_verified) == {
++        "jcs_deep_mutation_and_duplicate_key",
++        "path_traversal_and_symlink_escape",
++        "rg_and_git_malicious_config_injection",
++        "parser_runtime_download_and_crash_isolation",
++        "secret_leak_and_offline_scanner_enforcement",
++        "output_flood_truncation_and_shell_metachar_rejection",
++        "unisolated_worker_residual_blocks_new_dispatch",
++    }
 --- /dev/null
 +++ b/tests/unit/test_bootstrap.py
 @@ -0,0 +1,42 @@
