@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-031—033 / OB-037—039：提案、审批、六维策略、派发、恢复、取消、文件守卫/只读工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard/Read Tools, Egress, Secrets, and Redaction
+# OB-017—020 / OB-022 / OB-031—034 / OB-037—039：提案、审批、六维策略、派发、恢复、取消、文件守卫/读写补丁工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch Tools, Egress, Secrets, and Redaction
 
 ## 中文说明
 
@@ -32,6 +32,11 @@
 1. 固定摘要 `rg` 命令构建（`build_pinned_ripgrep_command`）：核验 `rg` 二进制真实文件与 SHA-256 摘要，清理 `RIPGREP_CONFIG_PATH` 与代理环境变量，固定生成 `--json --no-config --no-pre --no-follow -e <pattern> -- <subpath>`（不开放原始 flags，防止以 `--pre=` 开头的查询串注入预处理器），且不引入不必要的 `ripgrepy` 包装。
 2. 有界 `list_entries`、`read` 与 `search`（`WorkspaceReadTools`）：全部路径经 `WorkspaceFileGuard` 逐步句柄核验；MVP 严格以 UTF-8 为文本边界（拒绝含 NUL 字节的二进制文件 `BINARY_FILE_UNSUPPORTED` 与非 UTF-8 文件 `NON_UTF8_TEXT_UNSUPPORTED`，不因候选编码检测库自动扩张编码）；分别施加目录深度（`max_depth`）、扫描文件数（`max_files_scanned`）、单文件字节（`max_single_file_bytes`）、全局命中数（`max_global_matches`）、全局输出总字节（`max_global_output_bytes`）、单行字符（`max_line_chars`）与耗时（`timeout_ms`）上限；所有结果均携带 `sha256`、`provenance_kind='UNTRUSTED_WORKSPACE_FILE'` 与 `executable_instructions=False`。
 
+实现（OB-034）：新增 `services/core/src/openbot/tools/workspace/patch.py`（`WorkspacePatchTool`、`FileEditSpec`、`FrozenFilePatchPlan`、`PatchProposalBundle`、`PatchApplyReport`）与 `services/core/src/openbot/tools/workspace/commit_journal.py`（`PatchCommitJournal`）：
+1. 审批前冻结精确新旧哈希与新字节 Artifact（`propose_patch`）：使用 `WorkspaceFileGuard.observe` 观测目标文件而不改动工作区；拒绝重复匹配（`AMBIGUOUS_MULTIPLE_MATCHES`，多处匹配绝不猜测）；使用标准库 `difflib.unified_diff` 生成展示 Diff，并将确切新文件字节写入 `ArtifactStore` 固化 `old_sha256`、`new_artifact_id` 与 `new_sha256`。
+2. 批准后精确字节替换与零 fuzz/零换行改写（`apply_patch`）：不调用 `patch-ng` 直接写宿主，也不在批准后做模糊匹配、CRLF/LF 修正或重算新内容；写入前逐文件复验 `ArtifactStore.verify_approved_digest`、目标文件当前 `old_sha256` 与父目录 inode（若用户在审批期间修改文件或改变行尾则立即拒绝）。
+3. 逐文件提交日志与多文件部分失败恢复（`PatchCommitJournal`）：显式声明 `claims_cross_file_atomicity=False`（不冒充跨文件单文件系统事务）；写入前落盘 `journal.json` 及原文件备份字节，按文件调用 `WorkspaceFileGuard.write_atomic`；当第二文件提交失败时，自动按日志回滚已写入的第一文件至原字节并记录 `RESTORED_ORIGINAL` / `FAILED_NOT_APPLIED`，绝不调用 `git reset --hard`、自动 commit 或 push。
+
 实现（OB-037）：新增 `services/core/src/openbot/policy/egress.py`（`EgressGuard`、`EgressRequest`、`EgressDecision`、`LocalModelRunnerAttestation`、`ControlledHttpConfig`、`build_controlled_http_config`）：
 1. 全出口统一评估：共享覆盖 `MODEL_GATEWAY`、`LOCAL_MODEL_RUNNER`、`FEISHU_NOTIFICATION`、`BROWSER`、`MCP`、`FILE_UPLOAD` 与 `MESSAGE_TOOL`；`OFFLINE` 模式阻断所有出口的全部远端连接（不只限制 LLM）；`SECRET` 数据在任何出口（含 `redacted=True`）均硬拒绝（`SECRET_EGRESS_FORBIDDEN`）。
 2. 敏感预览/摘要保护与隐式出口阻断：`SENSITIVE` 数据不会因放进通知卡片（返回 `REQUIRE_LOCAL`）、上下文摘要（`from_summary=True`）或 Artifact（`from_artifact=True`）而自动放行，发送到允许域名的模型也必须经过显式一次一审 `ASK`；任何 Provider 托管 `web_search`/`remote_mcp`、价格表/词表/语法包运行期下载或扫描器在线验证均直接 `DENY`。
@@ -54,10 +59,10 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
-- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（85 passed，含 `test_workspace_patch.py` 2 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 
 ## English Summary
 
@@ -76,6 +81,9 @@
 - **OB-033 (`IN_PROGRESS`)**: Bounded workspace `list`/`read`/`search` tools (`services/core/src/openbot/tools/workspace/read.py`):
   1. `build_pinned_ripgrep_command`: Verifies pinned `rg` binary SHA-256, strips `RIPGREP_CONFIG_PATH` and proxy variables, and binds patterns with `-e` and paths after `--` alongside `--json --no-config --no-pre --no-follow`.
   2. `WorkspaceReadTools`: Enforces `WorkspaceFileGuard` on every path, strict UTF-8 text boundary (rejecting binary NUL bytes and non-UTF-8 encodings), and separate limits on depth, files scanned, single-file size, global match count, global output bytes, line length, and timeout, tagging all outputs with `provenance_kind='UNTRUSTED_WORKSPACE_FILE'` and `executable_instructions=False`.
+- **OB-034 (`IN_PROGRESS`)**: Workspace patch proposal, frozen-byte application, and per-file commit journal (`services/core/src/openbot/tools/workspace/patch.py` and `commit_journal.py`):
+  1. `propose_patch`: Freezes `old_sha256`, exact new bytes in `ArtifactStore` (`new_artifact_id`, `new_sha256`), and `difflib` display diff without modifying the workspace; rejects duplicate hunk matches (`AMBIGUOUS_MULTIPLE_MATCHES`).
+  2. `apply_patch` & `PatchCommitJournal`: Re-verifies `old_sha256`, parent directory inode, and approved artifact digest before writing exact frozen bytes via `WorkspaceFileGuard.write_atomic` (zero post-approval fuzz or CRLF normalization); uses `PatchCommitJournal` (`claims_cross_file_atomicity=False`) to roll back already-written files if a subsequent file fails, without `git reset --hard` or auto-commit/push.
 - **OB-037 (`IN_PROGRESS`)**: Unified data egress policy (`services/core/src/openbot/policy/egress.py`):
   1. `EgressGuard`: Evaluates `PUBLIC`/`WORKSPACE`/`SENSITIVE`/`SECRET` across `MODEL_GATEWAY`, `LOCAL_MODEL_RUNNER`, `FEISHU_NOTIFICATION`, `BROWSER`, `MCP`, `FILE_UPLOAD`, and `MESSAGE_TOOL`; `OFFLINE` blocks remote egress across all surfaces; `SECRET` is always denied.
   2. Taint & implicit-feature protection: `SENSITIVE` data in notification cards returns `REQUIRE_LOCAL` and in summaries/artifacts to allowed model domains requires `ASK`; provider-hosted `web_search`/`remote_mcp`, asset downloads, and online secret verification are denied.

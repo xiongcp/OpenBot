@@ -2369,7 +2369,7 @@
     "title": "实现补丁提议与受授权应用",
     "milestone": "M1",
     "priority": "P0",
-    "status": "TODO",
+    "status": "IN_PROGRESS",
     "owner_lane": "Runtime",
     "size": "M",
     "req_ids": [
@@ -2430,7 +2430,20 @@
       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
       "审批绑定的old/new hash、不可变新字节Artifact、逐文件提交/恢复manifest和具体解析库版本。"
     ],
-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12、17、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
+    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12、17、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
+    "execution": {
+      "scope": "macOS ARM64 WorkspacePatchTool (propose_patch, apply_patch) and PatchCommitJournal (frozen old/new SHA-256 and new-bytes Artifact binding, duplicate match rejection, zero post-approval fuzz/CRLF fixup, and per-file rollback on multi-file partial failure)",
+      "evidence": [
+        "docs/evidence/approvals.md",
+        "tests/integration/storage/test_workspace_patch.py",
+        "evidence/implementation/m1-storage-tests.log",
+        "evidence/implementation/verification.json"
+      ],
+      "blockers": [
+        "上游 OB-016、OB-019、OB-032、OB-033、OB-036、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
+      ],
+      "review": "Read component_refs (unidiff, patch-ng, git-worktree, dulwich), reuse_type (dependency_adapter), and reuse_notes; used stdlib difflib for display diffs and WorkspaceFileGuard + ArtifactStore for exact byte freezing without patch-ng host writes; verified old_sha256/CRLF drift rejection, tampered artifact rejection, and journal rollback on second-file failure."
+    }
   },
   {
     "id": "OB-035",

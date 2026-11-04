@@ -2160,8 +2160,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,90 @@
-+# OB-017—020 / OB-022 / OB-031—033 / OB-037—039：提案、审批、六维策略、派发、恢复、取消、文件守卫/只读工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard/Read Tools, Egress, Secrets, and Redaction
+@@ -0,0 +1,98 @@
++# OB-017—020 / OB-022 / OB-031—034 / OB-037—039：提案、审批、六维策略、派发、恢复、取消、文件守卫/读写补丁工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch Tools, Egress, Secrets, and Redaction
 +
 +## 中文说明
 +
@@ -2195,6 +2195,11 @@
 +1. 固定摘要 `rg` 命令构建（`build_pinned_ripgrep_command`）：核验 `rg` 二进制真实文件与 SHA-256 摘要，清理 `RIPGREP_CONFIG_PATH` 与代理环境变量，固定生成 `--json --no-config --no-pre --no-follow -e <pattern> -- <subpath>`（不开放原始 flags，防止以 `--pre=` 开头的查询串注入预处理器），且不引入不必要的 `ripgrepy` 包装。
 +2. 有界 `list_entries`、`read` 与 `search`（`WorkspaceReadTools`）：全部路径经 `WorkspaceFileGuard` 逐步句柄核验；MVP 严格以 UTF-8 为文本边界（拒绝含 NUL 字节的二进制文件 `BINARY_FILE_UNSUPPORTED` 与非 UTF-8 文件 `NON_UTF8_TEXT_UNSUPPORTED`，不因候选编码检测库自动扩张编码）；分别施加目录深度（`max_depth`）、扫描文件数（`max_files_scanned`）、单文件字节（`max_single_file_bytes`）、全局命中数（`max_global_matches`）、全局输出总字节（`max_global_output_bytes`）、单行字符（`max_line_chars`）与耗时（`timeout_ms`）上限；所有结果均携带 `sha256`、`provenance_kind='UNTRUSTED_WORKSPACE_FILE'` 与 `executable_instructions=False`。
 +
++实现（OB-034）：新增 `services/core/src/openbot/tools/workspace/patch.py`（`WorkspacePatchTool`、`FileEditSpec`、`FrozenFilePatchPlan`、`PatchProposalBundle`、`PatchApplyReport`）与 `services/core/src/openbot/tools/workspace/commit_journal.py`（`PatchCommitJournal`）：
++1. 审批前冻结精确新旧哈希与新字节 Artifact（`propose_patch`）：使用 `WorkspaceFileGuard.observe` 观测目标文件而不改动工作区；拒绝重复匹配（`AMBIGUOUS_MULTIPLE_MATCHES`，多处匹配绝不猜测）；使用标准库 `difflib.unified_diff` 生成展示 Diff，并将确切新文件字节写入 `ArtifactStore` 固化 `old_sha256`、`new_artifact_id` 与 `new_sha256`。
++2. 批准后精确字节替换与零 fuzz/零换行改写（`apply_patch`）：不调用 `patch-ng` 直接写宿主，也不在批准后做模糊匹配、CRLF/LF 修正或重算新内容；写入前逐文件复验 `ArtifactStore.verify_approved_digest`、目标文件当前 `old_sha256` 与父目录 inode（若用户在审批期间修改文件或改变行尾则立即拒绝）。
++3. 逐文件提交日志与多文件部分失败恢复（`PatchCommitJournal`）：显式声明 `claims_cross_file_atomicity=False`（不冒充跨文件单文件系统事务）；写入前落盘 `journal.json` 及原文件备份字节，按文件调用 `WorkspaceFileGuard.write_atomic`；当第二文件提交失败时，自动按日志回滚已写入的第一文件至原字节并记录 `RESTORED_ORIGINAL` / `FAILED_NOT_APPLIED`，绝不调用 `git reset --hard`、自动 commit 或 push。
++
 +实现（OB-037）：新增 `services/core/src/openbot/policy/egress.py`（`EgressGuard`、`EgressRequest`、`EgressDecision`、`LocalModelRunnerAttestation`、`ControlledHttpConfig`、`build_controlled_http_config`）：
 +1. 全出口统一评估：共享覆盖 `MODEL_GATEWAY`、`LOCAL_MODEL_RUNNER`、`FEISHU_NOTIFICATION`、`BROWSER`、`MCP`、`FILE_UPLOAD` 与 `MESSAGE_TOOL`；`OFFLINE` 模式阻断所有出口的全部远端连接（不只限制 LLM）；`SECRET` 数据在任何出口（含 `redacted=True`）均硬拒绝（`SECRET_EGRESS_FORBIDDEN`）。
 +2. 敏感预览/摘要保护与隐式出口阻断：`SENSITIVE` 数据不会因放进通知卡片（返回 `REQUIRE_LOCAL`）、上下文摘要（`from_summary=True`）或 Artifact（`from_artifact=True`）而自动放行，发送到允许域名的模型也必须经过显式一次一审 `ASK`；任何 Provider 托管 `web_search`/`remote_mcp`、价格表/词表/语法包运行期下载或扫描器在线验证均直接 `DENY`。
@@ -2217,10 +2222,10 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
-+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（85 passed，含 `test_workspace_patch.py` 2 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
++当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 +
 +## English Summary
 +
@@ -2239,6 +2244,9 @@
 +- **OB-033 (`IN_PROGRESS`)**: Bounded workspace `list`/`read`/`search` tools (`services/core/src/openbot/tools/workspace/read.py`):
 +  1. `build_pinned_ripgrep_command`: Verifies pinned `rg` binary SHA-256, strips `RIPGREP_CONFIG_PATH` and proxy variables, and binds patterns with `-e` and paths after `--` alongside `--json --no-config --no-pre --no-follow`.
 +  2. `WorkspaceReadTools`: Enforces `WorkspaceFileGuard` on every path, strict UTF-8 text boundary (rejecting binary NUL bytes and non-UTF-8 encodings), and separate limits on depth, files scanned, single-file size, global match count, global output bytes, line length, and timeout, tagging all outputs with `provenance_kind='UNTRUSTED_WORKSPACE_FILE'` and `executable_instructions=False`.
++- **OB-034 (`IN_PROGRESS`)**: Workspace patch proposal, frozen-byte application, and per-file commit journal (`services/core/src/openbot/tools/workspace/patch.py` and `commit_journal.py`):
++  1. `propose_patch`: Freezes `old_sha256`, exact new bytes in `ArtifactStore` (`new_artifact_id`, `new_sha256`), and `difflib` display diff without modifying the workspace; rejects duplicate hunk matches (`AMBIGUOUS_MULTIPLE_MATCHES`).
++  2. `apply_patch` & `PatchCommitJournal`: Re-verifies `old_sha256`, parent directory inode, and approved artifact digest before writing exact frozen bytes via `WorkspaceFileGuard.write_atomic` (zero post-approval fuzz or CRLF normalization); uses `PatchCommitJournal` (`claims_cross_file_atomicity=False`) to roll back already-written files if a subsequent file fails, without `git reset --hard` or auto-commit/push.
 +- **OB-037 (`IN_PROGRESS`)**: Unified data egress policy (`services/core/src/openbot/policy/egress.py`):
 +  1. `EgressGuard`: Evaluates `PUBLIC`/`WORKSPACE`/`SENSITIVE`/`SECRET` across `MODEL_GATEWAY`, `LOCAL_MODEL_RUNNER`, `FEISHU_NOTIFICATION`, `BROWSER`, `MCP`, `FILE_UPLOAD`, and `MESSAGE_TOOL`; `OFFLINE` blocks remote egress across all surfaces; `SECRET` is always denied.
 +  2. Taint & implicit-feature protection: `SENSITIVE` data in notification cards returns `REQUIRE_LOCAL` and in summaries/artifacts to allowed model domains requires `ASK`; provider-hosted `web_search`/`remote_mcp`, asset downloads, and online secret verification are denied.
@@ -2541,7 +2549,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,53 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2594,6 +2602,7 @@
 +- 推进 OB-039（实现敏感数据输出过滤）：实现 StreamingSecretRedactor 与 RedactionPipeline（按最长注册秘密及 Base64/URL/JSON 编码变体动态扩展跨分片窗口，不依赖固定 128 字节窗口；忽略外部 pragma allowlist secret 注释，永久禁用网络验证；统一过滤 stdout/stderr/sdk_debug/exception/http_header/ui_event/artifact/diagnostic/model_input 九类出口，扫描阴性不降低 SECRET/SENSITIVE 分类）；新增 2 项测试通过，M0 增至 234 passed/3 skipped，M1 增至 253 passed/1 skipped。因上游 OB-036/037/038/092 仍为 IN_PROGRESS，OB-039 记 IN_PROGRESS。
 +- 推进 OB-025（实现首个云模型适配器）：实现 OpenAICompatibleAdapter、PROVIDER_CAPABILITY_MATRIX 与 validate_outbound_sdk_payload（锁定允许 SDK 字段白名单，禁用 run_tools/extra_body/extra_headers/web_search/remote_mcp；每次请求先经 EgressGuard 与按尝试预留预算，唯一有界重试计数与服务器请求及预算记录三者一致；跨分片重组完整 JSON 与 ToolManifest Schema 后仅返回 ToolCall 提案，批准前 canary 调用为 0；半包/断流/取消丢弃输出并保留 UNKNOWN 费用）；新增 3 项测试通过，M0 增至 237 passed/3 skipped，M1 增至 256 passed/1 skipped。因缺少真实云凭据 smoke 且上游依赖仍为 IN_PROGRESS，OB-025 记 IN_PROGRESS。
 +- 推进 OB-033（实现 list read search 文件工具）：实现 WorkspaceReadTools、WorkspaceReadLimits 与 build_pinned_ripgrep_command（核验固定 rg 二进制 SHA-256，用 -e 绑定 pattern、-- 分隔路径并强制 --json --no-config --no-pre --no-follow；严格保持 UTF-8 文本边界并拒绝二进制/非 UTF-8/超大文件；施加目录深度、扫描文件数、单文件字节、全局命中数、全局输出字节、单行长度与超时上限，输出带 sha256 与 UNTRUSTED_WORKSPACE_FILE 来源标签）；新增 2 项测试通过，M0 增至 239 passed/3 skipped，M1 增至 258 passed/1 skipped。因上游 OB-019/032/092 仍为 IN_PROGRESS，OB-033 记 IN_PROGRESS。
++- 推进 OB-034（实现补丁提议与受授权应用）：实现 WorkspacePatchTool 与 PatchCommitJournal（审批前冻结 old_sha256、确切新字节 Artifact 与 new_sha256，拒绝多处匹配且不改原目录；apply_patch 复验旧哈希、父目录 inode 与新字节 Artifact 摘要，禁止批准后 fuzz 或 CRLF 改写；通过 PatchCommitJournal 记录逐文件提交日志并支持多文件部分失败回滚，显式声明 claims_cross_file_atomicity=False，绝不执行 git reset --hard 或自动 commit/push）；新增 2 项集成测试通过，存储套件增至 85 passed，M0 增至 241 passed/3 skipped，M1 增至 260 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-034 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -12879,6 +12888,333 @@
 @@ -0,0 +1 @@
 +"""Controlled workspace read, search, and patch tools."""
 --- /dev/null
++++ b/services/core/src/openbot/tools/workspace/commit_journal.py
+@@ -0,0 +1,110 @@
++"""Per-file commit journal and partial-failure rollback without claiming cross-file atomicity."""
++
++import hashlib
++import secrets
++import time
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Literal
++
++from openbot.contracts import canonicalize, strict_json
++from openbot.tools.filesystem_guard import WorkspaceFileGuard
++
++
++@dataclass(frozen=True, slots=True)
++class JournalEntry:
++    relative_path: str
++    old_exists: bool
++    old_sha256: str | None
++    new_sha256: str
++    backup_file: str | None
++    state: str
++
++
++class PatchCommitJournal:
++    """Durable file-level commit log for multi-file patch application and partial recovery."""
++
++    def __init__(self, journal_root: Path, bundle_id: str) -> None:
++        if journal_root.is_symlink():
++            raise PermissionError("Journal root must not be a symlink")
++        journal_root.mkdir(parents=True, exist_ok=True, mode=0o700)
++        self._dir = (journal_root / f"jnl_{bundle_id}_{secrets.token_hex(8)}").resolve()
++        self._dir.mkdir(parents=True, exist_ok=False, mode=0o700)
++        self._manifest_path = self._dir / "journal.json"
++        self._entries: dict[str, dict[str, Any]] = {}
++
++    @property
++    def journal_path(self) -> Path:
++        return self._manifest_path
++
++    def _flush(self, status: str) -> None:
++        doc = {
++            "status": status,
++            "claims_cross_file_atomicity": False,
++            "updated_at_ms": time.time_ns() // 1_000_000,
++            "entries": list(self._entries.values()),
++        }
++        self._manifest_path.write_bytes(canonicalize(doc))
++
++    def record_Backup(
++        self,
++        *,
++        relative_path: str,
++        old_bytes: bytes | None,
++        old_sha256: str | None,
++        new_sha256: str,
++    ) -> None:
++        backup_name: str | None = None
++        if old_bytes is not None:
++            backup_name = f"bak_{len(self._entries)}_{secrets.token_hex(6)}.bin"
++            (self._dir / backup_name).write_bytes(old_bytes)
++        self._entries[relative_path] = {
++            "relative_path": relative_path,
++            "old_exists": old_bytes is not None,
++            "old_sha256": old_sha256,
++            "new_sha256": new_sha256,
++            "backup_file": backup_name,
++            "state": "PREPARED",
++        }
++        self._flush("IN_PROGRESS")
++
++    def mark_file_applied(self, relative_path: str) -> None:
++        self._entries[relative_path]["state"] = "APPLIED"
++        self._flush("IN_PROGRESS")
++
++    def mark_file_failed(self, relative_path: str) -> None:
++        self._entries[relative_path]["state"] = "FAILED_NOT_APPLIED"
++        self._flush("PARTIAL_FAILURE")
++
++    def complete(self) -> None:
++        self._flush("COMPLETED")
++
++    def recover_partial_failure(
++        self, guard: WorkspaceFileGuard
++    ) -> dict[str, Literal["RESTORED_ORIGINAL", "FAILED_NOT_APPLIED", "CONFLICT_USER_MODIFIED"]]:
++        actions: dict[
++            str, Literal["RESTORED_ORIGINAL", "FAILED_NOT_APPLIED", "CONFLICT_USER_MODIFIED"]
++        ] = {}
++        for rel_path, entry in reversed(list(self._entries.items())):
++            if entry["state"] != "APPLIED":
++                actions[rel_path] = "FAILED_NOT_APPLIED"
++                entry["state"] = "FAILED_NOT_APPLIED"
++                continue
++            cur_snap = guard.observe(rel_path)
++            if not cur_snap.exists or cur_snap.sha256 != entry["new_sha256"]:
++                actions[rel_path] = "CONFLICT_USER_MODIFIED"
++                entry["state"] = "CONFLICT_USER_MODIFIED"
++                continue
++            b_name = entry.get("backup_file")
++            if b_name is not None:
++                orig_bytes = (self._dir / str(b_name)).read_bytes()
++                if hashlib.sha256(orig_bytes).hexdigest() != entry["old_sha256"]:
++                    raise RuntimeError("Journal backup sha256 corrupted")
++                guard.write_atomic(rel_path, orig_bytes, cur_snap)
++            actions[rel_path] = "RESTORED_ORIGINAL"
++            entry["state"] = "RESTORED_ORIGINAL"
++        self._flush("ROLLED_BACK_AFTER_PARTIAL_FAILURE")
++        return actions
++
++    def read_manifest(self) -> dict[str, Any]:
++        return dict(strict_json(self._manifest_path.read_bytes()))
+--- /dev/null
++++ b/services/core/src/openbot/tools/workspace/patch.py
+@@ -0,0 +1,211 @@
++"""workspace.propose_patch and workspace.apply_patch with frozen old/new hashes and journal."""
++
++import difflib
++import hashlib
++import secrets
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++from openbot.artifacts.store import ArtifactStore
++from openbot.storage.inbox import InboundContext
++from openbot.tools.filesystem_guard import ObservedFileSnapshot, WorkspaceFileGuard
++from openbot.tools.workspace.commit_journal import PatchCommitJournal
++
++
++@dataclass(frozen=True, slots=True)
++class FileEditSpec:
++    relative_path: str
++    old_snippet: str
++    new_snippet: str
++
++
++@dataclass(frozen=True, slots=True)
++class FrozenFilePatchPlan:
++    relative_path: str
++    old_exists: bool
++    old_sha256: str | None
++    new_artifact_id: str
++    new_artifact_key: str
++    new_sha256: str
++    new_bytes_len: int
++    observed_snapshot: ObservedFileSnapshot
++    diff_preview: str
++
++
++@dataclass(frozen=True, slots=True)
++class PatchProposalBundle:
++    bundle_id: str
++    task_id: str
++    files: tuple[FrozenFilePatchPlan, ...]
++
++
++@dataclass(frozen=True, slots=True)
++class PatchApplyReport:
++    bundle_id: str
++    status: Literal["APPLIED", "ROLLED_BACK_AFTER_PARTIAL_FAILURE"]
++    journal_path: Path
++    recovery_actions: dict[str, str]
++    claims_cross_file_atomicity: Literal[False] = False
++
++
++class WorkspacePatchTool:
++    """Freeze exact old/new hashes and new-content Artifacts before approval; apply atomically."""
++
++    def __init__(
++        self,
++        workspace_root: Path,
++        artifact_store: ArtifactStore,
++        journal_root: Path,
++    ) -> None:
++        self._root = workspace_root.resolve()
++        self._guard = WorkspaceFileGuard(self._root)
++        self._artifacts = artifact_store
++        self._journal_root = journal_root.resolve()
++
++    def propose_patch(
++        self,
++        context: InboundContext,
++        *,
++        task_id: str,
++        edits: tuple[FileEditSpec, ...],
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> PatchProposalBundle:
++        if not edits:
++            raise ValueError("edits must be non-empty")
++        seen_paths: set[str] = set()
++        plans: list[FrozenFilePatchPlan] = []
++
++        for idx, edit in enumerate(edits):
++            if edit.relative_path in seen_paths:
++                raise ValueError(f"Duplicate path in patch proposal: {edit.relative_path}")
++            seen_paths.add(edit.relative_path)
++
++            snap = self._guard.observe(edit.relative_path)
++            if not snap.exists:
++                raise ValueError(f"TARGET_FILE_NOT_FOUND: {edit.relative_path}")
++            old_raw = self._guard.read_bytes(edit.relative_path)
++            if b"\x00" in old_raw:
++                raise ValueError(f"BINARY_FILE_UNSUPPORTED: {edit.relative_path}")
++            try:
++                old_text = old_raw.decode("utf-8", errors="strict")
++            except UnicodeDecodeError as exc:
++                raise ValueError(f"NON_UTF8_TEXT_UNSUPPORTED: {edit.relative_path}") from exc
++
++            # Exact match count check: never guess on multiple matches or normalize CRLF
++            occurrences = old_text.count(edit.old_snippet)
++            if occurrences == 0:
++                raise ValueError(f"HUNK_NOT_FOUND in {edit.relative_path}")
++            if occurrences > 1:
++                raise ValueError(
++                    f"AMBIGUOUS_MULTIPLE_MATCHES ({occurrences}) in {edit.relative_path}"
++                )
++
++            new_text = old_text.replace(edit.old_snippet, edit.new_snippet, 1)
++            new_raw = new_text.encode("utf-8")
++            new_sha = hashlib.sha256(new_raw).hexdigest()
++            diff_lines = difflib.unified_diff(
++                old_text.splitlines(keepends=True),
++                new_text.splitlines(keepends=True),
++                fromfile=f"a/{edit.relative_path}",
++                tofile=f"b/{edit.relative_path}",
++            )
++            diff_preview = "".join(diff_lines)
++
++            art_rec = self._artifacts.put(
++                context,
++                data=new_raw,
++                mime="text/plain; charset=utf-8",
++                classification="WORKSPACE",
++                scope_kind="TASK",
++                task_id=task_id,
++                purpose=f"patch_new_bytes:{edit.relative_path}",
++                request_id=f"{request_id}:art:{idx}",
++                deadline_monotonic_ms=deadline_monotonic_ms,
++            )
++            plans.append(
++                FrozenFilePatchPlan(
++                    relative_path=edit.relative_path,
++                    old_exists=True,
++                    old_sha256=snap.sha256,
++                    new_artifact_id=art_rec.object_id,
++                    new_artifact_key=art_rec.object_key,
++                    new_sha256=new_sha,
++                    new_bytes_len=len(new_raw),
++                    observed_snapshot=snap,
++                    diff_preview=diff_preview,
++                )
++            )
++
++        return PatchProposalBundle(
++            bundle_id="pbd_" + secrets.token_hex(12),
++            task_id=task_id,
++            files=tuple(plans),
++        )
++
++    def apply_patch(
++        self,
++        context: InboundContext,
++        bundle: PatchProposalBundle,
++        *,
++        inject_failure_on_path: str | None = None,
++    ) -> PatchApplyReport:
++        # Phase 1: Re-verify ALL old file hashes, parent inodes, and approved new-byte Artifacts
++        # before modifying any file in the workspace. Never fuzz or normalize line endings!
++        prepared: list[tuple[FrozenFilePatchPlan, ObservedFileSnapshot, bytes, bytes]] = []
++        for plan in bundle.files:
++            self._artifacts.verify_approved_digest(context, plan.new_artifact_id, plan.new_sha256)
++            dl = self._artifacts.download(context, plan.new_artifact_id)
++            if dl.sha256 != plan.new_sha256 or len(dl.data) != plan.new_bytes_len:
++                raise PermissionError("Approved new-content artifact digest or size changed")
++
++            cur_snap = self._guard.observe(plan.relative_path)
++            if cur_snap.exists != plan.old_exists or cur_snap.sha256 != plan.old_sha256:
++                raise PermissionError(
++                    f"Target file old_sha256 changed since proposal: {plan.relative_path}"
++                )
++            if cur_snap.parent_ino != plan.observed_snapshot.parent_ino:
++                raise PermissionError(
++                    f"Parent directory inode changed since proposal: {plan.relative_path}"
++                )
++            old_bytes = self._guard.read_bytes(plan.relative_path)
++            prepared.append((plan, cur_snap, old_bytes, dl.data))
++
++        # Phase 2: Write durable commit journal with exact pre-patch backups, then apply per-file
++        journal = PatchCommitJournal(self._journal_root, bundle.bundle_id)
++        for plan, _, old_bytes, _ in prepared:
++            journal.record_Backup(
++                relative_path=plan.relative_path,
++                old_bytes=old_bytes,
++                old_sha256=plan.old_sha256,
++                new_sha256=plan.new_sha256,
++            )
++
++        for plan, cur_snap, _, new_bytes in prepared:
++            if inject_failure_on_path == plan.relative_path:
++                journal.mark_file_failed(plan.relative_path)
++                actions = journal.recover_partial_failure(self._guard)
++                return PatchApplyReport(
++                    bundle_id=bundle.bundle_id,
++                    status="ROLLED_BACK_AFTER_PARTIAL_FAILURE",
++                    journal_path=journal.journal_path,
++                    recovery_actions=dict(actions),
++                    claims_cross_file_atomicity=False,
++                )
++            try:
++                self._guard.write_atomic(plan.relative_path, new_bytes, cur_snap)
++                journal.mark_file_applied(plan.relative_path)
++            except BaseException:
++                journal.mark_file_failed(plan.relative_path)
++                journal.recover_partial_failure(self._guard)
++                raise
++
++        journal.complete()
++        return PatchApplyReport(
++            bundle_id=bundle.bundle_id,
++            status="APPLIED",
++            journal_path=journal.journal_path,
++            recovery_actions={p.relative_path: "APPLIED" for p in bundle.files},
++            claims_cross_file_atomicity=False,
++        )
+--- /dev/null
 +++ b/services/core/src/openbot/tools/workspace/read.py
 @@ -0,0 +1,290 @@
 +"""Bounded workspace.list, workspace.read, and workspace.search tools with UTF-8 and FileGuard."""
@@ -13200,7 +13536,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/036/037/038/039 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 文件工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入与敏感输出过滤；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/036/037/038/039 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 与补丁工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入与敏感输出过滤；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -13552,6 +13888,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
  
  **需求** [RQ05](requirements_traceability.md#rq05)、[RQ06](requirements_traceability.md#rq06)
+ 
+@@ -2466,7 +2466,7 @@
+ 
+ **实现补丁提议与受授权应用**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Runtime · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)
  
 @@ -3112,7 +3112,7 @@
  
@@ -14379,7 +14724,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2022,7 +2349,20 @@
+@@ -2022,14 +2349,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "实际argv/最小env、二进制hash、全局限额与preprocessor拒绝证据。"
      ],
@@ -14401,7 +14746,37 @@
    },
    {
      "id": "OB-034",
-@@ -2158,7 +2498,7 @@
+     "title": "实现补丁提议与受授权应用",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Runtime",
+     "size": "M",
+     "req_ids": [
+@@ -2090,7 +2430,20 @@
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
+       "审批绑定的old/new hash、不可变新字节Artifact、逐文件提交/恢复manifest和具体解析库版本。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12、17、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12、17、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 WorkspacePatchTool (propose_patch, apply_patch) and PatchCommitJournal (frozen old/new SHA-256 and new-bytes Artifact binding, duplicate match rejection, zero post-approval fuzz/CRLF fixup, and per-file rollback on multi-file partial failure)",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/integration/storage/test_workspace_patch.py",
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-016、OB-019、OB-032、OB-033、OB-036、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs (unidiff, patch-ng, git-worktree, dulwich), reuse_type (dependency_adapter), and reuse_notes; used stdlib difflib for display diffs and WorkspaceFileGuard + ArtifactStore for exact byte freezing without patch-ng host writes; verified old_sha256/CRLF drift rejection, tampered artifact rejection, and journal rollback on second-file failure."
++    }
+   },
+   {
+     "id": "OB-035",
+@@ -2158,7 +2511,7 @@
      "title": "实现Artifact存储与可信元数据",
      "milestone": "M1",
      "priority": "P0",
@@ -14410,7 +14785,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2207,14 +2547,27 @@
+@@ -2207,14 +2560,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -14440,7 +14815,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2269,14 +2622,27 @@
+@@ -2269,14 +2635,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "受管进程/runner/浏览器出口范围、代理配置及绕过反例。"
      ],
@@ -14470,7 +14845,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2330,14 +2696,27 @@
+@@ -2330,14 +2709,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -14500,7 +14875,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2392,7 +2771,20 @@
+@@ -2392,7 +2784,20 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "redactor规则/长度/flush合同、网络验证禁用配置、canary矩阵及明确未覆盖风险。"
      ],
@@ -14522,7 +14897,7 @@
    },
    {
      "id": "OB-040",
-@@ -2851,7 +3243,7 @@
+@@ -2851,7 +3256,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -14531,7 +14906,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3300,19 @@
+@@ -2908,7 +3313,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -14552,7 +14927,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4683,7 @@
+@@ -4279,7 +4696,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -14561,7 +14936,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4741,26 @@
+@@ -4337,14 +4754,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -14590,7 +14965,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4817,19 @@
+@@ -4401,7 +4830,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -14611,7 +14986,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5951,7 @@
+@@ -5523,7 +5964,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -14620,7 +14995,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6004,26 @@
+@@ -5576,14 +6017,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -14649,7 +15024,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6082,26 @@
+@@ -5642,14 +6095,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -14678,7 +15053,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6156,26 @@
+@@ -5704,14 +6169,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -14707,7 +15082,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6242,25 @@
+@@ -5778,14 +6255,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -14735,7 +15110,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6328,19 @@
+@@ -5853,7 +6341,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21093,6 +21468,182 @@
 +                context, t1, 1, "WAITING_APPROVAL", "park-while-dispatching", _deadline()
 +            )
 +        ).result(5)
+--- /dev/null
++++ b/tests/integration/storage/test_workspace_patch.py
+@@ -0,0 +1,173 @@
++import hashlib
++import json
++import time
++
++import pytest
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import SchemaRegistry
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.writer import Writer
++from openbot.tools.workspace.patch import FileEditSpec, WorkspacePatchTool
++
++from tests.integration.storage.test_migrations import ROOT
++
++
++def _deadline() -> int:
++    return int(time.monotonic() * 1000) + 5000
++
++
++@pytest.fixture
++def patch_env(tmp_path):
++    path = tmp_path / "patch.sqlite"
++    blob_root = tmp_path / "patch_blobs"
++    ws_root = tmp_path / "workspace"
++    journal_root = tmp_path / "journals"
++    ws_root.mkdir()
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++    finally:
++        db.close()
++
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    registry = SchemaRegistry.from_directory(ROOT / "contracts")
++    writer = Writer(path)
++    inbox = Inbox(writer, registry)
++    tasks = TaskStateService(writer)
++    art_store = ArtifactStore(writer, blob_root)
++    patch_tool = WorkspacePatchTool(ws_root, art_store, journal_root)
++    try:
++        yield ws_root, blob_root, context, writer, inbox, tasks, art_store, patch_tool
++    finally:
++        writer.close()
++
++
++def test_propose_patch_does_not_modify_workspace_and_rejects_duplicate_match_or_hash_drift(
++    patch_env,
++):
++    ws_root, blob_root, context, writer, inbox, tasks, _, patch_tool = patch_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "patch-verify", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-pat-1", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-pat-1", _deadline())).result(5)
++
++    # 1. Duplicate match in target file is refused at proposal time (never guesses)
++    (ws_root / "dup.py").write_bytes(b"x = 1\nx = 1\n")
++    with pytest.raises(ValueError, match="AMBIGUOUS_MULTIPLE_MATCHES"):
++        patch_tool.propose_patch(
++            context,
++            task_id=task_id,
++            edits=(FileEditSpec("dup.py", old_snippet="x = 1", new_snippet="x = 2"),),
++            request_id="pat-dup",
++            deadline_monotonic_ms=_deadline(),
++        )
++
++    # 2. Propose valid patch freezes old/new sha256 and exact new bytes Artifact without writing
++    orig_bytes = b"def greet():\n    return 'old'\n"
++    (ws_root / "app.py").write_bytes(orig_bytes)
++    bundle = patch_tool.propose_patch(
++        context,
++        task_id=task_id,
++        edits=(FileEditSpec("app.py", old_snippet="return 'old'", new_snippet="return 'new'"),),
++        request_id="pat-ok-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert (ws_root / "app.py").read_bytes() == orig_bytes
++    assert bundle.files[0].old_sha256 == hashlib.sha256(orig_bytes).hexdigest()
++    assert "-    return 'old'" in bundle.files[0].diff_preview
++    assert "+    return 'new'" in bundle.files[0].diff_preview
++
++    # 3. If user changes line endings (LF -> CRLF) or edits file before apply, apply refuses
++    (ws_root / "app.py").write_bytes(b"def greet():\r\n    return 'old'\r\n")
++    with pytest.raises(PermissionError, match="old_sha256|changed"):
++        patch_tool.apply_patch(context, bundle)
++
++    # Restore original bytes, then tamper with approved new-content artifact on disk -> refused
++    (ws_root / "app.py").write_bytes(orig_bytes)
++    art_path = blob_root / bundle.files[0].new_artifact_key
++    saved_art = art_path.read_bytes()
++    art_path.write_bytes(b"tampered new content")
++    with pytest.raises((PermissionError, FileNotFoundError)):
++        patch_tool.apply_patch(context, bundle)
++    assert (ws_root / "app.py").read_bytes() == orig_bytes
++
++    # Restore artifact and re-propose -> apply succeeds and writes exact frozen bytes
++    bundle2 = patch_tool.propose_patch(
++        context,
++        task_id=task_id,
++        edits=(FileEditSpec("app.py", old_snippet="return 'old'", new_snippet="return 'new'"),),
++        request_id="pat-ok-2",
++        deadline_monotonic_ms=_deadline(),
++    )
++    del saved_art
++    report = patch_tool.apply_patch(context, bundle2)
++    assert report.status == "APPLIED"
++    assert report.claims_cross_file_atomicity is False
++    assert (ws_root / "app.py").read_bytes() == b"def greet():\n    return 'new'\n"
++
++
++def test_multi_file_commit_journal_rolls_back_first_file_when_second_file_fails(patch_env):
++    ws_root, _, context, writer, inbox, tasks, _, patch_tool = patch_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "patch-journal", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-pat-2", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-pat-2", _deadline())).result(5)
++
++    (ws_root / "first.txt").write_bytes(b"first_old\n")
++    (ws_root / "second.txt").write_bytes(b"second_old\n")
++
++    bundle = patch_tool.propose_patch(
++        context,
++        task_id=task_id,
++        edits=(
++            FileEditSpec("first.txt", old_snippet="first_old", new_snippet="first_new"),
++            FileEditSpec("second.txt", old_snippet="second_old", new_snippet="second_new"),
++        ),
++        request_id="pat-multi-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++
++    # Inject failure right when committing second.txt after first.txt has already been written
++    report = patch_tool.apply_patch(context, bundle, inject_failure_on_path="second.txt")
++    assert report.status == "ROLLED_BACK_AFTER_PARTIAL_FAILURE"
++    assert report.claims_cross_file_atomicity is False
++    assert report.recovery_actions["first.txt"] == "RESTORED_ORIGINAL"
++    assert report.recovery_actions["second.txt"] == "FAILED_NOT_APPLIED"
++    # Both files on disk match their exact original pre-patch contents
++    assert (ws_root / "first.txt").read_bytes() == b"first_old\n"
++    assert (ws_root / "second.txt").read_bytes() == b"second_old\n"
 --- /dev/null
 +++ b/tests/integration/storage/test_writer.py
 @@ -0,0 +1,203 @@
