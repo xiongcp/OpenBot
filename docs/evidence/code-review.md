@@ -12,3 +12,7 @@
 | 新增自查 | nonce 出现在第三方异常链、request_id 跨设备读回、文件探针放开整个工作区 | 各有 RED/GREEN 与完整回归 |
 
 独立审批审查在修复前实际跑 33 项审批/迁移测试，没有声称评审 API、持久 challenge、预览、claim/dispatch/recovery。上述明示待实现范围也未被其他审查认证。修复后由 Integrator 运行当前完整 M0/M1 套件；单测、合成服务与本机容器证据分别保留。
+
+## English Summary
+
+Independent read-only code reviews and reproducible negative tests were conducted across standard contracts, the OB-091 crash-protocol PoC, SQLite storage/writer failure modes, SDK/state boundaries, and canonical proposal/approval bindings. Every identified issue was first reproduced with a failing RED test before applying minimal surgical fixes and re-running the full M0 and M1 verification suites.

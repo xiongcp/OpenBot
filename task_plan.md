@@ -24,7 +24,7 @@
 - [complete] 标准合同、故障夹具与协议 PoC 本地验证
 - [in_progress] M1 SDK / 隔离先行验证和正式集成
 - [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/035/036/037/038/039/040/041/042/043 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/本地消息草稿工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；上游 OB-015/093 未闭合
+- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/035/036/037/038/039/040/041/042/043/044 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；上游 OB-015/093 未闭合
 - [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 
 ## 已知错误与处理
@@ -34,3 +34,7 @@
 ## 约束
 
 不推送、不部署、不发布、不发送第三方消息、不安装系统服务，不读取或使用用户真实凭据。
+
+## English Summary
+
+Goal: Implement OpenBot v1.2 through M3 following the 96-task DAG in `tasks/backlog.json`, reading `component_refs`, `reuse_type`, and `reuse_notes` for each task, writing failing RED tests before minimal implementation, running full M0/M1 verification (`scripts/verify.py`), maintaining bilingual documentation, and committing/pushing each completed task without leaking credentials.

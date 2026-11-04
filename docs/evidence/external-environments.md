@@ -12,3 +12,7 @@
 真实模型质量、第二 Provider/本地模型资产与出口、Browser/MCP 资产、长期浸泡与 M3 发行供应链均未验证。不能只凭缺环境就把全部工程 TODO 改为完成或环境阻塞；M1 正式策略、Supervisor、claim/dispatch、recovery、取消、预算、文件/Artifact、本地认证 API 与 CLI 是明确未完成实现。
 
 后续继续顺序：补 OB-093 的 Supervisor/旧执行域失效证据及 OB-014 终态门禁，推进 OB-015/016 与 OB-017/018/031 的正式集成，接两次短事务 claim/dispatch、恢复/取消/预算，再做 OB-029。M2/M3 只能在各自上游和真实门禁满足后验收；不将当前本地原型宣称为 MVP。
+
+## English Summary
+
+This record documents external verification environments not available on the current Darwin arm64 development host (native Windows x64 and Linux x64 machines for `OB-005`/`OB-070`/`OB-071`, and a dedicated Feishu test tenant/app for `OB-047`). Missing external environments block only their specific real-environment acceptance gates; local M1/M2/M3 engineering tasks continue along the DAG without fabricating credentials or real-service logs.

@@ -11,3 +11,7 @@
 状态、审计与 outbox 同短事务；fake 外部执行不在 SQLite 事务内。FakeChannel 的同 scope 事件重放 100 次只返回同一 Task。FakeOutbox 仅为离线输出夹具，无真实消息外发。
 
 正式 23 表 DDL、状态机文件和 14 API 没有变化。此模型仅在 tests/protocol，不能用于生产调度；未验证真实容器、网络隔离、模型、飞书或三平台，不能关闭 OB-029。
+
+## English Summary
+
+Command: `.venv/bin/python scripts/run_protocol_poc.py` and `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/protocol -q`. Verifies the OB-091 crash-recovery protocol PoC on real temporary SQLite across 8 crash injection points (`claim`, `begin_dispatch`, post-effect before local commit, and `os._exit(78)` subprocess exits), proving one-time `CONSUMED` approval grants, attempt-scoped `dispatch_id` vs operation-scoped `provider_idempotency_key`, and `UNKNOWN` quarantine.

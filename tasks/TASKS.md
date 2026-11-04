@@ -2760,7 +2760,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **实现消息发送用例与受控适配端口**
 
-阶段 M1 · 优先级 P1 · 状态 TODO · 能力域 Security · 规模 M
+阶段 M1 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
 
 **需求** [RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ06](requirements_traceability.md#rq06)
 

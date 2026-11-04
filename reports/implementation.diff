@@ -2160,8 +2160,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,113 @@
-+# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft Tools, Egress, Secrets, and Redaction
+@@ -0,0 +1,121 @@
++# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿与发送工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft/Send Tools, Egress, Secrets, and Redaction
 +
 +## 中文说明
 +
@@ -2224,6 +2224,11 @@
 +1. 稳定收件人解析与同名歧义阻断：当 `recipient_candidates` 缺失或存在多个同名候选人时，原子将 Task 转入 `WAITING_INPUT` 并返回 `sendable=False`、`draft_artifact_id=None`，绝不在收件人未唯一确认时生成可发送草稿。
 +2. 本地不可变草稿 Artifact 与修订版本绑定：校验全部附件 Artifact 的存在性与 SHA-256，将通道、账户、稳定 `recipient_id`、版本号（`revision`）、正文与附件摘要序列化为 canonical JSON 存入 `ArtifactStore`；每次修订生成新 `revision` 与新 `draft_sha256`，旧版本摘要在 `verify_latest_draft_binding` 中自动失效，且全过程零网络请求（`network_calls_made=0`）。
 +
++实现（OB-044）：新增 `services/core/src/openbot/tools/messages/send.py`（`MessageSendService`、`MessageSendTransportPort`、`MessageSendEnvelope`、`MessageSendResult`）：
++1. 绑定草稿哈希与稳定收件人提案（`propose_send`）：在生成 `message.send` 提案前强制调用 `MessageDraftService.verify_latest_draft_binding` 核验最新不可变草稿 `draft_artifact_id` 与 `draft_sha256`，并将 `destination` 固定为 `MESSAGE_RECIPIENT`（绑定 `account_id` 与稳定 `recipient_id`），默认采用 `RECONCILE_ONLY` 重试类别。
++2. 独立外发授权与适配门禁（`execute_approved_send`）：拒绝将普通 `owner_progress` 通知授权复用为第三方发送授权；在 M2 真实平台适配器通过验证前（`transport.qualified=False`）直接拒绝并返回 `CAPABILITY_UNAVAILABLE`；派发前再次核验 `caller_recipient_id`、最新草稿哈希与 `EgressGuard`。
++3. 成功后断连进入 `UNKNOWN` 与禁止自动重发：经 `claim` -> `begin_dispatch` 两次短事务后在事务外调用 `transport.send_message`；若发送中断连或回执丢失，将 `operation_attempts` 与 `operations` 置为 `UNKNOWN`、关联 Task 置为 `RECONCILING` 并保留资源 quarantine；后续恢复（`RecoveryService.recover_operation`）对 `RECONCILE_ONLY` 绝不签发重试凭据，防止重复发送外部消息。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2231,10 +2236,10 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
-+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（88 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed 与 `test_message_draft.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
++当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 +
 +## English Summary
 +
@@ -2274,6 +2279,9 @@
 +- **OB-043 (`IN_PROGRESS`)**: Local immutable message draft service (`services/core/src/openbot/tools/messages/draft.py` and `tests/integration/storage/test_message_draft.py`, 1 passed):
 +  1. `create_or_revise_draft`: Transitions the task to `WAITING_INPUT` (`sendable=False`) when recipient candidates are missing or ambiguous; stores canonical JSON drafts with stable `recipient_id`, `channel`, `account_id`, `revision`, and attachment SHA-256 digests in `ArtifactStore` with zero network calls (`network_calls_made=0`).
 +  2. `verify_latest_draft_binding`: Ensures edits create a new `revision` and `draft_sha256`, invalidating stale draft hashes so old approvals cannot authorize modified message content.
++- **OB-044 (`IN_PROGRESS`)**: Controlled `message.send` use case and transport port (`services/core/src/openbot/tools/messages/send.py` and `tests/integration/storage/test_message_send.py`, 1 passed):
++  1. `propose_send` & `execute_approved_send`: Binds `draft_artifact_id`, `draft_sha256`, `account_id`, and stable `recipient_id` (`RECONCILE_ONLY`); rejects reusing ordinary `owner_progress` notification grants for third-party sends, rejects recipient or draft-hash drift, and fails closed with `CAPABILITY_UNAVAILABLE` when the real channel adapter is not yet qualified (`transport.qualified=False`).
++  2. Disconnect handling: Runs two-phase `claim -> begin_dispatch` before calling `transport.send_message` outside the transaction; connection drops after send transition the Operation to `UNKNOWN` and Task to `RECONCILING` while retaining resource quarantine and refusing automatic re-send.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2327,7 +2335,7 @@
 +  2. `ProcessSupervisorService`: Verifies real POSIX process-group + grandchild termination (`SIGTERM -> SIGKILL` with `waitpid(WNOHANG)` zombie reaping), enforces `process_start_token` checks against PID reuse, sets `old_domain_isolated=False` and `quarantine_required=True` when residual PIDs or unstopped containers remain, and preserves daemon/workers when UI windows close.
 --- /dev/null
 +++ b/docs/evidence/code-review.md
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,18 @@
 +# 本轮代码审查范围与处置
 +
 +采用只读独立审查与可重复反例，不把独立分支测试当作合并结果。仓库原始设计全部未跟踪且无 commit，本轮没有制造基线提交；审查按实际文件和初始 hash 清单进行。
@@ -2342,6 +2350,10 @@
 +| 新增自查 | nonce 出现在第三方异常链、request_id 跨设备读回、文件探针放开整个工作区 | 各有 RED/GREEN 与完整回归 |
 +
 +独立审批审查在修复前实际跑 33 项审批/迁移测试，没有声称评审 API、持久 challenge、预览、claim/dispatch/recovery。上述明示待实现范围也未被其他审查认证。修复后由 Integrator 运行当前完整 M0/M1 套件；单测、合成服务与本机容器证据分别保留。
++
++## English Summary
++
++Independent read-only code reviews and reproducible negative tests were conducted across standard contracts, the OB-091 crash-protocol PoC, SQLite storage/writer failure modes, SDK/state boundaries, and canonical proposal/approval bindings. Every identified issue was first reproduced with a failing RED test before applying minimal surgical fixes and re-running the full M0 and M1 verification suites.
 --- /dev/null
 +++ b/docs/evidence/component-fault-contract.md
 @@ -0,0 +1,26 @@
@@ -2373,7 +2385,7 @@
 +  3. Accumulates fragmented `tool_calls` SSE deltas until `[DONE]`, validating complete JSON and `ToolManifest` schema via `accept_model_call` to return `ToolCall` proposals (0 canary executions before approval); half-packets, missing `tool_call_id`, or post-chunk cancellations discard output, hold cost as `UNKNOWN`, and never retry. Real cloud smoke remains unverified without live credentials.
 --- /dev/null
 +++ b/docs/evidence/external-environments.md
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,18 @@
 +# 未提供的真实验收环境
 +
 +本轮仅使用当前 Darwin arm64、本地合成 SQLite/HTTP、固定镜像的 Docker Desktop 测试。没有使用真实模型 key、飞书个人会话或未授权账号；未扫描用户秘密目录来寻找凭据。以下描述“本次任务未提供可用验收环境”，不声称用户机器上不存在相应账号或服务。
@@ -2388,9 +2400,13 @@
 +真实模型质量、第二 Provider/本地模型资产与出口、Browser/MCP 资产、长期浸泡与 M3 发行供应链均未验证。不能只凭缺环境就把全部工程 TODO 改为完成或环境阻塞；M1 正式策略、Supervisor、claim/dispatch、recovery、取消、预算、文件/Artifact、本地认证 API 与 CLI 是明确未完成实现。
 +
 +后续继续顺序：补 OB-093 的 Supervisor/旧执行域失效证据及 OB-014 终态门禁，推进 OB-015/016 与 OB-017/018/031 的正式集成，接两次短事务 claim/dispatch、恢复/取消/预算，再做 OB-029。M2/M3 只能在各自上游和真实门禁满足后验收；不将当前本地原型宣称为 MVP。
++
++## English Summary
++
++This record documents external verification environments not available on the current Darwin arm64 development host (native Windows x64 and Linux x64 machines for `OB-005`/`OB-070`/`OB-071`, and a dedicated Feishu test tenant/app for `OB-047`). Missing external environments block only their specific real-environment acceptance gates; local M1/M2/M3 engineering tasks continue along the DAG without fabricating credentials or real-service logs.
 --- /dev/null
 +++ b/docs/evidence/protocol-poc.md
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,17 @@
 +# OB-091 协议验收
 +
 +命令：`.venv/bin/python scripts/run_protocol_poc.py`；完整行为测试：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/protocol -q`。
@@ -2404,9 +2420,13 @@
 +状态、审计与 outbox 同短事务；fake 外部执行不在 SQLite 事务内。FakeChannel 的同 scope 事件重放 100 次只返回同一 Task。FakeOutbox 仅为离线输出夹具，无真实消息外发。
 +
 +正式 23 表 DDL、状态机文件和 14 API 没有变化。此模型仅在 tests/protocol，不能用于生产调度；未验证真实容器、网络隔离、模型、飞书或三平台，不能关闭 OB-029。
++
++## English Summary
++
++Command: `.venv/bin/python scripts/run_protocol_poc.py` and `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/protocol -q`. Verifies the OB-091 crash-recovery protocol PoC on real temporary SQLite across 8 crash injection points (`claim`, `begin_dispatch`, post-effect before local commit, and `os._exit(78)` subprocess exits), proving one-time `CONSUMED` approval grants, attempt-scoped `dispatch_id` vs operation-scoped `provider_idempotency_key`, and `UNKNOWN` quarantine.
 --- /dev/null
 +++ b/docs/evidence/standard-contracts.md
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,17 @@
 +# OB-006 / OB-007 / OB-008 / OB-009 / OB-090 标准合同
 +
 +运行：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts tests/unit -q`；版本和发行物 hash 见 components/admissions/m0.json。
@@ -2420,6 +2440,10 @@
 +模型仅生成 tool_name / args，由本地 Manifest 再校验；两个 fake Provider 和独立 fake executor 共用同一值对象，不给 provider 自动执行权限。事件身份/接收时间由 TrustedSource 接入上下文提供，入站 body 不能赋权。持久事件 seq 来自未来数据库 writer，事件回放没有工具执行入口。
 +
 +CONNECTED / LOCAL_MODEL / OFFLINE 为独立版本配置；不允许 cloud fallback、SDK 重试叠加、宿主执行、运行期下载。没有真实本地推理 / runner / 出口证据时连接工厂返回 CAPABILITY_UNAVAILABLE；loopback 地址不作证明。UTC/monotonic/boot 变化测试使旧敏感 TTL 失效；派发后 timeout/cancel 映射 UNKNOWN，未把所有异常设为 retryable。
++
++## English Summary
++
++Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts tests/unit -q`. Verifies OB-006/007/008/009/090 standard contracts: RFC 8785 JCS canonicalization (UTF-16 key ordering, safe integers, duplicate-key rejection), full JSON Schema Draft 2020-12 validation with local-only `$ref` registry and zero network retrieval, strict immutable Pydantic DTOs, `CONNECTED`/`LOCAL_MODEL`/`OFFLINE` configuration guards, and `ClockSnapshot` TTL verification.
 --- /dev/null
 +++ b/docs/evidence/storage.md
 @@ -0,0 +1,74 @@
@@ -2578,7 +2602,7 @@
 +未安装 command-group、service-manager、PyInstaller、AstrBot 或任何候选自治框架；没有源码摘取。路径守卫、隔离和供应链仍由各自任务真实验收。
 --- /dev/null
 +++ b/findings.md
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,16 @@
 +# 实施发现
 +
 +- 2026-11-04：实际仓库为设计包；main 尚无 commit，现有文件全部未跟踪。无应用实现或真实依赖锁。
@@ -2589,9 +2613,15 @@
 +- 本地 MEMORY.md 无 OpenBot 相关命中；OpenViking Experience 定向检索无结果。
 +- Docker 后端后续已可用并通过 8 项本机 CLI 原语测试；Supervisor/旧执行域隔离等属于未完成工程，不能继续写成 Docker 环境阻塞。
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
++
++## English Summary
++
++- The repository started as the OpenBot v1.2 engineering design package (96 tasks across M0–P2 and 52 component decisions in `components/catalog.json`).
++- Current host is Darwin arm64 with local CPython 3.12 and Docker Desktop 29.1.3.
++- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,65 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2650,6 +2680,13 @@
 +- 推进 OB-042（实现 worker 进程树取消与回收）：实现 ProcessSupervisorService、PLATFORM_CAPABILITY_BOUNDARIES、validate_windows_job_spawn_order 与 native/supervisor/src/process_tree.rs（明确三平台监督边界与 Drop/EOF 非 100% 保证，不引入 command-group；实测 macOS 真实进程组及孙进程 SIGTERM->SIGKILL 回收与僵尸进程收割；通过 process_start_token 防御 PID 复用误杀；残留子孙或未停止容器时保持 quarantine 并阻断新派发；关闭 UI 窗口不停止常驻 daemon）；新增 2 项集成测试通过，M0 增至 248 passed/3 skipped，M1 增至 267 passed/1 skipped。因上游 OB-022/040/041/093 及 Windows/Linux 原生实测待闭合，OB-042 记 IN_PROGRESS。
 +- 推进 OB-035（实现显式语言验证与修改事务）：实现 PinnedGrammarRegistry、IsolatedParserWorker 与 WorkspaceValidationCoordinator（校验固定离线 grammar SHA-256 且禁运行期下载，拒绝工作区内二进制 grammar；在受大小/嵌套深度/超时限制的独立子进程中执行解析以隔离崩溃；多文件第二项验证失败时仅按 PatchCommitJournal 撤回本次修改并保留用户其他未提交文件；显式标记 functional_correctness_proven=False）；新增 2 项集成测试通过，存储套件增至 87 passed，M0 增至 250 passed/3 skipped，M1 增至 269 passed/1 skipped。因上游 OB-034/041/092 仍为 IN_PROGRESS，OB-035 记 IN_PROGRESS。
 +- 推进 OB-043（实现本地消息草稿）：实现 MessageDraftService、ContactCandidate 与 MessageDraftOutcome（同名收件人歧义或缺失时原子将 Task 转 WAITING_INPUT 且拒绝生成可发送草稿；唯一稳定收件人时核验附件 SHA-256 并在 ArtifactStore 生成不可变草稿；草稿编辑产生新 revision 与新 draft_sha256 使旧哈希失效，全程零网络调用）；新增集成测试通过，存储套件增至 88 passed，M0 增至 251 passed/3 skipped，M1 增至 270 passed/1 skipped。因上游 OB-036/037 仍为 IN_PROGRESS，OB-043 记 IN_PROGRESS。
++- 推进 OB-044（实现消息发送用例与受控适配端口）：实现 MessageSendService、MessageSendTransportPort、MessageSendEnvelope 与 MessageSendResult（绑定最新不可变草稿哈希、目标账户与稳定 recipient_id，默认 RECONCILE_ONLY；拒绝将普通 owner_progress 通知授权复用为第三方发送授权，未资格化真实平台适配器返回 CAPABILITY_UNAVAILABLE；经 claim->begin_dispatch 后在事务外发送，断连丢回执时转 UNKNOWN/RECONCILING 并保留 quarantine，恢复器绝不自动重发）；新增集成测试通过，存储套件增至 89 passed，M0 增至 252 passed/3 skipped，M1 增至 271 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-044 记 IN_PROGRESS。
++
++## English Progress Summary
++
++- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
++- Implemented and verified M1 runtime, security, tools, and platform tasks on Darwin arm64 (`OB-016`–`OB-025`, `OB-030`–`OB-044`, `OB-092`–`OB-093`), reaching 89 passed storage integration tests, 252 passed M0 checks, and 271 passed M1 checks.
++- Next ready M1 tasks: `OB-015` (single-instance daemon & scheduler lease), `OB-081` (authenticated local HTTP & SSE control API), `OB-028` (CLI task & approval operations), `OB-029` (first persistent vertical slice), `OB-045` (security tool threat regression), and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -13815,6 +13852,326 @@
 +        latest = self._latest_by_recipient.get(key)
 +        return latest == (draft_artifact_id, expected_sha256, int(doc["revision"]))
 --- /dev/null
++++ b/services/core/src/openbot/tools/messages/send.py
+@@ -0,0 +1,317 @@
++"""Controlled message.send use case bound to immutable draft hash, account, and recipient."""
++
++import hashlib
++import secrets
++import sqlite3
++import time
++from dataclasses import dataclass
++from typing import Any, Literal, Protocol
++
++from openbot.application.dispatch import DispatchService
++from openbot.application.operations import OperationService, load_proposal
++from openbot.application.resources import ResourceRequest
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import canonicalize, strict_json
++from openbot.policy.egress import EgressGuard, EgressRequest
++from openbot.storage.inbox import InboundContext, authorize
++from openbot.storage.writer import LookupResult, Writer, WriterCommand
++from openbot.tools.messages.draft import MessageDraftService
++
++
++@dataclass(frozen=True, slots=True)
++class MessageSendEnvelope:
++    operation_id: str
++    attempt_id: str
++    dispatch_id: str
++    account_id: str
++    recipient_id: str
++    draft_artifact_id: str
++    draft_sha256: str
++    body_text: str
++
++
++@dataclass(frozen=True, slots=True)
++class MessageSendResult:
++    status: Literal["SENT", "FAILED", "UNKNOWN"]
++    provider_message_id: str | None = None
++    error_code: str | None = None
++
++
++class MessageSendTransportPort(Protocol):
++    qualified: bool
++
++    def send_message(self, envelope: MessageSendEnvelope) -> MessageSendResult: ...
++
++
++class MessageSendService:
++    """Broker-gated message.send with draft/recipient binding and RECONCILE_ONLY semantics."""
++
++    def __init__(
++        self,
++        writer: Writer,
++        operations: OperationService,
++        dispatcher: DispatchService,
++        drafts: MessageDraftService,
++        artifacts: ArtifactStore,
++        egress: EgressGuard,
++    ) -> None:
++        self._writer = writer
++        self._operations = operations
++        self._dispatcher = dispatcher
++        self._drafts = drafts
++        self._artifacts = artifacts
++        self._egress = egress
++
++    def propose_send(
++        self,
++        context: InboundContext,
++        *,
++        task_id: str,
++        draft_artifact_id: str,
++        draft_sha256: str,
++        account_id: str,
++        recipient_id: str,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> dict[str, Any]:
++        if not self._drafts.verify_latest_draft_binding(context, draft_artifact_id, draft_sha256):
++            raise PermissionError("Stale or unverified message draft hash cannot be proposed")
++        args_json = canonicalize(
++            {
++                "draft_artifact_id": draft_artifact_id,
++                "draft_sha256": draft_sha256,
++                "account_id": account_id,
++                "recipient_id": recipient_id,
++            }
++        ).decode()
++        raw = self._operations.propose(
++            context,
++            task_id,
++            "message.send",
++            args_json,
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {
++                "kind": "MESSAGE_RECIPIENT",
++                "resource_ref": recipient_id,
++                "account_ref": account_id,
++            },
++            request_id,
++            deadline_monotonic_ms,
++        )
++        return dict(strict_json(raw))
++
++    def execute_approved_send(
++        self,
++        context: InboundContext,
++        *,
++        operation_id: str,
++        runtime_epoch: str,
++        executor_id: str,
++        transport: MessageSendTransportPort,
++        caller_recipient_id: str,
++        is_owner_progress_only_grant: bool = False,
++        destination_url: str = "https://open.feishu.cn/open-apis/im/v1/messages",
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> dict[str, Any]:
++        if is_owner_progress_only_grant:
++            raise PermissionError(
++                "Ordinary owner_progress grant cannot authorize third-party message.send"
++            )
++        if not getattr(transport, "qualified", False):
++            raise PermissionError(
++                "CAPABILITY_UNAVAILABLE: message send adapter is not qualified for this environment"
++            )
++
++        # Verify bound proposal arguments and latest draft hash BEFORE claiming or dispatching
++        def inspect_bound(db: sqlite3.Connection) -> tuple[str, dict[str, Any]]:
++            doc = load_proposal(db, context, operation_id, self._operations._registry).value()
++            return str(doc["task_id"]), dict(doc["args"])
++
++        task_id, bound_args = self._writer.read(inspect_bound)
++        if caller_recipient_id != bound_args["recipient_id"]:
++            raise PermissionError("Caller recipient_id does not match approved proposal binding")
++        if not self._drafts.verify_latest_draft_binding(
++            context, str(bound_args["draft_artifact_id"]), str(bound_args["draft_sha256"])
++        ):
++            raise PermissionError("Approved draft hash is stale or modified; refusing to send")
++
++        eg_dec = self._egress.evaluate(
++            EgressRequest(
++                surface="MESSAGE_TOOL",
++                task_network_mode="CONNECTED",
++                data_class="WORKSPACE",
++                destination_url=destination_url,
++            )
++        )
++        if eg_dec.decision == "DENY":
++            raise PermissionError(f"Egress denied for message.send: {eg_dec.reason_code}")
++
++        draft_dl = self._artifacts.download(context, str(bound_args["draft_artifact_id"]))
++        draft_doc = dict(strict_json(draft_dl.data))
++
++        # Short transaction 1: claim
++        claimed = dict(
++            strict_json(
++                self._writer.submit(
++                    self._dispatcher.claim(
++                        context,
++                        operation_id,
++                        runtime_epoch,
++                        executor_id,
++                        [ResourceRequest("WORKSPACE", context.workspace_id, expected_generation=1)],
++                        30_000,
++                        request_id + ":claim",
++                        deadline_monotonic_ms,
++                    )
++                ).result(timeout=5)
++            )
++        )
++        att_id = str(claimed["attempt_id"])
++        disp_id = str(claimed["dispatch_id"])
++
++        # Short transaction 2: begin_dispatch
++        self._writer.submit(
++            self._dispatcher.begin_dispatch(
++                context,
++                operation_id,
++                att_id,
++                runtime_epoch,
++                executor_id,
++                request_id + ":dispatch",
++                deadline_monotonic_ms,
++            )
++        ).result(timeout=5)
++
++        envelope = MessageSendEnvelope(
++            operation_id=operation_id,
++            attempt_id=att_id,
++            dispatch_id=disp_id,
++            account_id=str(bound_args["account_id"]),
++            recipient_id=str(bound_args["recipient_id"]),
++            draft_artifact_id=str(bound_args["draft_artifact_id"]),
++            draft_sha256=str(bound_args["draft_sha256"]),
++            body_text=str(draft_doc["body_text"]),
++        )
++        try:
++            send_res = transport.send_message(envelope)
++        except Exception:
++            send_res = MessageSendResult(status="UNKNOWN", error_code="CONNECTION_LOST_AFTER_SEND")
++
++        return self._record_send_outcome(
++            context,
++            task_id=task_id,
++            operation_id=operation_id,
++            attempt_id=att_id,
++            result=send_res,
++            request_id=request_id + ":outcome",
++            deadline_monotonic_ms=deadline_monotonic_ms,
++        )
++
++    def _record_send_outcome(
++        self,
++        context: InboundContext,
++        *,
++        task_id: str,
++        operation_id: str,
++        attempt_id: str,
++        result: MessageSendResult,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> dict[str, Any]:
++        fp = hashlib.sha256(
++            canonicalize({"req": request_id, "op": operation_id, "status": result.status})
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return None
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            now = time.time_ns() // 1_000_000
++            op_ver = int(
++                db.execute(
++                    "SELECT version FROM operations WHERE operation_id=?", (operation_id,)
++                ).fetchone()[0]
++            )
++            t_row = db.execute(
++                "SELECT state,version FROM tasks WHERE task_id=?", (task_id,)
++            ).fetchone()
++            assert t_row is not None
++            t_state, t_ver = str(t_row[0]), int(t_row[1])
++
++            if result.status == "SENT":
++                rec_json = canonicalize(
++                    {"provider_message_id": result.provider_message_id}
++                ).decode()
++                db.execute(
++                    "UPDATE resource_leases SET holder_attempt_id=NULL,runtime_epoch=NULL,"
++                    "state='RELEASED',acquired_at=NULL,expires_at=NULL,version=version+1,"
++                    "updated_at=? WHERE holder_attempt_id=? AND state='HELD'",
++                    (now, attempt_id),
++                )
++                db.execute(
++                    "UPDATE operation_attempts SET status='SUCCEEDED',receipt_json=?,"
++                    "finished_at=?,version=version+1 WHERE attempt_id=?",
++                    (rec_json, now, attempt_id),
++                )
++                db.execute(
++                    "UPDATE operations SET state='SUCCEEDED',completed_at=?,updated_at=?,"
++                    "version=? WHERE operation_id=?",
++                    (now, now, op_ver + 1, operation_id),
++                )
++                out_op_state = "SUCCEEDED"
++                out_t_state = t_state
++            else:
++                # Keep lease held as quarantine and transition Operation -> UNKNOWN
++                db.execute(
++                    "UPDATE operation_attempts SET status='UNKNOWN',error_code=?,version=version+1 "
++                    "WHERE attempt_id=?",
++                    (result.error_code or "SEND_OUTCOME_UNKNOWN", attempt_id),
++                )
++                db.execute(
++                    "UPDATE operations SET state='UNKNOWN',unknown_reason='send_outcome_unknown',"
++                    "updated_at=?,version=? WHERE operation_id=?",
++                    (now, op_ver + 1, operation_id),
++                )
++                if t_state == "RUNNING":
++                    db.execute(
++                        "UPDATE tasks SET state='RECONCILING',version=version+1,updated_at=? "
++                        "WHERE task_id=? AND version=?",
++                        (now, task_id, t_ver),
++                    )
++                    out_t_state = "RECONCILING"
++                else:
++                    out_t_state = t_state
++                out_op_state = "UNKNOWN"
++
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "operation_id": operation_id,
++                "attempt_id": attempt_id,
++                "operation_state": out_op_state,
++                "task_state": out_t_state,
++            }
++            db.execute(
++                "INSERT INTO events(event_id,aggregate_kind,aggregate_id,aggregate_version,task_id,"
++                "operation_id,actor_principal_id,event_type,schema_version,trace_id,payload_json,"
++                "created_at) VALUES(?,'Operation',?,?,?,?,?,'MESSAGE_SEND_RECORDED',1,?,?,?)",
++                (
++                    "evt_" + secrets.token_hex(16),
++                    operation_id,
++                    op_ver + 1,
++                    task_id,
++                    operation_id,
++                    context.principal_id,
++                    "trc_" + secrets.token_hex(16),
++                    canonicalize(receipt).decode(),
++                    now,
++                ),
++            )
++            return canonicalize(receipt)
++
++        raw = self._writer.submit(
++            WriterCommand(request_id, fp, "result", deadline_monotonic_ms, apply, lookup)
++        ).result(timeout=5)
++        return dict(strict_json(raw))
+--- /dev/null
 +++ b/services/core/src/openbot/tools/workspace/__init__.py
 @@ -0,0 +1 @@
 +"""Controlled workspace read, search, and patch tools."""
@@ -14683,7 +15040,7 @@
 +        )
 --- /dev/null
 +++ b/task_plan.md
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,40 @@
 +# OpenBot v1.2 实施计划
 +
 +目标：保留 OB-001 至 OB-096，按依赖实施到 M3；任务完成须有正向、负向和所需真实环境证据。
@@ -14710,7 +15067,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/035/036/037/038/039/040/041/042/043 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/本地消息草稿工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/035/036/037/038/039/040/041/042/043/044 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -14720,6 +15077,10 @@
 +## 约束
 +
 +不推送、不部署、不发布、不发送第三方消息、不安装系统服务，不读取或使用用户真实凭据。
++
++## English Summary
++
++Goal: Implement OpenBot v1.2 through M3 following the 96-task DAG in `tasks/backlog.json`, reading `component_refs`, `reuse_type`, and `reuse_notes` for each task, writing failing RED tests before minimal implementation, running full M0/M1 verification (`scripts/verify.py`), maintaining bilingual documentation, and committing/pushing each completed task without leaking credentials.
 --- a/tasks/TASKS.md
 +++ b/tasks/TASKS.md
 @@ -1,6 +1,6 @@
@@ -15116,6 +15477,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
  
  **需求** [RQ01](requirements_traceability.md#rq01)、[RQ05](requirements_traceability.md#rq05)、[RQ11](requirements_traceability.md#rq11)
+ 
+@@ -2760,7 +2760,7 @@
+ 
+ **实现消息发送用例与受控适配端口**
+ 
+-阶段 M1 · 优先级 P1 · 状态 TODO · 能力域 Security · 规模 M
++阶段 M1 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ06](requirements_traceability.md#rq06)
  
 @@ -3112,7 +3112,7 @@
  
@@ -16243,7 +16613,7 @@
      "owner_lane": "Runtime",
      "size": "S",
      "req_ids": [
-@@ -2647,7 +3104,20 @@
+@@ -2647,14 +3104,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -16265,7 +16635,37 @@
    },
    {
      "id": "OB-044",
-@@ -2851,7 +3321,7 @@
+     "title": "实现消息发送用例与受控适配端口",
+     "milestone": "M1",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Security",
+     "size": "M",
+     "req_ids": [
+@@ -2708,7 +3178,20 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 MessageSendService and MessageSendTransportPort (bound draft_sha256/account_id/recipient_id verification, owner_progress grant reuse refusal, unqualified adapter CAPABILITY_UNAVAILABLE gate, two-phase claim->begin_dispatch, and RECONCILE_ONLY UNKNOWN retention on post-send disconnect)",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/integration/storage/test_message_send.py",
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-017、OB-018、OB-019、OB-020、OB-037、OB-043 仍为 IN_PROGRESS，且真实飞书发送适配器需在 M2（OB-047/051）通过真实租户验证后才启用；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (lark-oapi), reuse_type (control_owned), and reuse_notes; kept message.send control-owned behind Broker approval and RECONCILE_ONLY semantics without enabling unqualified lark-oapi runtime transport; verified no auto-resend on UNKNOWN and no owner_progress grant reuse."
++    }
+   },
+   {
+     "id": "OB-045",
+@@ -2851,7 +3334,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -16274,7 +16674,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3378,19 @@
+@@ -2908,7 +3391,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -16295,7 +16695,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4761,7 @@
+@@ -4279,7 +4774,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -16304,7 +16704,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4819,26 @@
+@@ -4337,14 +4832,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -16333,7 +16733,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4895,19 @@
+@@ -4401,7 +4908,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -16354,7 +16754,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +6029,7 @@
+@@ -5523,7 +6042,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -16363,7 +16763,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6082,26 @@
+@@ -5576,14 +6095,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -16392,7 +16792,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6160,26 @@
+@@ -5642,14 +6173,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -16421,7 +16821,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6234,26 @@
+@@ -5704,14 +6247,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -16450,7 +16850,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6320,25 @@
+@@ -5778,14 +6333,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -16478,7 +16878,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6406,19 @@
+@@ -5853,7 +6419,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21318,6 +21718,286 @@
 +    assert (
 +        drafts.verify_latest_draft_binding(context, d2.draft_artifact_id, d2.draft_sha256) is True
 +    )
+--- /dev/null
++++ b/tests/integration/storage/test_message_send.py
+@@ -0,0 +1,277 @@
++import hashlib
++import json
++import time
++
++import pytest
++from openbot.application.dispatch import DispatchService
++from openbot.application.operations import OperationService
++from openbot.application.recovery import RecoveryService
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import SchemaRegistry, canonicalize
++from openbot.policy.approvals import ApprovalService
++from openbot.policy.egress import EgressGuard
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.writer import Writer
++from openbot.tools.messages.draft import ContactCandidate, MessageDraftService
++from openbot.tools.messages.send import (
++    MessageSendEnvelope,
++    MessageSendResult,
++    MessageSendService,
++)
++
++from tests.integration.storage.test_migrations import ROOT
++from tests.integration.storage.test_recovery import MemoryChallenges
++
++
++def _deadline() -> int:
++    return int(time.monotonic() * 1000) + 5000
++
++
++class FakeMessageTransport:
++    def __init__(self, *, qualified: bool = True, drop_after_send: bool = False) -> None:
++        self.qualified = qualified
++        self.drop_after_send = drop_after_send
++        self.sent_envelopes: list[MessageSendEnvelope] = []
++
++    def send_message(self, envelope: MessageSendEnvelope) -> MessageSendResult:
++        self.sent_envelopes.append(envelope)
++        if self.drop_after_send:
++            raise ConnectionError("remote sent message then dropped connection before receipt")
++        return MessageSendResult(
++            status="SENT",
++            provider_message_id=f"im_msg_{len(self.sent_envelopes)}",
++        )
++
++
++@pytest.fixture
++def send_env(tmp_path):
++    path = tmp_path / "send.sqlite"
++    blob_root = tmp_path / "send_blobs"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'CONNECTED','ep_1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++        manifest = {
++            "name": "message.send",
++            "version": "1.0.0",
++            "effect": "EXTERNAL_WRITE",
++            "retry_class": "RECONCILE_ONLY",
++            "input_schema": {
++                "$schema": "https://json-schema.org/draft/2020-12/schema",
++                "type": "object",
++                "properties": {
++                    "draft_artifact_id": {"type": "string"},
++                    "draft_sha256": {"type": "string"},
++                    "account_id": {"type": "string"},
++                    "recipient_id": {"type": "string"},
++                },
++                "required": ["draft_artifact_id", "draft_sha256", "account_id", "recipient_id"],
++                "additionalProperties": False,
++            },
++        }
++        raw = canonicalize(manifest)
++        db.execute(
++            "INSERT INTO tool_registry VALUES("
++            "'message.send','1.0.0',?,NULL,'builtin',?,'ACTIVE',1000)",
++            (hashlib.sha256(raw).hexdigest(), raw.decode()),
++        )
++    finally:
++        db.close()
++
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    registry = SchemaRegistry.from_directory(ROOT / "contracts")
++    challenges = MemoryChallenges()
++    writer = Writer(path)
++    inbox = Inbox(writer, registry)
++    tasks = TaskStateService(writer)
++    ops = OperationService(writer, challenges, registry)
++    approvals = ApprovalService(writer, challenges, registry)
++    dispatcher = DispatchService(writer, registry)
++    recovery = RecoveryService(writer, registry)
++    art_store = ArtifactStore(writer, blob_root)
++    drafts = MessageDraftService(writer, tasks, art_store)
++    egress = EgressGuard(
++        profile_network_mode="CONNECTED",
++        profile_allowed_domains=frozenset({"open.feishu.cn"}),
++        workspace_allowed_domains=frozenset({"open.feishu.cn"}),
++    )
++    send_svc = MessageSendService(writer, ops, dispatcher, drafts, art_store, egress)
++    try:
++        yield (
++            path,
++            context,
++            writer,
++            inbox,
++            tasks,
++            ops,
++            approvals,
++            dispatcher,
++            recovery,
++            drafts,
++            send_svc,
++            challenges,
++        )
++    finally:
++        writer.close()
++
++
++def test_message_send_rejects_wrong_recipient_unqualified_adapter_and_disconnect_unknown(
++    send_env,
++):
++    (
++        _,
++        context,
++        writer,
++        inbox,
++        tasks,
++        _,
++        approvals,
++        _,
++        recovery,
++        drafts,
++        send_svc,
++        challenges,
++    ) = send_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "send-msg", "network_mode": "CONNECTED"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-snd-1", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-snd-1", _deadline())).result(5)
++
++    d1 = drafts.create_or_revise_draft(
++        context,
++        task_id=task_id,
++        channel="feishu",
++        account_id="acc_feishu_1",
++        recipient_candidates=(ContactCandidate("ou_target_1", "Target 1"),),
++        body_text="v1 body",
++        request_id="snd-drf-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert d1.draft_artifact_id is not None and d1.draft_sha256 is not None
++
++    # Propose and approve message.send bound to d1
++    proposed = send_svc.propose_send(
++        context,
++        task_id=task_id,
++        draft_artifact_id=d1.draft_artifact_id,
++        draft_sha256=d1.draft_sha256,
++        account_id="acc_feishu_1",
++        recipient_id="ou_target_1",
++        request_id="snd-prop-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    op_id, apr_id = proposed["operation_id"], proposed["approval_id"]
++    approvals.decide(
++        context,
++        apr_id,
++        json.dumps(
++            {
++                "expected_version": 1,
++                "expected_binding_hash": proposed["binding_hash"],
++                "decision": "APPROVE",
++                "nonce": challenges.get(apr_id).decode(),
++            }
++        ),
++        "snd-apr-1",
++        _deadline(),
++    )
++    writer.submit(tasks.command(context, task_id, 3, "RUNNING", "run-snd-2", _deadline())).result(5)
++
++    # 1. Owner progress grant or wrong recipient cannot authorize third-party send
++    with pytest.raises(PermissionError, match="recipient_id|owner_progress"):
++        send_svc.execute_approved_send(
++            context,
++            operation_id=op_id,
++            runtime_epoch="ep_1",
++            executor_id="exec_1",
++            transport=FakeMessageTransport(qualified=True),
++            caller_recipient_id="ou_wrong_recipient",
++            is_owner_progress_only_grant=True,
++            request_id="snd-exec-wrong",
++            deadline_monotonic_ms=_deadline(),
++        )
++
++    # 2. Unqualified real adapter (before M2 qualification) fails with CAPABILITY_UNAVAILABLE
++    with pytest.raises(PermissionError, match="CAPABILITY_UNAVAILABLE"):
++        send_svc.execute_approved_send(
++            context,
++            operation_id=op_id,
++            runtime_epoch="ep_1",
++            executor_id="exec_1",
++            transport=FakeMessageTransport(qualified=False),
++            caller_recipient_id="ou_target_1",
++            request_id="snd-exec-unqual",
++            deadline_monotonic_ms=_deadline(),
++        )
++
++    # 3. Disconnect after remote send enters UNKNOWN/RECONCILING; RECONCILE_ONLY never resends
++    dropping_transport = FakeMessageTransport(qualified=True, drop_after_send=True)
++    out = send_svc.execute_approved_send(
++        context,
++        operation_id=op_id,
++        runtime_epoch="ep_1",
++        executor_id="exec_1",
++        transport=dropping_transport,
++        caller_recipient_id="ou_target_1",
++        request_id="snd-exec-drop",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert out["operation_state"] == "UNKNOWN"
++    assert out["task_state"] == "RECONCILING"
++    assert len(dropping_transport.sent_envelopes) == 1
++
++    # Recovery on RECONCILE_ONLY message.send refuses to mint a retry ticket (never auto-resends!)
++    writer.submit(
++        recovery.recover_epoch(
++            context,
++            "ep_2",
++            "boot_2",
++            "sup_2",
++            old_epoch_isolated=True,
++            request_id="snd-rec-ep2",
++            deadline_monotonic_ms=_deadline(),
++        )
++    ).result(5)
++    rec_out, ticket = recovery.recover_operation(
++        context,
++        op_id,
++        "ep_2",
++        dispatch_was_sent=True,
++        probe_status="UNKNOWN",
++        request_id="snd-rec-op",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert rec_out["operation_state"] == "UNKNOWN"
++    assert ticket is None
++    assert len(dropping_transport.sent_envelopes) == 1
 --- /dev/null
 +++ b/tests/integration/storage/test_migrations.py
 @@ -0,0 +1,172 @@

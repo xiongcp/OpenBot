@@ -11,3 +11,7 @@ JCS 预期字符串独立来自 [RFC8785 3.2.2—3.2.3](https://www.rfc-editor.o
 模型仅生成 tool_name / args，由本地 Manifest 再校验；两个 fake Provider 和独立 fake executor 共用同一值对象，不给 provider 自动执行权限。事件身份/接收时间由 TrustedSource 接入上下文提供，入站 body 不能赋权。持久事件 seq 来自未来数据库 writer，事件回放没有工具执行入口。
 
 CONNECTED / LOCAL_MODEL / OFFLINE 为独立版本配置；不允许 cloud fallback、SDK 重试叠加、宿主执行、运行期下载。没有真实本地推理 / runner / 出口证据时连接工厂返回 CAPABILITY_UNAVAILABLE；loopback 地址不作证明。UTC/monotonic/boot 变化测试使旧敏感 TTL 失效；派发后 timeout/cancel 映射 UNKNOWN，未把所有异常设为 retryable。
+
+## English Summary
+
+Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts tests/unit -q`. Verifies OB-006/007/008/009/090 standard contracts: RFC 8785 JCS canonicalization (UTF-16 key ordering, safe integers, duplicate-key rejection), full JSON Schema Draft 2020-12 validation with local-only `$ref` registry and zero network retrieval, strict immutable Pydantic DTOs, `CONNECTED`/`LOCAL_MODEL`/`OFFLINE` configuration guards, and `ClockSnapshot` TTL verification.

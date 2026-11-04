@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft Tools, Egress, Secrets, and Redaction
+# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿与发送工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft/Send Tools, Egress, Secrets, and Redaction
 
 ## 中文说明
 
@@ -61,6 +61,11 @@
 1. 稳定收件人解析与同名歧义阻断：当 `recipient_candidates` 缺失或存在多个同名候选人时，原子将 Task 转入 `WAITING_INPUT` 并返回 `sendable=False`、`draft_artifact_id=None`，绝不在收件人未唯一确认时生成可发送草稿。
 2. 本地不可变草稿 Artifact 与修订版本绑定：校验全部附件 Artifact 的存在性与 SHA-256，将通道、账户、稳定 `recipient_id`、版本号（`revision`）、正文与附件摘要序列化为 canonical JSON 存入 `ArtifactStore`；每次修订生成新 `revision` 与新 `draft_sha256`，旧版本摘要在 `verify_latest_draft_binding` 中自动失效，且全过程零网络请求（`network_calls_made=0`）。
 
+实现（OB-044）：新增 `services/core/src/openbot/tools/messages/send.py`（`MessageSendService`、`MessageSendTransportPort`、`MessageSendEnvelope`、`MessageSendResult`）：
+1. 绑定草稿哈希与稳定收件人提案（`propose_send`）：在生成 `message.send` 提案前强制调用 `MessageDraftService.verify_latest_draft_binding` 核验最新不可变草稿 `draft_artifact_id` 与 `draft_sha256`，并将 `destination` 固定为 `MESSAGE_RECIPIENT`（绑定 `account_id` 与稳定 `recipient_id`），默认采用 `RECONCILE_ONLY` 重试类别。
+2. 独立外发授权与适配门禁（`execute_approved_send`）：拒绝将普通 `owner_progress` 通知授权复用为第三方发送授权；在 M2 真实平台适配器通过验证前（`transport.qualified=False`）直接拒绝并返回 `CAPABILITY_UNAVAILABLE`；派发前再次核验 `caller_recipient_id`、最新草稿哈希与 `EgressGuard`。
+3. 成功后断连进入 `UNKNOWN` 与禁止自动重发：经 `claim` -> `begin_dispatch` 两次短事务后在事务外调用 `transport.send_message`；若发送中断连或回执丢失，将 `operation_attempts` 与 `operations` 置为 `UNKNOWN`、关联 Task 置为 `RECONCILING` 并保留资源 quarantine；后续恢复（`RecoveryService.recover_operation`）对 `RECONCILE_ONLY` 绝不签发重试凭据，防止重复发送外部消息。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -68,10 +73,10 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
-- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（88 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed 与 `test_message_draft.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 
 ## English Summary
 
@@ -111,3 +116,6 @@
 - **OB-043 (`IN_PROGRESS`)**: Local immutable message draft service (`services/core/src/openbot/tools/messages/draft.py` and `tests/integration/storage/test_message_draft.py`, 1 passed):
   1. `create_or_revise_draft`: Transitions the task to `WAITING_INPUT` (`sendable=False`) when recipient candidates are missing or ambiguous; stores canonical JSON drafts with stable `recipient_id`, `channel`, `account_id`, `revision`, and attachment SHA-256 digests in `ArtifactStore` with zero network calls (`network_calls_made=0`).
   2. `verify_latest_draft_binding`: Ensures edits create a new `revision` and `draft_sha256`, invalidating stale draft hashes so old approvals cannot authorize modified message content.
+- **OB-044 (`IN_PROGRESS`)**: Controlled `message.send` use case and transport port (`services/core/src/openbot/tools/messages/send.py` and `tests/integration/storage/test_message_send.py`, 1 passed):
+  1. `propose_send` & `execute_approved_send`: Binds `draft_artifact_id`, `draft_sha256`, `account_id`, and stable `recipient_id` (`RECONCILE_ONLY`); rejects reusing ordinary `owner_progress` notification grants for third-party sends, rejects recipient or draft-hash drift, and fails closed with `CAPABILITY_UNAVAILABLE` when the real channel adapter is not yet qualified (`transport.qualified=False`).
+  2. Disconnect handling: Runs two-phase `claim -> begin_dispatch` before calling `transport.send_message` outside the transaction; connection drops after send transition the Operation to `UNKNOWN` and Task to `RECONCILING` while retaining resource quarantine and refusing automatic re-send.
