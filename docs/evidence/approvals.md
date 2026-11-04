@@ -1,4 +1,4 @@
-# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031 / OB-032 / OB-037：提案、审批、六维策略、两次短事务派发、恢复、取消、文件句柄守卫与统一外发策略 / Proposals, Approvals, 6D Policy, Two-Phase Dispatch, Recovery, Cancellation, File Guard, and Unified Egress Policy
+# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031 / OB-032 / OB-037 / OB-038：提案、审批、六维策略、两次短事务派发、恢复、取消、文件守卫、统一外发与密钥最小注入 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard, Egress, and Minimal Secret Injection
 
 ## 中文说明
 
@@ -33,14 +33,20 @@
 2. 敏感预览/摘要保护与隐式出口阻断：`SENSITIVE` 数据不会因放进通知卡片（返回 `REQUIRE_LOCAL`）、上下文摘要（`from_summary=True`）或 Artifact（`from_artifact=True`）而自动放行，发送到允许域名的模型也必须经过显式一次一审 `ASK`；任何 Provider 托管 `web_search`/`remote_mcp`、价格表/词表/语法包运行期下载或扫描器在线验证均直接 `DENY`。
 3. 本地模型 Runner 核验与受控 HTTP 代理配置：允许 loopback 地址不等于允许云转发，必须通过 `LocalModelRunnerAttestation` 证明本地模型来源、禁用 `:cloud` 路由、禁用 web search 且出口隔离已验证；`build_controlled_http_config` 强制 `trust_env=False`、`follow_redirects=False`、`max_retries=0`，清理环境 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` 并仅允许白名单内代理，同时显式声明 Python 审计探针覆盖范围与需要 OS/容器隔离证明的边界。
 
+实现（OB-038）：新增 `services/core/src/openbot/policy/secrets/broker.py`（`SecretBroker`、`SecretUnavailableError`、`SingleUseSecretHandle`、`build_minimal_child_spawn_spec`）与 `native/supervisor/src/credential_transport.rs`：
+1. 锁定 OS 凭据后端白名单（`APPROVED_KEYRING_BACKENDS`）：仅允许 `macos.Keychain`、`windows.WinVaultKeyring`、`linux.SecretService`，拒绝明文文件、未知插件或无独立主密钥的 `Fernet` 文件自动回退；钥匙串锁定（`KEYCHAIN_LOCKED`）、无 D-Bus（`DBUS_UNAVAILABLE`）、无图形会话（`HEADLESS_NO_SESSION`）或用户取消（`USER_CANCELLED`）时抛出不含任何秘密字节的 `SecretUnavailableError`。
+2. 按组件最小权限隔离注入：飞书网关仅可解析 `keychain:feishu:*`；模型网关仅可解析匹配 `selected_provider` 的 `keychain:provider:<selected_provider>:*`（禁止跨 Provider 读取或读取飞书密钥）；Worker 仅获得绑定 `attempt_id` 与有效期的单用途短时 IPC 句柄 `SingleUseSecretHandle`（一次消费即销毁，撤销或轮换 `secret_ref` 立即使全部在途句柄失效）。
+3. 子进程环境净化与 Canary 扫描（`build_minimal_child_spawn_spec`）：不继承父进程 `os.environ`，拒绝挂载宿主 `HOME` 目录，扫描并拒绝任何包含测试/已注册密钥 canary 的 `argv`，确保 child env、argv、异常栈与诊断中零密钥泄漏。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及 Windows/Linux 原生句柄测试尚未闭合。因此 OB-017/018/019/020/022/031/032/037 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/037/038 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 
 ## English Summary
 
@@ -60,3 +66,7 @@
   1. `EgressGuard`: Evaluates `PUBLIC`/`WORKSPACE`/`SENSITIVE`/`SECRET` across `MODEL_GATEWAY`, `LOCAL_MODEL_RUNNER`, `FEISHU_NOTIFICATION`, `BROWSER`, `MCP`, `FILE_UPLOAD`, and `MESSAGE_TOOL`; `OFFLINE` blocks remote egress across all surfaces; `SECRET` is always denied.
   2. Taint & implicit-feature protection: `SENSITIVE` data in notification cards returns `REQUIRE_LOCAL` and in summaries/artifacts to allowed model domains requires `ASK`; provider-hosted `web_search`/`remote_mcp`, asset downloads, and online secret verification are denied.
   3. `LocalModelRunnerAttestation` & `build_controlled_http_config`: Requires verified local model source, disabled cloud routing, and isolated egress rather than trusting `localhost`; strips ambient proxy variables and enforces `trust_env=False`, `follow_redirects=False`, `max_retries=0` while documenting Python probe boundaries.
+- **OB-038 (`IN_PROGRESS`)**: OS credential storage contract and minimal compartmentalized secret injection (`services/core/src/openbot/policy/secrets/broker.py` and `native/supervisor/src/credential_transport.rs`):
+  1. `APPROVED_KEYRING_BACKENDS` & `SecretUnavailableError`: Rejects plaintext or ad-hoc Fernet file fallbacks and unapproved plugins; fails closed on locked keychain, missing D-Bus, headless session, or user cancellation without leaking secret bytes in exceptions.
+  2. `SecretBroker`: Compartmentalizes secrets so the Feishu gateway only accesses `keychain:feishu:*`, model gateways only access `keychain:provider:<selected_provider>:*`, and workers only receive attempt-bound single-use IPC handles (`SingleUseSecretHandle`) invalidated on consumption, rotation, or revocation.
+  3. `build_minimal_child_spawn_spec`: Prevents inheriting ambient `os.environ`, blocks mounting host `HOME`, and rejects `argv` containing any registered secret canary.

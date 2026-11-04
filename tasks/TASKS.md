@@ -1829,7 +1829,7 @@ U3《OpenBot 开源组件复用评估》PDF物理第7–9、13–14、20–24页
 
 **实现密钥存储与最小注入**
 
-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Security · 规模 M
+阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
 
 **需求** [RQ06](requirements_traceability.md#rq06)、[RQ11](requirements_traceability.md#rq11)
 
