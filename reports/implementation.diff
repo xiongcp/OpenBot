@@ -2160,8 +2160,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,106 @@
-+# OB-017—020 / OB-022 / OB-031—035 / OB-037—039：提案、审批、六维策略、派发、恢复、取消、文件守卫/读写补丁/语言验证工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation Tools, Egress, Secrets, and Redaction
+@@ -0,0 +1,113 @@
++# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft Tools, Egress, Secrets, and Redaction
 +
 +## 中文说明
 +
@@ -2220,6 +2220,10 @@
 +2. 忽略外部 Allowlist 与永久禁用在线验证：外部 `# pragma: allowlist secret` 等注释完全不生效；`network_verification_enabled=False` 且 `verify_secret_online_forbidden` 硬拒绝任何向第三方验证端点发送秘密的行为。
 +3. 全出口统一接入与分类保护（`RedactionPipeline`）：统一覆盖 `stdout`、`stderr`、`sdk_debug`、`exception`、`http_header`、`ui_event`、`artifact`、`diagnostic` 与 `model_input` 九类出口；显式声明 `guarantees_100_percent_detection=False` 与 `negative_scan_downgrades_classification=False`（扫描阴性绝不降低 `SECRET`/`SENSITIVE` 分类，不确定敏感内容 `uncertain_sensitivity=True` 直接阻断远端外发）。
 +
++实现（OB-043）：新增 `services/core/src/openbot/tools/messages/draft.py`（`MessageDraftService`、`ContactCandidate`、`MessageDraftOutcome`）：
++1. 稳定收件人解析与同名歧义阻断：当 `recipient_candidates` 缺失或存在多个同名候选人时，原子将 Task 转入 `WAITING_INPUT` 并返回 `sendable=False`、`draft_artifact_id=None`，绝不在收件人未唯一确认时生成可发送草稿。
++2. 本地不可变草稿 Artifact 与修订版本绑定：校验全部附件 Artifact 的存在性与 SHA-256，将通道、账户、稳定 `recipient_id`、版本号（`revision`）、正文与附件摘要序列化为 canonical JSON 存入 `ArtifactStore`；每次修订生成新 `revision` 与新 `draft_sha256`，旧版本摘要在 `verify_latest_draft_binding` 中自动失效，且全过程零网络请求（`network_calls_made=0`）。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2227,10 +2231,10 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
-+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（87 passed，含 `test_workspace_patch.py` 2 passed 与 `test_workspace_validation.py` 2 passed，见 evidence/implementation/m1-storage-tests.log）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（88 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed 与 `test_message_draft.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
++当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 +
 +## English Summary
 +
@@ -2267,6 +2271,9 @@
 +  1. `StreamingSecretRedactor`: Dynamically sizes its holdback window to the longest registered secret (including Base64, URL-encoded, and JSON-escaped variants) rather than relying on a fixed 128-byte window; redacts secrets split across arbitrary chunk boundaries.
 +  2. No allowlist or network bypass: Ignores `# pragma: allowlist secret` comments and permanently disables online secret verification (`network_verification_enabled=False`).
 +  3. `RedactionPipeline`: Filters `stdout`, `stderr`, `sdk_debug`, `exception`, `http_header`, `ui_event`, `artifact`, `diagnostic`, and `model_input` without downgrading `SECRET`/`SENSITIVE` classifications on negative scans (`guarantees_100_percent_detection=False`).
++- **OB-043 (`IN_PROGRESS`)**: Local immutable message draft service (`services/core/src/openbot/tools/messages/draft.py` and `tests/integration/storage/test_message_draft.py`, 1 passed):
++  1. `create_or_revise_draft`: Transitions the task to `WAITING_INPUT` (`sendable=False`) when recipient candidates are missing or ambiguous; stores canonical JSON drafts with stable `recipient_id`, `channel`, `account_id`, `revision`, and attachment SHA-256 digests in `ArtifactStore` with zero network calls (`network_calls_made=0`).
++  2. `verify_latest_draft_binding`: Ensures edits create a new `revision` and `draft_sha256`, invalidating stale draft hashes so old approvals cannot authorize modified message content.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2584,7 +2591,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,58 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2642,6 +2649,7 @@
 +- 推进 OB-041（实现 worker 隔离与资源上限）：实现 ContainerSandboxBroker、validate_and_extract_tar_export 与 native/supervisor/src/worker_control.rs（固定非 root、cap-drop=ALL、no-new-privileges、只读根与 /input、禁网与内存/CPU/PID 上限，拒绝挂载 docker.sock 或宿主 HOME，未认证后端返回 CAPABILITY_UNAVAILABLE 绝不自动回退 Podman/nerdctl/bubblewrap/宿主；登记容器标签归属，客户端退出不等于容器回收，强制 stop -> wait -> 导出 tar 校验 -> remove 时序并拒绝删除未登记用户容器）；新增 3 项测试通过，M0 增至 246 passed/3 skipped，M1 增至 265 passed/1 skipped。因上游 OB-016/036/040/093 仍为 IN_PROGRESS，OB-041 记 IN_PROGRESS。
 +- 推进 OB-042（实现 worker 进程树取消与回收）：实现 ProcessSupervisorService、PLATFORM_CAPABILITY_BOUNDARIES、validate_windows_job_spawn_order 与 native/supervisor/src/process_tree.rs（明确三平台监督边界与 Drop/EOF 非 100% 保证，不引入 command-group；实测 macOS 真实进程组及孙进程 SIGTERM->SIGKILL 回收与僵尸进程收割；通过 process_start_token 防御 PID 复用误杀；残留子孙或未停止容器时保持 quarantine 并阻断新派发；关闭 UI 窗口不停止常驻 daemon）；新增 2 项集成测试通过，M0 增至 248 passed/3 skipped，M1 增至 267 passed/1 skipped。因上游 OB-022/040/041/093 及 Windows/Linux 原生实测待闭合，OB-042 记 IN_PROGRESS。
 +- 推进 OB-035（实现显式语言验证与修改事务）：实现 PinnedGrammarRegistry、IsolatedParserWorker 与 WorkspaceValidationCoordinator（校验固定离线 grammar SHA-256 且禁运行期下载，拒绝工作区内二进制 grammar；在受大小/嵌套深度/超时限制的独立子进程中执行解析以隔离崩溃；多文件第二项验证失败时仅按 PatchCommitJournal 撤回本次修改并保留用户其他未提交文件；显式标记 functional_correctness_proven=False）；新增 2 项集成测试通过，存储套件增至 87 passed，M0 增至 250 passed/3 skipped，M1 增至 269 passed/1 skipped。因上游 OB-034/041/092 仍为 IN_PROGRESS，OB-035 记 IN_PROGRESS。
++- 推进 OB-043（实现本地消息草稿）：实现 MessageDraftService、ContactCandidate 与 MessageDraftOutcome（同名收件人歧义或缺失时原子将 Task 转 WAITING_INPUT 且拒绝生成可发送草稿；唯一稳定收件人时核验附件 SHA-256 并在 ArtifactStore 生成不可变草稿；草稿编辑产生新 revision 与新 draft_sha256 使旧哈希失效，全程零网络调用）；新增集成测试通过，存储套件增至 88 passed，M0 增至 251 passed/3 skipped，M1 增至 270 passed/1 skipped。因上游 OB-036/037 仍为 IN_PROGRESS，OB-043 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -13649,6 +13657,164 @@
 +    )
 +    return clean_env, argv
 --- /dev/null
++++ b/services/core/src/openbot/tools/messages/__init__.py
+@@ -0,0 +1 @@
++"""Local immutable message drafts and controlled external send ports."""
+--- /dev/null
++++ b/services/core/src/openbot/tools/messages/draft.py
+@@ -0,0 +1,151 @@
++"""Local immutable message.draft tool with recipient resolution and attachment digests."""
++
++import time
++from dataclasses import dataclass
++from typing import Any, Literal
++
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import canonicalize, strict_json
++from openbot.storage.inbox import InboundContext
++from openbot.storage.writer import Writer
++
++
++@dataclass(frozen=True, slots=True)
++class ContactCandidate:
++    recipient_id: str
++    display_name: str
++
++
++@dataclass(frozen=True, slots=True)
++class MessageDraftOutcome:
++    status: Literal["DRAFT_READY", "WAITING_INPUT"]
++    sendable: bool
++    revision: int
++    channel: str
++    account_id: str
++    recipient_id: str | None
++    draft_artifact_id: str | None
++    draft_sha256: str | None
++    attachment_digests: tuple[tuple[str, str], ...]
++    network_calls_made: Literal[0] = 0
++
++
++class MessageDraftService:
++    """Create local immutable message drafts and require WAITING_INPUT on ambiguous recipients."""
++
++    def __init__(self, writer: Writer, tasks: TaskStateService, artifacts: ArtifactStore) -> None:
++        self._writer = writer
++        self._tasks = tasks
++        self._artifacts = artifacts
++        self._latest_by_recipient: dict[tuple[str, str, str], tuple[str, str, int]] = {}
++
++    def create_or_revise_draft(
++        self,
++        context: InboundContext,
++        *,
++        task_id: str,
++        channel: str,
++        account_id: str,
++        recipient_candidates: tuple[ContactCandidate, ...],
++        body_text: str,
++        attachment_artifact_ids: tuple[str, ...] = (),
++        prior_revision: int = 0,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> MessageDraftOutcome:
++        if not channel.strip() or not account_id.strip() or not body_text.strip():
++            raise ValueError("channel, account_id, and body_text must be non-empty")
++
++        # 1. Ambiguous or missing recipient MUST transition Task to WAITING_INPUT
++        if len(recipient_candidates) != 1 or not recipient_candidates[0].recipient_id.strip():
++            snap = self._tasks.snapshot(context, task_id)
++            if snap["state"] == "RUNNING":
++                ver = snap["version"]
++                assert isinstance(ver, int)
++                self._writer.submit(
++                    self._tasks.command(
++                        context,
++                        task_id,
++                        ver,
++                        "WAITING_INPUT",
++                        request_id + ":wait_input",
++                        deadline_monotonic_ms,
++                    )
++                ).result(
++                    timeout=max(
++                        0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05
++                    )
++                )
++            return MessageDraftOutcome(
++                status="WAITING_INPUT",
++                sendable=False,
++                revision=prior_revision,
++                channel=channel,
++                account_id=account_id,
++                recipient_id=None,
++                draft_artifact_id=None,
++                draft_sha256=None,
++                attachment_digests=(),
++                network_calls_made=0,
++            )
++
++        recipient = recipient_candidates[0]
++        att_digests: list[tuple[str, str]] = []
++        for aid in attachment_artifact_ids:
++            dl = self._artifacts.download(context, aid)
++            att_digests.append((aid, dl.sha256))
++
++        new_rev = prior_revision + 1
++        draft_doc: dict[str, Any] = {
++            "task_id": task_id,
++            "channel": channel,
++            "account_id": account_id,
++            "recipient_id": recipient.recipient_id,
++            "recipient_display_name": recipient.display_name,
++            "revision": new_rev,
++            "body_text": body_text,
++            "attachments": [{"artifact_id": aid, "sha256": sha} for aid, sha in att_digests],
++        }
++        draft_bytes = canonicalize(draft_doc)
++        art_rec = self._artifacts.put(
++            context,
++            data=draft_bytes,
++            mime="application/json",
++            classification="WORKSPACE",
++            scope_kind="TASK",
++            task_id=task_id,
++            purpose=f"message_draft:v{new_rev}",
++            request_id=request_id + ":artifact",
++            deadline_monotonic_ms=deadline_monotonic_ms,
++        )
++        key = (task_id, account_id, recipient.recipient_id)
++        self._latest_by_recipient[key] = (art_rec.object_id, art_rec.sha256, new_rev)
++        return MessageDraftOutcome(
++            status="DRAFT_READY",
++            sendable=True,
++            revision=new_rev,
++            channel=channel,
++            account_id=account_id,
++            recipient_id=recipient.recipient_id,
++            draft_artifact_id=art_rec.object_id,
++            draft_sha256=art_rec.sha256,
++            attachment_digests=tuple(att_digests),
++            network_calls_made=0,
++        )
++
++    def verify_latest_draft_binding(
++        self,
++        context: InboundContext,
++        draft_artifact_id: str | None,
++        expected_sha256: str | None,
++    ) -> bool:
++        if not draft_artifact_id or not expected_sha256:
++            return False
++        dl = self._artifacts.download(context, draft_artifact_id)
++        if dl.sha256 != expected_sha256:
++            return False
++        doc = dict(strict_json(dl.data))
++        key = (str(doc["task_id"]), str(doc["account_id"]), str(doc["recipient_id"]))
++        latest = self._latest_by_recipient.get(key)
++        return latest == (draft_artifact_id, expected_sha256, int(doc["revision"]))
+--- /dev/null
 +++ b/services/core/src/openbot/tools/workspace/__init__.py
 @@ -0,0 +1 @@
 +"""Controlled workspace read, search, and patch tools."""
@@ -14544,7 +14710,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/035/036/037/038/039/040/041/042 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/035/036/037/038/039/040/041/042/043 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/本地消息草稿工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -14795,6 +14961,15 @@
  
 -阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Security · 规模 M
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)、[RQ06](requirements_traceability.md#rq06)
+ 
+@@ -1716,7 +1716,7 @@
+ 
+ **实现本地消息草稿**
+ 
+-阶段 M1 · 优先级 P1 · 状态 TODO · 能力域 Runtime · 规模 S
++阶段 M1 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 S
  
  **需求** [RQ04](requirements_traceability.md#rq04)、[RQ06](requirements_traceability.md#rq06)
  
@@ -16038,7 +16213,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2595,7 +3039,20 @@
+@@ -2595,14 +3039,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "OS/arch/原语版本，PID身份/Job/容器归属与前后进程树清单及清理失败决定。"
      ],
@@ -16060,7 +16235,37 @@
    },
    {
      "id": "OB-043",
-@@ -2851,7 +3308,7 @@
+     "title": "实现本地消息草稿",
+     "milestone": "M1",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Runtime",
+     "size": "S",
+     "req_ids": [
+@@ -2647,7 +3104,20 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 MessageDraftService (WAITING_INPUT on ambiguous recipient candidates, immutable ArtifactStore draft generation with attachment SHA-256 digests, revision bumping invalidating old draft hashes, and zero network calls)",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/integration/storage/test_message_draft.py",
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-036 与 OB-037 仍为 IN_PROGRESS；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs ([]), reuse_type (control_owned), and reuse_notes; implemented local immutable message draft creation and recipient disambiguation without auto-send or first-sender-as-owner logic."
++    }
+   },
+   {
+     "id": "OB-044",
+@@ -2851,7 +3321,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -16069,7 +16274,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3365,19 @@
+@@ -2908,7 +3378,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -16090,7 +16295,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4748,7 @@
+@@ -4279,7 +4761,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -16099,7 +16304,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4806,26 @@
+@@ -4337,14 +4819,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -16128,7 +16333,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4882,19 @@
+@@ -4401,7 +4895,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -16149,7 +16354,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +6016,7 @@
+@@ -5523,7 +6029,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -16158,7 +16363,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6069,26 @@
+@@ -5576,14 +6082,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -16187,7 +16392,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6147,26 @@
+@@ -5642,14 +6160,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -16216,7 +16421,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6221,26 @@
+@@ -5704,14 +6234,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -16245,7 +16450,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6307,25 @@
+@@ -5778,14 +6320,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -16273,7 +16478,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6393,19 @@
+@@ -5853,7 +6406,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20949,6 +21154,170 @@
 +        )
 +    finally:
 +        rdb.close()
+--- /dev/null
++++ b/tests/integration/storage/test_message_draft.py
+@@ -0,0 +1,161 @@
++import json
++import time
++
++import pytest
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import SchemaRegistry
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.writer import Writer
++from openbot.tools.messages.draft import ContactCandidate, MessageDraftService
++
++from tests.integration.storage.test_migrations import ROOT
++
++
++def _deadline() -> int:
++    return int(time.monotonic() * 1000) + 5000
++
++
++@pytest.fixture
++def draft_env(tmp_path):
++    path = tmp_path / "draft.sqlite"
++    blob_root = tmp_path / "draft_blobs"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++    finally:
++        db.close()
++
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    registry = SchemaRegistry.from_directory(ROOT / "contracts")
++    writer = Writer(path)
++    inbox = Inbox(writer, registry)
++    tasks = TaskStateService(writer)
++    art_store = ArtifactStore(writer, blob_root)
++    drafts = MessageDraftService(writer, tasks, art_store)
++    try:
++        yield path, context, writer, inbox, tasks, art_store, drafts
++    finally:
++        writer.close()
++
++
++def test_ambiguous_recipient_enters_waiting_input_and_revision_produces_new_immutable_hash(
++    draft_env,
++):
++    _, context, writer, inbox, tasks, art_store, drafts = draft_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "draft-msg", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-drf-1", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-drf-1", _deadline())).result(5)
++
++    # 1. Ambiguous recipient name (2 contacts named 'Alex') moves Task to WAITING_INPUT
++    # and refuses to produce a sendable draft artifact!
++    ambiguous = drafts.create_or_revise_draft(
++        context,
++        task_id=task_id,
++        channel="feishu",
++        account_id="acc_feishu_1",
++        recipient_candidates=(
++            ContactCandidate("ou_alex_1", "Alex (Engineering)"),
++            ContactCandidate("ou_alex_2", "Alex (Finance)"),
++        ),
++        body_text="Hello Alex",
++        attachment_artifact_ids=(),
++        request_id="drf-ambig-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert ambiguous.status == "WAITING_INPUT"
++    assert ambiguous.sendable is False
++    assert ambiguous.draft_artifact_id is None
++    assert tasks.snapshot(context, task_id)["state"] == "WAITING_INPUT"
++
++    # Resume task WAITING_INPUT -> QUEUED -> RUNNING after user clarifies recipient
++    cur_ver = int(tasks.snapshot(context, task_id)["version"])
++    writer.submit(
++        tasks.command(context, task_id, cur_ver, "QUEUED", "q-drf-2", _deadline())
++    ).result(5)
++    writer.submit(
++        tasks.command(context, task_id, cur_ver + 1, "RUNNING", "run-drf-2", _deadline())
++    ).result(5)
++
++    # 2. Unambiguous stable recipient ID produces immutable draft artifact v1 with 0 network calls
++    att = art_store.put(
++        context,
++        data=b"attachment content",
++        mime="text/plain",
++        classification="WORKSPACE",
++        scope_kind="TASK",
++        task_id=task_id,
++        purpose="draft_attachment",
++        request_id="drf-att-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    d1 = drafts.create_or_revise_draft(
++        context,
++        task_id=task_id,
++        channel="feishu",
++        account_id="acc_feishu_1",
++        recipient_candidates=(ContactCandidate("ou_alex_1", "Alex (Engineering)"),),
++        body_text="Draft v1 body",
++        attachment_artifact_ids=(att.object_id,),
++        request_id="drf-v1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert d1.status == "DRAFT_READY"
++    assert d1.sendable is True
++    assert d1.revision == 1
++    assert d1.recipient_id == "ou_alex_1"
++    assert d1.draft_sha256 is not None
++
++    # 3. Editing draft body produces revision 2 with a distinct draft_sha256; old hash is stale
++    d2 = drafts.create_or_revise_draft(
++        context,
++        task_id=task_id,
++        channel="feishu",
++        account_id="acc_feishu_1",
++        recipient_candidates=(ContactCandidate("ou_alex_1", "Alex (Engineering)"),),
++        body_text="Draft v2 edited body",
++        attachment_artifact_ids=(att.object_id,),
++        prior_revision=d1.revision,
++        request_id="drf-v2",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert d2.revision == 2
++    assert d2.draft_sha256 != d1.draft_sha256
++    assert (
++        drafts.verify_latest_draft_binding(context, d1.draft_artifact_id, d1.draft_sha256) is False
++    )
++    assert (
++        drafts.verify_latest_draft_binding(context, d2.draft_artifact_id, d2.draft_sha256) is True
++    )
 --- /dev/null
 +++ b/tests/integration/storage/test_migrations.py
 @@ -0,0 +1,172 @@

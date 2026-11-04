@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-031—035 / OB-037—039：提案、审批、六维策略、派发、恢复、取消、文件守卫/读写补丁/语言验证工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation Tools, Egress, Secrets, and Redaction
+# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043：提案、审批、六维策略、派发、恢复、取消、文件/补丁/语言验证/消息草稿工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File/Patch/Validation/Draft Tools, Egress, Secrets, and Redaction
 
 ## 中文说明
 
@@ -57,6 +57,10 @@
 2. 忽略外部 Allowlist 与永久禁用在线验证：外部 `# pragma: allowlist secret` 等注释完全不生效；`network_verification_enabled=False` 且 `verify_secret_online_forbidden` 硬拒绝任何向第三方验证端点发送秘密的行为。
 3. 全出口统一接入与分类保护（`RedactionPipeline`）：统一覆盖 `stdout`、`stderr`、`sdk_debug`、`exception`、`http_header`、`ui_event`、`artifact`、`diagnostic` 与 `model_input` 九类出口；显式声明 `guarantees_100_percent_detection=False` 与 `negative_scan_downgrades_classification=False`（扫描阴性绝不降低 `SECRET`/`SENSITIVE` 分类，不确定敏感内容 `uncertain_sensitivity=True` 直接阻断远端外发）。
 
+实现（OB-043）：新增 `services/core/src/openbot/tools/messages/draft.py`（`MessageDraftService`、`ContactCandidate`、`MessageDraftOutcome`）：
+1. 稳定收件人解析与同名歧义阻断：当 `recipient_candidates` 缺失或存在多个同名候选人时，原子将 Task 转入 `WAITING_INPUT` 并返回 `sendable=False`、`draft_artifact_id=None`，绝不在收件人未唯一确认时生成可发送草稿。
+2. 本地不可变草稿 Artifact 与修订版本绑定：校验全部附件 Artifact 的存在性与 SHA-256，将通道、账户、稳定 `recipient_id`、版本号（`revision`）、正文与附件摘要序列化为 canonical JSON 存入 `ArtifactStore`；每次修订生成新 `revision` 与新 `draft_sha256`，旧版本摘要在 `verify_latest_draft_binding` 中自动失效，且全过程零网络请求（`network_calls_made=0`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -64,10 +68,10 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
-- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（87 passed，含 `test_workspace_patch.py` 2 passed 与 `test_workspace_validation.py` 2 passed，见 evidence/implementation/m1-storage-tests.log）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（88 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed 与 `test_message_draft.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 
 ## English Summary
 
@@ -104,3 +108,6 @@
   1. `StreamingSecretRedactor`: Dynamically sizes its holdback window to the longest registered secret (including Base64, URL-encoded, and JSON-escaped variants) rather than relying on a fixed 128-byte window; redacts secrets split across arbitrary chunk boundaries.
   2. No allowlist or network bypass: Ignores `# pragma: allowlist secret` comments and permanently disables online secret verification (`network_verification_enabled=False`).
   3. `RedactionPipeline`: Filters `stdout`, `stderr`, `sdk_debug`, `exception`, `http_header`, `ui_event`, `artifact`, `diagnostic`, and `model_input` without downgrading `SECRET`/`SENSITIVE` classifications on negative scans (`guarantees_100_percent_detection=False`).
+- **OB-043 (`IN_PROGRESS`)**: Local immutable message draft service (`services/core/src/openbot/tools/messages/draft.py` and `tests/integration/storage/test_message_draft.py`, 1 passed):
+  1. `create_or_revise_draft`: Transitions the task to `WAITING_INPUT` (`sendable=False`) when recipient candidates are missing or ambiguous; stores canonical JSON drafts with stable `recipient_id`, `channel`, `account_id`, `revision`, and attachment SHA-256 digests in `ArtifactStore` with zero network calls (`network_calls_made=0`).
+  2. `verify_latest_draft_binding`: Ensures edits create a new `revision` and `draft_sha256`, invalidating stale draft hashes so old approvals cannot authorize modified message content.
