@@ -3207,6 +3207,20 @@
 +
 +This checkpoint preserves the original design and current implementation in local Git. It does not authorize a remote push, deployment, publication, third-party messages, system-service installation or access to real credentials. Continue routine reversible local work and synthetic validation autonomously; record environment gaps and continue independent ready work.
 --- /dev/null
++++ b/docs/install/user-daemon.md
+@@ -0,0 +1,11 @@
++# 用户级 Daemon 安装、自启与卸载指南 / User-Session Daemon Installation & Uninstall Guide (OB-068)
++
++## 中文说明
++1. **安装与自启**：通过 `UserDaemonInstaller.install(os_name=..., scope='user_session', spawn_from_tauri_ui=False)` 生成用户级服务描述文件。
++2. **UI 与常驻分离**：关闭桌面 Tauri 窗口不会停止常驻 daemon，Tauri 也不得自行拉起第二个 daemon。
++3. **安全卸载**：`UserDaemonInstaller.uninstall()` 仅清理服务描述文件，完整保留用户工作区代码与数据。
++
++## English Summary
++1. **Install & Autostart**: `UserDaemonInstaller.install(os_name=..., scope='user_session', spawn_from_tauri_ui=False)` writes the user-session service manifest.
++2. **UI Decoupling**: Closing the Tauri window leaves the resident daemon running, and Tauri never spawns a second daemon.
++3. **Safe Uninstall**: `UserDaemonInstaller.uninstall()` removes only the service manifest while preserving the user workspace.
+--- /dev/null
 +++ b/docs/integrations/feishu-contract.md
 @@ -0,0 +1,16 @@
 +# 飞书协议契约与脱敏夹具说明 / Feishu Protocol Contract & Sanitized Fixtures (OB-047 / M2)
@@ -3299,8 +3313,20 @@
 +- Current host is Darwin arm64 with local CPython 3.12 and Docker Desktop 29.1.3.
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
++++ b/native/supervisor/packaging/README.md
+@@ -0,0 +1,9 @@
++# 用户级常驻服务打包配置说明 / User-Session Daemon Packaging (OB-068)
++
++## 中文说明
++- **用户会话边界**：macOS 采用 `~/Library/LaunchAgents`（`macos_launchd_user_agent`），Linux 采用 `~/.config/systemd/user`（`linux_systemd_user_unit`），Windows 采用当前登录用户计划任务（`windows_user_logon_task`）。
++- **安全禁令**：严禁使用 `root` 或 `LocalSystem` 系统级高权限服务控制用户桌面；严禁 Tauri 窗口直接启动第二个 daemon；卸载服务仅移除服务配置，绝不删除用户工作区。
++
++## English Summary
++- **User-Session Boundary**: Uses `LaunchAgents` on macOS, `systemd --user` on Linux, and user-logon tasks on Windows (`scope='user_session'`).
++- **Safety Invariants**: Forbids `root`/`LocalSystem` system services, forbids Tauri UI windows from spawning duplicate daemons, and preserves user workspaces on uninstall.
+--- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,95 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3389,12 +3415,13 @@
 +- 推进 OB-065（建立 MCP 恶意与故障服务器测试）：实现 McpFaultAndMaliciousHarness 与 McpFaultReport（验证 list_changed 漂移隔离、超长输出截断与秘密脱敏、Schema 深度洪泛阻断、重复请求 ID 拒绝、内建工具名碰撞拦截与执行后断连转 UNKNOWN 零重试）；新增集成测试通过，M0 增至 287 passed/3 skipped，M1 增至 306 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-065 记 IN_PROGRESS。
 +- 推进 OB-066（实现只读技能指令加载）：新增 contracts/schemas/skill_manifest.schema.json 与 ReadOnlySkillLoader（核验来源、版本、license、SHA-256 与能力白名单，强制 can_mutate_policy=False、can_expand_workspace=False、can_promote_reference_only_components=False，生成技能仅存为 DRAFT_NOT_INSTALLED 且绝不自动安装）；新增单元测试通过，M0 增至 288 passed/3 skipped，M1 增至 307 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-066 记 IN_PROGRESS。
 +- 推进 OB-067（交付全 MVP 能力集回归）：实现 MvpCapabilityRegressionSuite、双语说明 docs/demos/mvp.md 与集成测试 tests/integration/scenarios/mvp/test_mvp_capability_regression.py（联合验证云+本地 Provider、飞书受控网关、工作区 ACI 与隔离进程、结构化浏览器、MCP 与只读技能六大子系统，security_critical_failures == 0，诚实声明 claims_three_os_release_complete=False）；M0 增至 289 passed/3 skipped，M1 增至 308 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-067 记 IN_PROGRESS。
++- 推进 OB-068（实现用户级 daemon 安装与卸载）：实现 UserDaemonInstaller、双语安装说明 docs/install/user-daemon.md 与 native/supervisor/packaging/README.md（仅允许 user_session 级服务，拦截 system/root/LocalSystem 高权限服务与 Tauri 直接启动第二 daemon，卸载时完整保留用户工作区）；新增单元测试通过，M0 增至 290 passed/3 skipped，M1 增至 309 passed/1 skipped。因上游 OB-005/093 三平台实测未闭合，OB-068 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-067`, and `OB-095`, reaching 289 passed M0 checks and 308 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-068`, and `OB-095`, reaching 290 passed M0 checks and 309 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3578,7 +3605,7 @@
 +        raise SystemExit(1) from exc
 --- /dev/null
 +++ b/scripts/record_changes.py
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,130 @@
 +"""Create review artifacts without staging the user's untracked design package."""
 +
 +import difflib
@@ -3618,6 +3645,7 @@
 +    roots = [
 +        "services/core/src",
 +        "services/feishu_gateway/src",
++        "native/supervisor",
 +        "contracts/schemas",
 +        "tests",
 +        "scripts",
@@ -6316,6 +6344,81 @@
 +            )
 +
 +        return self._writer.read(query)
+--- /dev/null
++++ b/services/core/src/openbot/application/daemon_installer.py
+@@ -0,0 +1,72 @@
++"""User-session daemon installer forbidding system services and preserving workspaces (OB-068)."""
++
++import json
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++_OS_SERVICE_KINDS = {
++    "Darwin": "macos_launchd_user_agent",
++    "Linux": "linux_systemd_user_unit",
++    "Windows": "windows_user_logon_task",
++}
++
++
++@dataclass(frozen=True, slots=True)
++class InstalledUserServiceRecord:
++    os_name: str
++    kind: str
++    manifest_path: Path
++    scope: str
++
++
++class UserDaemonInstaller:
++    """Install/uninstall user-session daemon manifests while preserving workspaces."""
++
++    def __init__(self, *, service_dir: Path, workspace_dir: Path) -> None:
++        self._service_dir = service_dir.resolve()
++        self._workspace_dir = workspace_dir.resolve()
++
++    def install(
++        self, *, os_name: str, scope: str, spawn_from_tauri_ui: bool
++    ) -> InstalledUserServiceRecord:
++        if scope != "user_session":
++            raise PermissionError(f"SYSTEM_SERVICE_SCOPE_FORBIDDEN: {scope}")
++        if spawn_from_tauri_ui:
++            raise PermissionError("TAURI_DIRECT_DAEMON_SPAWN_FORBIDDEN")
++        kind = _OS_SERVICE_KINDS.get(os_name)
++        if kind is None:
++            raise ValueError(f"Unsupported OS: {os_name}")
++        self._service_dir.mkdir(parents=True, exist_ok=True)
++        manifest_path = self._service_dir / "openbot-user-daemon.json"
++        manifest_path.write_text(
++            json.dumps(
++                {
++                    "label": "com.openbot.user-daemon",
++                    "os_name": os_name,
++                    "kind": kind,
++                    "scope": "user_session",
++                    "workspace_dir": str(self._workspace_dir),
++                },
++                indent=2,
++            )
++            + "\n",
++            encoding="utf-8",
++        )
++        return InstalledUserServiceRecord(
++            os_name=os_name,
++            kind=kind,
++            manifest_path=manifest_path,
++            scope=scope,
++        )
++
++    def uninstall(self) -> dict[str, Any]:
++        manifest_path = self._service_dir / "openbot-user-daemon.json"
++        removed = False
++        if manifest_path.is_file():
++            manifest_path.unlink()
++            removed = True
++        return {
++            "manifest_removed": removed,
++            "workspace_preserved": self._workspace_dir.is_dir(),
++        }
 --- /dev/null
 +++ b/services/core/src/openbot/application/dispatch.py
 @@ -0,0 +1,535 @@
@@ -20887,6 +20990,15 @@
  
  **需求** [RQ04](requirements_traceability.md#rq04)、[RQ07](requirements_traceability.md#rq07)
  
+@@ -4202,7 +4202,7 @@
+ 
+ **实现用户级daemon安装与卸载**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Platform · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
+ 
+ **需求** [RQ01](requirements_traceability.md#rq01)、[RQ11](requirements_traceability.md#rq11)
+ 
 @@ -4319,7 +4319,7 @@
  
  **建立Windows原生运行门禁**
@@ -22869,7 +22981,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -4140,7 +4942,19 @@
+@@ -4140,14 +4942,26 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "启用组件组合清单、关联Q/任务证据与每项能力的真实/模拟区分。"
      ],
@@ -22890,7 +23002,37 @@
    },
    {
      "id": "OB-068",
-@@ -4279,7 +5093,7 @@
+     "title": "实现用户级daemon安装与卸载",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Platform",
+     "size": "M",
+     "req_ids": [
+@@ -4209,7 +5023,20 @@
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
+       "每OS实际服务/登录任务描述、用户令牌/权限/锁归属与启停卸载证据。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、25页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、25页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 UserDaemonInstaller enforcing user_session scope, forbidding root/LocalSystem services and Tauri duplicate daemon spawn, and preserving workspace on uninstall",
++      "evidence": [
++        "docs/install/user-daemon.md",
++        "native/supervisor/packaging/README.md",
++        "tests/unit/test_user_daemon_installer.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-005（BLOCKED，缺少 Windows/Linux 原生机器）及 OB-028、OB-042、OB-093 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (service-manager, profile-locks, windows-sys), reuse_type (native_primitive), and reuse_notes; enforced user-session scope and workspace preservation."
++    }
+   },
+   {
+     "id": "OB-069",
+@@ -4279,7 +5106,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -22899,7 +23041,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +5151,26 @@
+@@ -4337,14 +5164,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -22928,7 +23070,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5227,19 @@
+@@ -4401,7 +5240,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -22949,7 +23091,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5847,7 @@
+@@ -5009,7 +5860,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -22958,7 +23100,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5916,20 @@
+@@ -5078,7 +5929,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -22980,7 +23122,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6374,7 @@
+@@ -5523,7 +6387,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -22989,7 +23131,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6427,26 @@
+@@ -5576,14 +6440,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23018,7 +23160,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6505,26 @@
+@@ -5642,14 +6518,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -23047,7 +23189,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6579,26 @@
+@@ -5704,14 +6592,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23076,7 +23218,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6665,25 @@
+@@ -5778,14 +6678,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23104,7 +23246,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6751,26 @@
+@@ -5853,14 +6764,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23133,7 +23275,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6824,27 @@
+@@ -5914,14 +6837,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -23163,7 +23305,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,7 +6900,20 @@
+@@ -5977,7 +6913,20 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -35450,6 +35592,43 @@
 +    assert rec["files"] == []
 +    assert rec["extraction_verification"] == "NOT_APPLICABLE"
 +    assert "first-user" in rec["reason"]
+--- /dev/null
++++ b/tests/unit/test_user_daemon_installer.py
+@@ -0,0 +1,34 @@
++from pathlib import Path
++
++import pytest
++from openbot.application.daemon_installer import UserDaemonInstaller
++
++
++def test_user_daemon_installer_forbids_system_service_and_preserves_workspace_on_uninstall(
++    tmp_path: Path,
++) -> None:
++    service_dir = tmp_path / "user_services"
++    workspace_dir = tmp_path / "user_workspace"
++    workspace_dir.mkdir(parents=True, exist_ok=True)
++    (workspace_dir / "important.py").write_text("keep = True\n", encoding="utf-8")
++
++    installer = UserDaemonInstaller(service_dir=service_dir, workspace_dir=workspace_dir)
++
++    # 1. System-level / root / LocalSystem service scope is strictly forbidden
++    for bad_scope in ("system", "root", "LocalSystem"):
++        with pytest.raises(PermissionError, match="SYSTEM_SERVICE_SCOPE_FORBIDDEN"):
++            installer.install(os_name="Darwin", scope=bad_scope, spawn_from_tauri_ui=False)
++
++    # 2. Tauri UI window is forbidden from spawning its own second daemon
++    with pytest.raises(PermissionError, match="TAURI_DIRECT_DAEMON_SPAWN_FORBIDDEN"):
++        installer.install(os_name="Darwin", scope="user_session", spawn_from_tauri_ui=True)
++
++    # 3. Install user-session manifest and verify uninstall preserves workspace
++    rec = installer.install(os_name="Darwin", scope="user_session", spawn_from_tauri_ui=False)
++    assert rec.manifest_path.is_file()
++    assert rec.kind == "macos_launchd_user_agent"
++
++    uninst = installer.uninstall()
++    assert uninst["manifest_removed"] is True
++    assert uninst["workspace_preserved"] is True
++    assert (workspace_dir / "important.py").is_file()
 --- /dev/null
 +++ b/tests/unit/test_workspace_read_tools.py
 @@ -0,0 +1,95 @@

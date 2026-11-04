@@ -256,6 +256,12 @@
       "included_in_patch": true
     },
     {
+      "path": "docs/install/user-daemon.md",
+      "before_sha256": null,
+      "after_sha256": "ed727ae248e6984b11c6622c5697946cbf7dff72300ea7bb5a5fc5ea69fe468a",
+      "included_in_patch": true
+    },
+    {
       "path": "docs/integrations/feishu-contract.md",
       "before_sha256": null,
       "after_sha256": "1a1e5ca2838f76901cc7edf1dfa6b4a6e5b5805d0f9a197b8eb92251b8523962",
@@ -312,7 +318,7 @@
     {
       "path": "evidence/implementation/database-design.log",
       "before_sha256": null,
-      "after_sha256": "94c9a79b7ce6b1a6b6f639ef3b20e0adf551c9a4a15fcced6ea9a8c5c864e036",
+      "after_sha256": "2e0c4b3578d061d566a00c3f1c56ff2900f05747108ce140db0dbbed5e7d46c2",
       "included_in_patch": false
     },
     {
@@ -324,7 +330,7 @@
     {
       "path": "evidence/implementation/design.log",
       "before_sha256": null,
-      "after_sha256": "87221e8b3470ac88c992b1b90c185b4788b5cf29025fce15322d730c21cd47c1",
+      "after_sha256": "e733fb8a99ed0b0c9cbb37d4f02d4057ac3a0b2c2d7502b8dd853d1de83f8a73",
       "included_in_patch": false
     },
     {
@@ -336,7 +342,7 @@
     {
       "path": "evidence/implementation/format.log",
       "before_sha256": null,
-      "after_sha256": "c3ac60a207092b7f89b7655ce3a74c2ff381e396335170c20b61328b3a33bce9",
+      "after_sha256": "3accebe6ea89f2c78ec6c12dbcaa6ecf88913ed058c8e2b2909b52889ac7ba20",
       "included_in_patch": false
     },
     {
@@ -606,7 +612,7 @@
     {
       "path": "evidence/implementation/m1-database-design.log",
       "before_sha256": null,
-      "after_sha256": "2bb3d2f02e1fa2a1697a400940607ae6576f1066f23acd194c8740ef073689ee",
+      "after_sha256": "d41c13e071b36fbe1e7b5b9fddc8b203fa4465332bf5162118a1b072b0bd21fb",
       "included_in_patch": false
     },
     {
@@ -618,13 +624,13 @@
     {
       "path": "evidence/implementation/m1-design.log",
       "before_sha256": null,
-      "after_sha256": "87221e8b3470ac88c992b1b90c185b4788b5cf29025fce15322d730c21cd47c1",
+      "after_sha256": "e733fb8a99ed0b0c9cbb37d4f02d4057ac3a0b2c2d7502b8dd853d1de83f8a73",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-format.log",
       "before_sha256": null,
-      "after_sha256": "c3ac60a207092b7f89b7655ce3a74c2ff381e396335170c20b61328b3a33bce9",
+      "after_sha256": "3accebe6ea89f2c78ec6c12dbcaa6ecf88913ed058c8e2b2909b52889ac7ba20",
       "included_in_patch": false
     },
     {
@@ -654,19 +660,19 @@
     {
       "path": "evidence/implementation/m1-types.log",
       "before_sha256": null,
-      "after_sha256": "14c86ee194cc9406b4f38866ce2eb1ba7e54c55437faf1ccc89f0195c485674d",
+      "after_sha256": "8ba9873e22426bcc7f35d8a5ef8518b9b69fb138ee78730ab64693a64293352c",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "23c06ca63942f5261d351f6cddfdcc1d67963fe03c19a89535452076c28bd133",
+      "after_sha256": "b85c87199672c85f85574874f83a45ff5535203484cc96809b4217389baee48c",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-verification.json",
       "before_sha256": null,
-      "after_sha256": "b0efe0214d3e859108cd744d21e84ff68155034181cd949640bef0c7a3b3623b",
+      "after_sha256": "73723354ff5f6dbf9db03959cfd013081f3ddc5805e562fe6ae388ed8b494259",
       "included_in_patch": false
     },
     {
@@ -988,6 +994,12 @@
       "included_in_patch": false
     },
     {
+      "path": "evidence/implementation/ob068-red.log",
+      "before_sha256": null,
+      "after_sha256": "fd3b419cde3a8da95a0a9f7ddcd3209a310ee4c47627a2f0f3908931781ba661",
+      "included_in_patch": false
+    },
+    {
       "path": "evidence/implementation/ob081-red.log",
       "before_sha256": null,
       "after_sha256": "c23201d2bcdba609185dd7af5df6674259dff1dc014b944e2388dad7f9ba231d",
@@ -1026,19 +1038,19 @@
     {
       "path": "evidence/implementation/types.log",
       "before_sha256": null,
-      "after_sha256": "14c86ee194cc9406b4f38866ce2eb1ba7e54c55437faf1ccc89f0195c485674d",
+      "after_sha256": "8ba9873e22426bcc7f35d8a5ef8518b9b69fb138ee78730ab64693a64293352c",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "bfb507ac64861348f64d99b4c0426beb9c8b52f9102941e83e0e8b219fe62100",
+      "after_sha256": "3350d7fb633df935c19d6142ce981693b4503f24a72e990f8a0f73feef48b1cc",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/verification.json",
       "before_sha256": null,
-      "after_sha256": "8bb0c580d842622a1bca2df970e276c394781d818061e54b4829ef2d21aa0f90",
+      "after_sha256": "9c99735b1bde6f68278e5839ed91048d7fa2d21e7e118d4910e4f8619aca3793",
       "included_in_patch": false
     },
     {
@@ -1048,9 +1060,39 @@
       "included_in_patch": true
     },
     {
+      "path": "native/supervisor/packaging/README.md",
+      "before_sha256": null,
+      "after_sha256": "34da677408845fe1badfa46dc47a27c87f027746697218f540a471e75061a430",
+      "included_in_patch": true
+    },
+    {
+      "path": "native/supervisor/src/credential_transport.rs",
+      "before_sha256": null,
+      "after_sha256": "569f8e0a9e324db9ac55dc216793a0859f61241cd7320452736f54bb398df48b",
+      "included_in_patch": false
+    },
+    {
+      "path": "native/supervisor/src/instance_lock.rs",
+      "before_sha256": null,
+      "after_sha256": "a9d531ea8c23c37e32359d0812f95ba2deb212667fb5316fd4966a6abdfc1f2e",
+      "included_in_patch": false
+    },
+    {
+      "path": "native/supervisor/src/process_tree.rs",
+      "before_sha256": null,
+      "after_sha256": "d23f23a539623bb3fe8568b554c07b8f9948c674cf0c6fc53cf21aee7803be63",
+      "included_in_patch": false
+    },
+    {
+      "path": "native/supervisor/src/worker_control.rs",
+      "before_sha256": null,
+      "after_sha256": "4ef8c29886880adab931c20b7f57b4e4fed8de0bc485fd2e42a66eaf5e86c17f",
+      "included_in_patch": false
+    },
+    {
       "path": "progress.md",
       "before_sha256": null,
-      "after_sha256": "6677afff1a8bed7b41a71166536cf75dd0e34f1187210656e1f631b057393be7",
+      "after_sha256": "f4d1b176e7c58887e3e0a223f35f0c3381614a55f631e9bfdc2f24be60766d51",
       "included_in_patch": true
     },
     {
@@ -1068,7 +1110,7 @@
     {
       "path": "scripts/record_changes.py",
       "before_sha256": null,
-      "after_sha256": "4cae0e981af231ced59b974346061251d465f01fe984bea09c3b67e0444da263",
+      "after_sha256": "56afe9494e39a36efa4744019ce0a4ef83e8c7703e740299a1f752c90a7b9d94",
       "included_in_patch": true
     },
     {
@@ -1153,6 +1195,12 @@
       "path": "services/core/src/openbot/application/context.py",
       "before_sha256": null,
       "after_sha256": "02db7e058ab6aa2f767646719e44035fbd7c115775e35fba3a1c65f1d55cb7f8",
+      "included_in_patch": true
+    },
+    {
+      "path": "services/core/src/openbot/application/daemon_installer.py",
+      "before_sha256": null,
+      "after_sha256": "f9890a2eb692dbcd653a5f1279f7f2c92dab7a8c3db0b0d4ff961f7a9a37f793",
       "included_in_patch": true
     },
     {
@@ -1638,13 +1686,13 @@
     {
       "path": "tasks/TASKS.md",
       "before_sha256": "62011244f45e5fc158ac1528b2bf737a2bd80c937751744c1059e6899a7c43ae",
-      "after_sha256": "9b3b21caf4abd1af2fcfbe6ea5fedf0b3dd585489812c13878a5b44dd8e577ff",
+      "after_sha256": "034fe93005326f93760d03207d41904df6eeddf34e4fa50dad9efefaeeb61e41",
       "included_in_patch": true
     },
     {
       "path": "tasks/backlog.json",
       "before_sha256": "343bc2c906a0f19539db16609498bf63f796069c75995944833089a6ae550e20",
-      "after_sha256": "657faa57c51eadf3290c4403f21ce0fbcf23a1717c1245721af80dab530b042a",
+      "after_sha256": "227f89d328e32156f3645866f95081219f532d29431f91855fa2e2e7b50ee89c",
       "included_in_patch": true
     },
     {
@@ -2095,6 +2143,12 @@
       "path": "tests/unit/test_source_reuse_feishu.py",
       "before_sha256": null,
       "after_sha256": "3fb604051f6a49d5041d6a6ab5d23fd930a75c73afde5c30968a6a3e5576f25f",
+      "included_in_patch": true
+    },
+    {
+      "path": "tests/unit/test_user_daemon_installer.py",
+      "before_sha256": null,
+      "after_sha256": "f99a37f8e6fa80175eb437d5827736a32e87086f0b0f1738039800499f52cbf5",
       "included_in_patch": true
     },
     {

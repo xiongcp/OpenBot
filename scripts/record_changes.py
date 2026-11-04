@@ -37,6 +37,7 @@ def run():
     roots = [
         "services/core/src",
         "services/feishu_gateway/src",
+        "native/supervisor",
         "contracts/schemas",
         "tests",
         "scripts",
