@@ -1,8 +1,8 @@
-# OB-011—014、OB-016、OB-021、OB-023、OB-024：持久化、资源锁、Durable Outbox、预算熔断与上下文摘要验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, and Context Summary Verification Scope
+# OB-011—014、OB-016、OB-021、OB-023、OB-024、OB-036：持久化、资源锁、Durable Outbox、预算熔断、上下文摘要与 Artifact 存储验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, Context Summary, and Artifact Store Verification Scope
 
 ## 中文说明
 
-实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断与上下文摘要共 80 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断、上下文摘要与 Artifact 存储共 82 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 
 OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 
@@ -31,11 +31,16 @@ OB-024（实现上下文快照与摘要，保持 IN_PROGRESS）：先读取 `com
 2. 保留污点、来源引用与未决动作的窗口摘要（`summarize_window`）：跨被压缩消息继承最高敏感数据分类（`PUBLIC < WORKSPACE < SENSITIVE`）与最不可信来源（如 `UNTRUSTED_EXTERNAL`），合并保留全部 `source_refs` 以及来自数据库权威表的 `pending_operation_ids` / `approved_operation_ids`；显式标记 `authoritative_grants=False`，绝不因摘要洗白污点或把外部注入文字升级为系统/用户授权。
 3. 长会话成对截断与开销核算（`build_model_context`）：跨重启恢复目标、未决动作、摘要与最近消息；按完整 `ASSISTANT+TOOL` 配对单元截断旧消息（不拆散 `tool_call_id` 关联）；显式将消息包装（`framing_overhead_tokens`）、工具 Schema（`tool_schema_overhead_tokens`）与多模态（`multimodal_overhead_tokens`）计入保守 Token 总额，不以纯文本分词数冒充最终费用（`exact_billing_guaranteed=False`）。因上游 `OB-017`/`OB-023` 仍为 `IN_PROGRESS`，`OB-024` 记为 `IN_PROGRESS`。
 
+OB-036（实现 Artifact 存储与可信元数据，保持 IN_PROGRESS）：先读取 `component_refs`（空）、`reuse_type`（`control_owned`）与 `reuse_notes`。新增 `services/core/src/openbot/artifacts/store.py`（`ArtifactStore`、`ArtifactLimits`、`ArtifactRecord`、`ArtifactDownload`）：
+1. 临时文件 `staging` -> `fsync` -> 原子 `os.replace` -> 数据库注册（`put`）：记录不可变 `sha256`、`mime`、`bytes`、`classification`（`PUBLIC`/`WORKSPACE`/`SENSITIVE`/`SECRET`，MIME 绝不降低分类）、`expires_at` 与 `artifact_refs`（`PRINCIPAL`/`SESSION`/`TASK`/`OPERATION`）；施加单产物（`max_single_artifact_bytes`）与单任务总额（`max_task_artifact_bytes`）字节配额。
+2. 受控下载与预览守卫（`download`、`preview`、`verify_approved_digest`）：不接收或暴露任何宿主文件路径；强制返回 `Content-Disposition: attachment`、`Content-Security-Policy: default-src 'none'; sandbox` 与 `X-Content-Type-Options: nosniff`（防止 HTML/脚本内联执行）；拒绝通过 `preview` 访问 `SECRET` 产物；登记后若底层文件缺失或哈希不符，自动将数据库状态标为 `QUARANTINED`；审批绑定内容摘要变化（`verify_approved_digest`）立即拒绝。
+3. 孤立文件回收与待审批/备份 GC 保护（`collect_garbage`、`pin_for_backup`、`unpin_backup`）：清理注册前崩溃遗留的 `staging/` 与未登记 `objects/` 孤立文件；即使 TTL 到期，仍拒绝回收任何被非终态 Task、待审批/在途/UNKNOWN Operation 或活跃备份 pin（`pin_for_backup`）引用的对象。因上游 `OB-017`/`OB-032` 仍为 `IN_PROGRESS`，`OB-036` 记为 `IN_PROGRESS`。
+
 OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
 
 ## English Summary
 
-Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (80 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
+Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (82 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
 
 - **OB-011**: Checksum-locked ordered SQLite migrator creating all 23 baseline tables, pre-upgrade backup, foreign-key and integrity checks, and WAL/FULL/FK/recursive_triggers verification using stdlib `sqlite3`.
 - **OB-012**: Single writer thread owning short transactions with bounded per-lane queues, round-robin fairness, total deadline enforcement, and fail-closed fatal writer state on commit/rollback I/O errors.
@@ -56,3 +61,7 @@ Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integrat
   1. `append_message`: Rejects `SECRET` payloads and `hidden_reasoning` fields; enforces that `TOOL` messages match a prior `ASSISTANT` `tool_call_id` in the same task and retain untrusted provenance.
   2. `summarize_window`: Inherits the strictest `data_class` (`SENSITIVE` over `WORKSPACE`/`PUBLIC`) and least-trusted `provenance_kind` (`UNTRUSTED_EXTERNAL`), preserves all `source_refs` and authoritative `pending_operation_ids`/`approved_operation_ids`, and enforces `authoritative_grants=False` so summaries never launder taint or elevate prompt-injection text into permissions.
   3. `build_model_context`: Reconstructs context across restarts, truncates older turns without splitting `ASSISTANT`+`TOOL` `tool_call_id` pairs, and explicitly accounts for message framing, tool schema, and multimodal token overhead (`exact_billing_guaranteed=False`).
+- **OB-036 (`IN_PROGRESS`)**: Content-addressed artifact storage and trusted metadata (`services/core/src/openbot/artifacts/store.py`):
+  1. `put`: Writes to `staging/`, `fsync`s, atomically `os.replace`s into `objects/`, and registers immutable `artifacts` and `artifact_refs` while enforcing single-artifact and per-task byte quotas.
+  2. `download`, `preview` & `verify_approved_digest`: Never exposes host paths; enforces `attachment`, sandbox CSP, and `nosniff` headers so HTML/scripts never execute inline; blocks `SECRET` preview; marks missing/corrupted blobs `QUARANTINED`; invalidates tampered approval digests.
+  3. `collect_garbage` & `pin_for_backup`: Cleans up pre-registration orphan files while protecting artifacts referenced by active tasks, pending/approved/in-flight/unknown operations, or active backup pins.
