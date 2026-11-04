@@ -2291,10 +2291,12 @@
 +CONNECTED / LOCAL_MODEL / OFFLINE 为独立版本配置；不允许 cloud fallback、SDK 重试叠加、宿主执行、运行期下载。没有真实本地推理 / runner / 出口证据时连接工厂返回 CAPABILITY_UNAVAILABLE；loopback 地址不作证明。UTC/monotonic/boot 变化测试使旧敏感 TTL 失效；派发后 timeout/cancel 映射 UNKNOWN，未把所有异常设为 retryable。
 --- /dev/null
 +++ b/docs/evidence/storage.md
-@@ -0,0 +1,15 @@
-+# OB-011—014、OB-016：持久化与资源锁验收范围
+@@ -0,0 +1,38 @@
++# OB-011—014、OB-016、OB-021：持久化、资源锁与 Durable Outbox 验收范围 / Persistence, Resource Leases, and Durable Outbox Verification Scope
 +
-+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队及提案/审批回归共 59 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
++## 中文说明
++
++实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复以及 durable outbox 共 72 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 +
 +OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 +
@@ -2306,7 +2308,28 @@
 +
 +OB-016（持久化资源锁与会话排队子集，保持 IN_PROGRESS）：实现 WORKSPACE、BROWSER_PROFILE、DESKTOP_SESSION、EXTERNAL_ACCOUNT 四类资源键及固定加锁顺序（按类型优先级与字典序排序防死锁），fencing_token 由 profile_config 单调递增分配；实现单活动 Task 串行槽位与会话内 FIFO 排队（claim_next_task）、人工审批/输入等待时的原子释锁点（park_for_wait，禁止在途 DISPATCHING/UNKNOWN 释锁）、重获锁时的工作区 generation/version 校验，以及租约过期不等于可抢占（仅旧 runtime_epoch=STOPPED 且未派发 attempt 可回收）与 UNKNOWN/DISPATCHING 资源 quarantine 阻断。因上游 OB-015 / OB-093 正式 Supervisor 代际交接尚未闭合，OB-016 记为 IN_PROGRESS。
 +
++OB-021（Durable Outbox 及投递状态，保持 IN_PROGRESS）：先读取 `component_refs`（`tenacity`）、`reuse_type`（`control_owned`）与 `reuse_notes`，采用纯自研有界退避与单重试所有者模型，不引入通用 `tenacity` 装饰器。新增 `services/core/src/openbot/storage/outbox.py`（`OutboxStore`、`enqueue_outbox_tx`）与 `services/core/src/openbot/application/outbox.py`（`OutboxService`、`OutboxGatewayPort`、`OutboxEnvelope`、`GatewaySendResult`）：
++1. 持久化语义键（`target_key` + `semantic_key`）、单调 `revision`、可合并进度（`UPSERT_REVISION` 新版本入队自动将同键旧 `PENDING` 置为 `SUPERSEDED`）与终态保护（拒绝非终态进度覆盖已存在的终态通知；迟到或重复回执在存在更高 `revision` 时记为 `SUPERSEDED`，绝不倒退更高已投递版本）。
++2. 远端发送严格移出 SQLite 短事务：`dispatch_next` 先经第一短事务 `claim_due`（`PENDING -> IN_FLIGHT`，递增真实可数 `attempt_count`，绑定 `claim_runtime_epoch` 与 `lease_token`），事务外调用 `gateway.send`，再经第二短事务 `complete_delivery` 落盘 `SENT / PENDING / DEAD / EXPIRED / UNKNOWN / SUPERSEDED` 与 `provider_receipt_json`。
++3. 唯一重试所有者与异常隔离：强制校验 `gateway.sdk_max_retries == 0`（拒绝叠加 SDK 内部自动重试）；捕获传输/库异常并收敛为 outbox 投递状态，绝不触发原业务 `Operation` 或 `operation_attempts` 重执行；仅当 `delivery_class == 'PROVIDER_IDEMPOTENT'` 且网关明确支持幂等时记录 `exact_once_guaranteed=True`，无远端幂等支持时禁止声称 `exactly-once`。
++4. 断网重启后的 `IN_FLIGHT` 恢复与核对：`recover_in_flight` 要求原 `claim_runtime_epoch` 已证明 `STOPPED`，按 `UPSERT_REVISION` / `PROVIDER_IDEMPOTENT` / `RECONCILE_ONLY` 分流（无幂等能力转 `UNKNOWN` 核对，不盲目重发）；`reconcile_unknown` 凭核实回执解决 `UNKNOWN -> SENT / SUPERSEDED / PENDING / DEAD / EXPIRED`。因上游 `OB-017` 仍为 `IN_PROGRESS`，`OB-021` 记为 `IN_PROGRESS`。
++
 +OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
++
++## English Summary
++
++Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (72 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
++
++- **OB-011**: Checksum-locked ordered SQLite migrator creating all 23 baseline tables, pre-upgrade backup, foreign-key and integrity checks, and WAL/FULL/FK/recursive_triggers verification using stdlib `sqlite3`.
++- **OB-012**: Single writer thread owning short transactions with bounded per-lane queues, round-robin fairness, total deadline enforcement, and fail-closed fatal writer state on commit/rollback I/O errors.
++- **OB-013**: Source-scoped durable inbox deduplication (`channel/tenant/app/profile`) committing Task, budget, inbox, event, and outbox atomically in one transaction.
++- **OB-014**: Complete 11×11 Task state transition matrix with version CAS, `OutcomeVerifier` (DIAGNOSIS/PATCH/TEST artifact and unresolved operation/approval/budget checks), cancellation guard (`RECONCILING` when `UNKNOWN`/`DISPATCHING` operations exist), and `resume_reconciled` quarantine verification.
++- **OB-016 (`IN_PROGRESS`)**: Durable resource leases (`WORKSPACE`, `BROWSER_PROFILE`, `DESKTOP_SESSION`, `EXTERNAL_ACCOUNT`) with deterministic lock ordering, monotonic `fencing_token`, single active Task FIFO session queueing, atomic release on `WAITING_APPROVAL`, workspace generation re-verification, and `UNKNOWN` quarantine enforcement.
++- **OB-021 (`IN_PROGRESS`)**: Control-owned durable outbox (`services/core/src/openbot/storage/outbox.py` and `services/core/src/openbot/application/outbox.py`) without `tenacity` decorators:
++  1. Monotonic `revision` per `(target_key, semantic_key)`, progress coalescing (`UPSERT_REVISION` marks older `PENDING` rows `SUPERSEDED`), and terminal state protection (rejecting non-terminal progress after terminal state and preventing late/duplicate receipts from regressing higher revisions).
++  2. Transaction-external delivery (`PENDING -> IN_FLIGHT -> SENT/PENDING/DEAD/EXPIRED/UNKNOWN/SUPERSEDED`) with countable `attempt_count`, bounded backoff, deadline expiration, and dead-letter transition.
++  3. Single retry owner (`gateway.sdk_max_retries == 0` enforced), exception containment (transport/library errors never re-execute business `Operation`/`Attempt`), and truthful delivery guarantees (`exact_once_guaranteed` is `False` unless `PROVIDER_IDEMPOTENT` is supported by the gateway).
++  4. Crash recovery (`recover_in_flight` requiring `STOPPED` old runtime epoch and routing `RECONCILE_ONLY` to `UNKNOWN`) and `reconcile_unknown`. Kept `IN_PROGRESS` pending upstream `OB-017` closure.
 --- /dev/null
 +++ b/docs/handoff/2026-11-04-checkpoint.md
 @@ -0,0 +1,66 @@
@@ -2401,7 +2424,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,41 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2442,6 +2465,7 @@
 +- 推进 OB-031（确定性策略评估器）：实现 PolicySnapshot（SQLite policy_revisions canonical SHA-256 摘要核验）与六维纯代码表驱动 PolicyEvaluator（ALLOW/ASK/DENY/REQUIRE_LOCAL、网络与域名交集防扩权、LOCAL_MODEL 真实核验、拒绝模型评分/MCP hint/pathspec/远程批准覆盖硬拒绝）；新增 20 项测试全部通过，M0 增至 180 passed/3 skipped，M1 增至 199 passed/1 skipped。因上游 OB-018 仍为 IN_PROGRESS，OB-031 记 IN_PROGRESS。
 +- 推进 OB-019（执行前授权 claim 与再校验两次短事务派发）：实现 DispatchService.claim（READY->CLAIMED，原子消费 APPROVED->CONSUMED，分配 fencing_token 与有序租约，生成 Attempt 级 dispatch_id 并保留 Operation 级 provider_idempotency_key）、RecoveryTicket 恢复器专属 CONSUMED 安全复用校验（不回退 CONSUMED、不延长期限），以及 DispatchService.begin_dispatch（CLAIMED->DISPATCHING 第二短事务复核取消/epoch/policy/workspace/lease，同 Attempt 重传保持 dispatch_id）；存储套件增至 65 passed，M0 增至 186 passed/3 skipped，M1 增至 205 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-019 记 IN_PROGRESS。
 +- 推进 OB-020（按副作用类型恢复）：实现 RecoveryService.recover_epoch（旧执行域未隔离阻断接管并将 DISPATCHING 置 UNKNOWN/RECONCILING）、recover_operation（区分未派发 CLAIMED 与五类 retry_class，仅在安全可重放且原授权有效时签发 RecoveryTicket）与 reconcile_unknown（校验 reconciliation.schema.json、AVAILABLE 证据产物及 PROVIDER_VERIFIED/USER_ATTESTED 来源，拒绝模型来源或无证据文本覆盖账本）；存储套件增至 68 passed，M0 增至 189 passed/3 skipped，M1 增至 208 passed/1 skipped。因上游 OB-015/093 未闭合，OB-020 记 IN_PROGRESS。
++- 推进 OB-021（实现 durable outbox 及投递状态）：实现 OutboxStore 与 OutboxService（语义键与单调 revision、UPSERT_REVISION 进度合并、终态保护与迟到/重复回执防倒退、事务外远端投递、唯一重试所有者 sdk_max_retries=0 校验、attempt_count/deadline/DEAD 死信、旧 epoch STOPPED 后的 IN_FLIGHT 按能力恢复与 UNKNOWN 核对、投递异常绝不重放业务 Operation）；新增 4 项集成测试通过，存储套件增至 72 passed，M0 增至 193 passed/3 skipped，M1 增至 212 passed/1 skipped。因上游 OB-017 仍为 IN_PROGRESS，OB-021 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3983,6 +4007,651 @@
 +        )
 +        return self._writer.submit(command).result(
 +            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
++        )
+--- /dev/null
++++ b/services/core/src/openbot/application/outbox.py
+@@ -0,0 +1,642 @@
++"""Durable outbox delivery orchestration outside SQLite transactions."""
++
++import hashlib
++import sqlite3
++import time
++from dataclasses import dataclass
++from typing import Any, Literal, Protocol
++
++from openbot.contracts import canonicalize, strict_json
++from openbot.storage.inbox import InboundContext, authorize
++from openbot.storage.outbox import (
++    OutboxStore,
++    append_outbox_event,
++    enqueue_outbox_tx,
++    event_lookup,
++)
++from openbot.storage.writer import LookupResult, RequestConflict, Writer, WriterCommand
++
++type DeliveryStatus = Literal["SENT", "RETRYABLE_ERROR", "PERMANENT_ERROR", "UNKNOWN"]
++type ReconcileResolution = Literal["CONFIRMED_SENT", "CONFIRMED_NOT_SENT", "MARK_DEAD"]
++
++
++@dataclass(frozen=True, slots=True)
++class OutboxEnvelope:
++    outbox_id: str
++    task_id: str | None
++    target_key: str
++    target: dict[str, Any]
++    semantic_key: str
++    revision: int
++    payload: dict[str, Any]
++    payload_ref: str | None
++    delivery_class: str
++    provider_idempotency_key: str | None
++    attempt_count: int
++    deadline_ms: int | None
++
++
++@dataclass(frozen=True, slots=True)
++class GatewaySendResult:
++    status: DeliveryStatus
++    provider_message_id: str | None = None
++    remote_revision: int | None = None
++    retry_after_ms: int | None = None
++    error_code: str | None = None
++    exact_once_supported: bool = False
++
++    def to_payload(self) -> dict[str, Any]:
++        return {
++            "status": self.status,
++            "provider_message_id": self.provider_message_id,
++            "remote_revision": self.remote_revision,
++            "retry_after_ms": self.retry_after_ms,
++            "error_code": self.error_code,
++            "exact_once_supported": self.exact_once_supported,
++        }
++
++
++class OutboxGatewayPort(Protocol):
++    """Outbound channel adapter port. Must disable internal SDK retries (sdk_max_retries == 0)."""
++
++    sdk_max_retries: int
++
++    def capabilities(self) -> frozenset[str]: ...
++    def send(self, envelope: OutboxEnvelope) -> GatewaySendResult: ...
++
++
++class OutboxService:
++    """Single-owner outbox scheduling, transaction-external send, and IN_FLIGHT recovery."""
++
++    def __init__(self, writer: Writer, store: OutboxStore) -> None:
++        self._writer = writer
++        self._store = store
++
++    def enqueue(
++        self,
++        context: InboundContext,
++        *,
++        task_id: str | None = None,
++        channel_account_id: str | None = None,
++        target_key: str,
++        target: dict[str, Any],
++        semantic_key: str,
++        payload: dict[str, Any],
++        delivery_class: str = "UPSERT_REVISION",
++        revision: int | None = None,
++        provider_idempotency_key: str | None = None,
++        payload_ref: str | None = None,
++        not_before_ms: int | None = None,
++        deadline_ms: int | None = None,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "outbox_enqueue",
++                    "task": task_id,
++                    "account": channel_account_id,
++                    "target_key": target_key,
++                    "target": target,
++                    "semantic_key": semantic_key,
++                    "payload": payload,
++                    "delivery_class": delivery_class,
++                    "revision": revision,
++                    "idempotency_key": provider_idempotency_key,
++                    "payload_ref": payload_ref,
++                    "deadline": deadline_ms,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return event_lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            now = time.time_ns() // 1_000_000
++            receipt = enqueue_outbox_tx(
++                db,
++                context,
++                task_id=task_id,
++                channel_account_id=channel_account_id,
++                target_key=target_key,
++                target=target,
++                semantic_key=semantic_key,
++                payload=payload,
++                delivery_class=delivery_class,
++                revision=revision,
++                provider_idempotency_key=provider_idempotency_key,
++                payload_ref=payload_ref,
++                not_before_ms=not_before_ms,
++                deadline_ms=deadline_ms,
++                now_ms=now,
++            )
++            append_outbox_event(
++                db,
++                context,
++                str(receipt["outbox_id"]),
++                0,
++                task_id,
++                "OUTBOX_ENQUEUED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
++        )
++
++    def complete_delivery(
++        self,
++        context: InboundContext,
++        *,
++        outbox_id: str,
++        lease_token: str,
++        expected_version: int,
++        result: GatewaySendResult,
++        max_attempts: int = 3,
++        base_backoff_ms: int = 500,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if max_attempts < 1 or base_backoff_ms < 0:
++            raise ValueError("Invalid retry parameters")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "outbox_complete",
++                    "outbox_id": outbox_id,
++                    "lease_token": lease_token,
++                    "expected_version": expected_version,
++                    "result": result.to_payload(),
++                    "max_attempts": max_attempts,
++                    "base_backoff_ms": base_backoff_ms,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return event_lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            row = db.execute(
++                "SELECT task_id,target_key,semantic_key,revision,delivery_class,state,"
++                "attempt_count,version,deadline,lease_token "
++                "FROM outbox WHERE outbox_id=?",
++                (outbox_id,),
++            ).fetchone()
++            if (
++                not row
++                or row[5] != "IN_FLIGHT"
++                or int(row[7]) != expected_version
++                or str(row[9]) != lease_token
++            ):
++                raise RequestConflict("Outbox record is not IN_FLIGHT with matching lease/version")
++            task_id = None if row[0] is None else str(row[0])
++            target_key, semantic_key = str(row[1]), str(row[2])
++            revision = int(row[3])
++            delivery_class = str(row[4])
++            attempt_count = int(row[6])
++            old_ver = int(row[7])
++            deadline = None if row[8] is None else int(row[8])
++            now = time.time_ns() // 1_000_000
++
++            max_rev_row = db.execute(
++                "SELECT coalesce(max(revision),0) FROM outbox "
++                "WHERE target_key=? AND semantic_key=?",
++                (target_key, semantic_key),
++            ).fetchone()
++            max_rev = int(max_rev_row[0]) if max_rev_row else revision
++            superseded_by_higher = max_rev > revision and delivery_class == "UPSERT_REVISION"
++
++            # Only PROVIDER_IDEMPOTENT with gateway confirmation can guarantee exact-once
++            exact_once = bool(
++                delivery_class == "PROVIDER_IDEMPOTENT" and result.exact_once_supported
++            )
++            receipt_doc: dict[str, Any] = {
++                "provider_message_id": result.provider_message_id,
++                "remote_revision": result.remote_revision,
++                "attempt_count": attempt_count,
++                "exact_once_guaranteed": exact_once,
++                "superseded_by_higher_revision": superseded_by_higher,
++            }
++
++            next_not_before: int | None = None
++            error_code = result.error_code
++            if result.status == "SENT":
++                target_state = "SUPERSEDED" if superseded_by_higher else "SENT"
++            elif result.status == "RETRYABLE_ERROR":
++                if superseded_by_higher:
++                    target_state = "SUPERSEDED"
++                else:
++                    delay_ms = (
++                        result.retry_after_ms
++                        if result.retry_after_ms is not None
++                        else base_backoff_ms * (2 ** max(0, attempt_count - 1))
++                    )
++                    if deadline is not None and now + delay_ms >= deadline:
++                        target_state = "EXPIRED"
++                        error_code = error_code or "DEADLINE_EXCEEDED"
++                    elif attempt_count >= max_attempts:
++                        target_state = "DEAD"
++                        error_code = error_code or "MAX_ATTEMPTS_EXCEEDED"
++                    else:
++                        target_state = "PENDING"
++                        next_not_before = now + delay_ms
++                        error_code = error_code or "RETRYABLE_ERROR"
++            elif result.status == "PERMANENT_ERROR":
++                target_state = "DEAD"
++                error_code = error_code or "PERMANENT_ERROR"
++            else:
++                target_state = "UNKNOWN"
++                error_code = error_code or "DELIVERY_OUTCOME_UNKNOWN"
++
++            new_ver = old_ver + 1
++            upd = db.execute(
++                "UPDATE outbox SET state=?,version=?,not_before=coalesce(?,not_before),"
++                "claim_runtime_epoch=NULL,lease_token=NULL,lease_until=NULL,"
++                "provider_receipt_json=?,error_code=?,updated_at=? "
++                "WHERE outbox_id=? AND version=? AND state='IN_FLIGHT'",
++                (
++                    target_state,
++                    new_ver,
++                    next_not_before,
++                    canonicalize(receipt_doc).decode(),
++                    error_code,
++                    now,
++                    outbox_id,
++                    old_ver,
++                ),
++            )
++            if upd.rowcount != 1:
++                raise RequestConflict("Outbox completion CAS conflict")
++
++            receipt: dict[str, Any] = {
++                "outbox_id": outbox_id,
++                "target_key": target_key,
++                "semantic_key": semantic_key,
++                "revision": revision,
++                "state": target_state,
++                "attempt_count": attempt_count,
++                "version": new_ver,
++                "exact_once_guaranteed": exact_once,
++                "superseded_by_higher_revision": superseded_by_higher,
++                "error_code": error_code,
++            }
++            append_outbox_event(
++                db,
++                context,
++                outbox_id,
++                new_ver,
++                task_id,
++                "OUTBOX_DELIVERY_RECORDED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
++        )
++
++    def dispatch_next(
++        self,
++        context: InboundContext,
++        *,
++        runtime_epoch: str,
++        gateway: OutboxGatewayPort,
++        target_key: str | None = None,
++        lease_ttl_ms: int = 10_000,
++        max_attempts: int = 3,
++        base_backoff_ms: int = 500,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> dict[str, Any] | None:
++        if getattr(gateway, "sdk_max_retries", 0) != 0:
++            raise PermissionError(
++                "Gateway SDK retry must be disabled (sdk_max_retries=0); "
++                "OutboxService is sole retry owner"
++            )
++        claim = self._store.claim_due(
++            context,
++            runtime_epoch=runtime_epoch,
++            lease_ttl_ms=lease_ttl_ms,
++            target_key=target_key,
++            request_id=request_id + ":claim",
++            deadline_monotonic_ms=deadline_monotonic_ms,
++        )
++        if claim is None:
++            return None
++
++        envelope = OutboxEnvelope(
++            outbox_id=claim.outbox_id,
++            task_id=claim.task_id,
++            target_key=claim.target_key,
++            target=claim.target,
++            semantic_key=claim.semantic_key,
++            revision=claim.revision,
++            payload=claim.payload,
++            payload_ref=claim.payload_ref,
++            delivery_class=claim.delivery_class,
++            provider_idempotency_key=claim.provider_idempotency_key,
++            attempt_count=claim.attempt_count,
++            deadline_ms=claim.deadline,
++        )
++        # Execute remote send strictly OUTSIDE any SQLite transaction.
++        # Catch library/transport exceptions so outbox consumers never re-run business operations.
++        try:
++            send_result = gateway.send(envelope)
++        except Exception:
++            fallback_status: DeliveryStatus = (
++                "RETRYABLE_ERROR"
++                if claim.delivery_class in {"UPSERT_REVISION", "PROVIDER_IDEMPOTENT"}
++                else "UNKNOWN"
++            )
++            send_result = GatewaySendResult(
++                status=fallback_status,
++                error_code="GATEWAY_TRANSPORT_EXCEPTION",
++                retry_after_ms=base_backoff_ms,
++                exact_once_supported=False,
++            )
++
++        raw = self._writer.submit(
++            self.complete_delivery(
++                context,
++                outbox_id=claim.outbox_id,
++                lease_token=claim.lease_token,
++                expected_version=claim.version,
++                result=send_result,
++                max_attempts=max_attempts,
++                base_backoff_ms=base_backoff_ms,
++                request_id=request_id + ":complete",
++                deadline_monotonic_ms=deadline_monotonic_ms,
++            )
++        ).result(
++            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
++        )
++        return dict(strict_json(raw))
++
++    def recover_in_flight(
++        self,
++        context: InboundContext,
++        *,
++        runtime_epoch: str,
++        max_attempts: int = 3,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "outbox_recover_in_flight",
++                    "epoch": runtime_epoch,
++                    "max_attempts": max_attempts,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return event_lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            prof = db.execute(
++                "SELECT active_runtime_epoch FROM profile_config WHERE singleton=1"
++            ).fetchone()
++            inst = db.execute(
++                "SELECT state FROM runtime_instances WHERE runtime_epoch=?", (runtime_epoch,)
++            ).fetchone()
++            if not prof or prof[0] != runtime_epoch or inst != ("ACTIVE",):
++                raise PermissionError("Runtime epoch is not active for outbox recovery")
++
++            now = time.time_ns() // 1_000_000
++            rows = db.execute(
++                "SELECT outbox_id,target_key,semantic_key,revision,delivery_class,attempt_count,"
++                "version,deadline,claim_runtime_epoch FROM outbox WHERE state='IN_FLIGHT' "
++                "ORDER BY created_at,outbox_id"
++            ).fetchall()
++
++            requeued_ids: list[str] = []
++            superseded_ids: list[str] = []
++            unknown_ids: list[str] = []
++            dead_or_expired_ids: list[str] = []
++
++            for r in rows:
++                oid, t_key, s_key, rev, d_class, attempts, ver, deadline, old_epoch = (
++                    str(r[0]),
++                    str(r[1]),
++                    str(r[2]),
++                    int(r[3]),
++                    str(r[4]),
++                    int(r[5]),
++                    int(r[6]),
++                    None if r[7] is None else int(r[7]),
++                    str(r[8]),
++                )
++                old_inst = db.execute(
++                    "SELECT state FROM runtime_instances WHERE runtime_epoch=?", (old_epoch,)
++                ).fetchone()
++                if old_inst != ("STOPPED",):
++                    raise PermissionError(
++                        f"Claiming runtime_epoch {old_epoch} is not proven STOPPED"
++                    )
++
++                max_rev_row = db.execute(
++                    "SELECT coalesce(max(revision),0) FROM outbox "
++                    "WHERE target_key=? AND semantic_key=?",
++                    (t_key, s_key),
++                ).fetchone()
++                max_rev = int(max_rev_row[0]) if max_rev_row else rev
++
++                if d_class == "UPSERT_REVISION" and max_rev > rev:
++                    next_state = "SUPERSEDED"
++                    err = None
++                    superseded_ids.append(oid)
++                elif d_class in {"UPSERT_REVISION", "PROVIDER_IDEMPOTENT"}:
++                    if deadline is not None and now >= deadline:
++                        next_state = "EXPIRED"
++                        err = "DEADLINE_EXCEEDED"
++                        dead_or_expired_ids.append(oid)
++                    elif attempts >= max_attempts:
++                        next_state = "DEAD"
++                        err = "MAX_ATTEMPTS_EXCEEDED"
++                        dead_or_expired_ids.append(oid)
++                    else:
++                        next_state = "PENDING"
++                        err = "RECOVERED_IN_FLIGHT"
++                        requeued_ids.append(oid)
++                else:
++                    next_state = "UNKNOWN"
++                    err = "IN_FLIGHT_OUTCOME_UNKNOWN"
++                    unknown_ids.append(oid)
++
++                db.execute(
++                    "UPDATE outbox SET state=?,version=?,claim_runtime_epoch=NULL,"
++                    "lease_token=NULL,lease_until=NULL,error_code=?,updated_at=? "
++                    "WHERE outbox_id=? AND version=? AND state='IN_FLIGHT'",
++                    (next_state, ver + 1, err, now, oid, ver),
++                )
++
++            receipt: dict[str, Any] = {
++                "runtime_epoch": runtime_epoch,
++                "requeued_ids": requeued_ids,
++                "superseded_ids": superseded_ids,
++                "unknown_ids": unknown_ids,
++                "dead_or_expired_ids": dead_or_expired_ids,
++            }
++            append_outbox_event(
++                db,
++                context,
++                f"out_rec_{runtime_epoch}",
++                1,
++                None,
++                "OUTBOX_RECOVERED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
++        )
++
++    def reconcile_unknown(
++        self,
++        context: InboundContext,
++        *,
++        outbox_id: str,
++        expected_version: int,
++        resolution: ReconcileResolution,
++        provider_receipt: dict[str, Any] | None = None,
++        max_attempts: int = 3,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if resolution == "CONFIRMED_SENT" and not provider_receipt:
++            raise ValueError("CONFIRMED_SENT requires verified provider_receipt")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "outbox_reconcile_unknown",
++                    "outbox_id": outbox_id,
++                    "expected_version": expected_version,
++                    "resolution": resolution,
++                    "receipt": provider_receipt,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return event_lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            row = db.execute(
++                "SELECT task_id,target_key,semantic_key,revision,delivery_class,state,"
++                "attempt_count,version,deadline FROM outbox WHERE outbox_id=?",
++                (outbox_id,),
++            ).fetchone()
++            if not row or row[5] != "UNKNOWN" or int(row[7]) != expected_version:
++                raise RequestConflict("Outbox record is not in UNKNOWN at expected_version")
++            task_id = None if row[0] is None else str(row[0])
++            t_key, s_key = str(row[1]), str(row[2])
++            rev = int(row[3])
++            d_class = str(row[4])
++            attempts = int(row[6])
++            old_ver = int(row[7])
++            deadline = None if row[8] is None else int(row[8])
++            now = time.time_ns() // 1_000_000
++
++            max_sent_row = db.execute(
++                "SELECT coalesce(max(revision),0) FROM outbox "
++                "WHERE target_key=? AND semantic_key=? AND state='SENT'",
++                (t_key, s_key),
++            ).fetchone()
++            max_sent = int(max_sent_row[0]) if max_sent_row else 0
++            exact_once = bool(
++                d_class == "PROVIDER_IDEMPOTENT"
++                and provider_receipt is not None
++                and provider_receipt.get("exact_once_guaranteed") is True
++            )
++
++            receipt_json: str | None = None
++            err: str | None = None
++            if resolution == "CONFIRMED_SENT":
++                target_state = "SUPERSEDED" if max_sent > rev else "SENT"
++                doc = dict(provider_receipt or {}) | {"exact_once_guaranteed": exact_once}
++                receipt_json = canonicalize(doc).decode()
++            elif resolution == "CONFIRMED_NOT_SENT":
++                if deadline is not None and now >= deadline:
++                    target_state = "EXPIRED"
++                    err = "DEADLINE_EXCEEDED"
++                elif attempts >= max_attempts:
++                    target_state = "DEAD"
++                    err = "MAX_ATTEMPTS_EXCEEDED"
++                else:
++                    target_state = "PENDING"
++            else:
++                target_state = "DEAD"
++                err = "RECONCILED_DEAD"
++
++            new_ver = old_ver + 1
++            upd = db.execute(
++                "UPDATE outbox SET state=?,version=?,"
++                "provider_receipt_json=coalesce(?,provider_receipt_json),"
++                "error_code=?,updated_at=? WHERE outbox_id=? AND version=? AND state='UNKNOWN'",
++                (target_state, new_ver, receipt_json, err, now, outbox_id, old_ver),
++            )
++            if upd.rowcount != 1:
++                raise RequestConflict("Outbox reconcile CAS conflict")
++
++            receipt: dict[str, Any] = {
++                "outbox_id": outbox_id,
++                "state": target_state,
++                "version": new_ver,
++                "exact_once_guaranteed": exact_once,
++            }
++            append_outbox_event(
++                db,
++                context,
++                outbox_id,
++                new_ver,
++                task_id,
++                "OUTBOX_RECONCILED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
 +        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/recovery.py
@@ -7422,6 +8091,496 @@
 +    finally:
 +        db.close()
 --- /dev/null
++++ b/services/core/src/openbot/storage/outbox.py
+@@ -0,0 +1,487 @@
++"""Durable outbox storage primitives with revision coalescing and terminal state guards."""
++
++import hashlib
++import secrets
++import sqlite3
++import time
++from dataclasses import dataclass
++from typing import Any
++
++from openbot.contracts import canonicalize, strict_json
++from openbot.storage.inbox import InboundContext, authorize
++from openbot.storage.writer import LookupResult, RequestConflict, Writer, WriterCommand
++
++DELIVERY_CLASSES = frozenset({"UPSERT_REVISION", "PROVIDER_IDEMPOTENT", "RECONCILE_ONLY"})
++OUTBOX_STATES = frozenset(
++    {"PENDING", "IN_FLIGHT", "SENT", "UNKNOWN", "DEAD", "EXPIRED", "SUPERSEDED"}
++)
++TERMINAL_TASK_STATES = frozenset({"SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"})
++
++
++def is_terminal_payload(payload: dict[str, Any]) -> bool:
++    return bool(payload.get("terminal") is True or payload.get("state") in TERMINAL_TASK_STATES)
++
++
++@dataclass(frozen=True, slots=True)
++class OutboxRecord:
++    outbox_id: str
++    task_id: str | None
++    channel_account_id: str | None
++    target_key: str
++    target: dict[str, Any]
++    semantic_key: str
++    revision: int
++    payload_ref: str | None
++    payload: dict[str, Any]
++    delivery_class: str
++    provider_idempotency_key: str | None
++    state: str
++    attempt_count: int
++    version: int
++    not_before: int
++    deadline: int | None
++    claim_runtime_epoch: str | None
++    lease_token: str | None
++    lease_until: int | None
++    provider_receipt: dict[str, Any] | None
++    error_code: str | None
++    created_at: int
++    updated_at: int
++
++
++@dataclass(frozen=True, slots=True)
++class OutboxClaim:
++    outbox_id: str
++    task_id: str | None
++    channel_account_id: str | None
++    target_key: str
++    target: dict[str, Any]
++    semantic_key: str
++    revision: int
++    payload_ref: str | None
++    payload: dict[str, Any]
++    delivery_class: str
++    provider_idempotency_key: str | None
++    attempt_count: int
++    version: int
++    deadline: int | None
++    claim_runtime_epoch: str
++    lease_token: str
++    lease_until: int
++
++
++def _row_to_record(row: tuple[Any, ...]) -> OutboxRecord:
++    return OutboxRecord(
++        outbox_id=str(row[0]),
++        task_id=None if row[1] is None else str(row[1]),
++        channel_account_id=None if row[2] is None else str(row[2]),
++        target_key=str(row[3]),
++        target=strict_json(str(row[4])),
++        semantic_key=str(row[5]),
++        revision=int(row[6]),
++        payload_ref=None if row[7] is None else str(row[7]),
++        payload=strict_json(str(row[8])),
++        delivery_class=str(row[9]),
++        provider_idempotency_key=None if row[10] is None else str(row[10]),
++        state=str(row[11]),
++        attempt_count=int(row[12]),
++        version=int(row[13]),
++        not_before=int(row[14]),
++        deadline=None if row[15] is None else int(row[15]),
++        claim_runtime_epoch=None if row[16] is None else str(row[16]),
++        lease_token=None if row[17] is None else str(row[17]),
++        lease_until=None if row[18] is None else int(row[18]),
++        provider_receipt=None if row[19] is None else strict_json(str(row[19])),
++        error_code=None if row[20] is None else str(row[20]),
++        created_at=int(row[21]),
++        updated_at=int(row[22]),
++    )
++
++
++def event_lookup(
++    db: sqlite3.Connection, context: InboundContext, request_id: str
++) -> LookupResult | None:
++    authorize(db, context)
++    row = db.execute(
++        "SELECT actor_principal_id,payload_json FROM events "
++        "WHERE json_extract(payload_json,'$.request_id')=?",
++        (request_id,),
++    ).fetchone()
++    if row is None:
++        return None
++    if row[0] != context.principal_id:
++        raise PermissionError("Request belongs to another principal")
++    val = strict_json(str(row[1]))
++    if val.get("source_scope") not in (None, context.source_scope):
++        raise PermissionError("Request belongs to another source scope")
++    return LookupResult(str(val["command_hash"]), canonicalize(val["receipt"]))
++
++
++def append_outbox_event(
++    db: sqlite3.Connection,
++    context: InboundContext,
++    outbox_id: str,
++    outbox_version: int,
++    task_id: str | None,
++    event_type: str,
++    request_id: str,
++    fingerprint: str,
++    receipt: dict[str, Any],
++    now: int,
++) -> None:
++    payload = canonicalize(
++        {
++            "request_id": request_id,
++            "command_hash": fingerprint,
++            "source_scope": context.source_scope,
++            "receipt": receipt,
++        }
++    ).decode()
++    db.execute(
++        "INSERT INTO events(event_id,aggregate_kind,aggregate_id,aggregate_version,task_id,"
++        "actor_principal_id,event_type,schema_version,trace_id,payload_json,created_at) "
++        "VALUES(?,'Outbox',?,?,?,?,?,1,?,?,?)",
++        (
++            "evt_" + secrets.token_hex(16),
++            outbox_id,
++            outbox_version,
++            task_id,
++            context.principal_id,
++            event_type,
++            "trc_" + hashlib.sha256(request_id.encode()).hexdigest()[:32],
++            payload,
++            now,
++        ),
++    )
++
++
++def enqueue_outbox_tx(
++    db: sqlite3.Connection,
++    context: InboundContext,
++    *,
++    task_id: str | None,
++    channel_account_id: str | None,
++    target_key: str,
++    target: dict[str, Any],
++    semantic_key: str,
++    payload: dict[str, Any],
++    delivery_class: str,
++    revision: int | None = None,
++    provider_idempotency_key: str | None = None,
++    payload_ref: str | None = None,
++    not_before_ms: int | None = None,
++    deadline_ms: int | None = None,
++    now_ms: int,
++) -> dict[str, Any]:
++    authorize(db, context)
++    if task_id is not None:
++        t_row = db.execute("SELECT owner_id FROM tasks WHERE task_id=?", (task_id,)).fetchone()
++        if not t_row or t_row[0] != context.principal_id:
++            raise PermissionError("Task scope mismatch for outbox enqueue")
++    if not target_key.strip() or not semantic_key.strip():
++        raise ValueError("target_key and semantic_key must be non-empty")
++    if delivery_class not in DELIVERY_CLASSES:
++        raise ValueError(f"Unsupported delivery_class: {delivery_class}")
++    if delivery_class == "PROVIDER_IDEMPOTENT" and (
++        provider_idempotency_key is None or not provider_idempotency_key.strip()
++    ):
++        raise ValueError("PROVIDER_IDEMPOTENT requires provider_idempotency_key")
++
++    existing = db.execute(
++        "SELECT revision,payload_json,state FROM outbox "
++        "WHERE target_key=? AND semantic_key=? ORDER BY revision",
++        (target_key, semantic_key),
++    ).fetchall()
++    max_rev = max((int(r[0]) for r in existing), default=0)
++    has_terminal = any(
++        is_terminal_payload(strict_json(str(r[1])))
++        for r in existing
++        if str(r[2]) in {"PENDING", "IN_FLIGHT", "SENT", "UNKNOWN"}
++    )
++    incoming_terminal = is_terminal_payload(payload)
++    if has_terminal and not incoming_terminal:
++        raise RequestConflict("Non-terminal progress cannot overwrite terminal outbox state")
++
++    assigned_rev = max_rev + 1 if revision is None else int(revision)
++    if assigned_rev <= 0:
++        raise ValueError("Outbox revision must be positive")
++    if any(int(r[0]) == assigned_rev for r in existing):
++        raise RequestConflict("Duplicate outbox revision for target_key and semantic_key")
++
++    initial_state = (
++        "SUPERSEDED"
++        if (assigned_rev < max_rev and delivery_class == "UPSERT_REVISION")
++        else "PENDING"
++    )
++    if initial_state == "PENDING" and delivery_class == "UPSERT_REVISION":
++        db.execute(
++            "UPDATE outbox SET state='SUPERSEDED',version=version+1,updated_at=? "
++            "WHERE target_key=? AND semantic_key=? AND state='PENDING' AND revision<?",
++            (now_ms, target_key, semantic_key, assigned_rev),
++        )
++
++    outbox_id = "out_" + secrets.token_hex(16)
++    nb = now_ms if not_before_ms is None else int(not_before_ms)
++    db.execute(
++        "INSERT INTO outbox("
++        "outbox_id,task_id,channel_account_id,target_key,target_json,semantic_key,revision,"
++        "payload_ref,payload_json,delivery_class,provider_idempotency_key,state,attempt_count,"
++        "version,not_before,deadline,created_at,updated_at) "
++        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)",
++        (
++            outbox_id,
++            task_id,
++            channel_account_id,
++            target_key,
++            canonicalize(target).decode(),
++            semantic_key,
++            assigned_rev,
++            payload_ref,
++            canonicalize(payload).decode(),
++            delivery_class,
++            provider_idempotency_key,
++            initial_state,
++            nb,
++            deadline_ms,
++            now_ms,
++            now_ms,
++        ),
++    )
++    return {
++        "outbox_id": outbox_id,
++        "target_key": target_key,
++        "semantic_key": semantic_key,
++        "revision": assigned_rev,
++        "state": initial_state,
++        "version": 0,
++    }
++
++
++class OutboxStore:
++    """Authoritative SQLite persistence for outbox state transitions."""
++
++    def __init__(self, writer: Writer) -> None:
++        self._writer = writer
++
++    def claim_due(
++        self,
++        context: InboundContext,
++        *,
++        runtime_epoch: str,
++        lease_ttl_ms: int,
++        target_key: str | None = None,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> OutboxClaim | None:
++        if lease_ttl_ms <= 0:
++            raise ValueError("lease_ttl_ms must be positive")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "outbox_claim_due",
++                    "epoch": runtime_epoch,
++                    "target_key": target_key,
++                    "ttl": lease_ttl_ms,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return event_lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            prof = db.execute(
++                "SELECT active_runtime_epoch FROM profile_config WHERE singleton=1"
++            ).fetchone()
++            inst = db.execute(
++                "SELECT state FROM runtime_instances WHERE runtime_epoch=?", (runtime_epoch,)
++            ).fetchone()
++            if not prof or prof[0] != runtime_epoch or inst != ("ACTIVE",):
++                raise PermissionError("Runtime epoch is not active for outbox claim")
++            now = time.time_ns() // 1_000_000
++
++            # 1. Expire past-deadline PENDING rows
++            db.execute(
++                "UPDATE outbox SET state='EXPIRED',error_code='DEADLINE_EXCEEDED',"
++                "version=version+1,updated_at=? "
++                "WHERE state='PENDING' AND deadline IS NOT NULL AND deadline<=?",
++                (now, now),
++            )
++            # 2. Coalesce superseded UPSERT_REVISION PENDING rows
++            db.execute(
++                "UPDATE outbox SET state='SUPERSEDED',version=version+1,updated_at=? "
++                "WHERE state='PENDING' AND delivery_class='UPSERT_REVISION' AND revision < ("
++                "SELECT max(newer.revision) FROM outbox newer "
++                "WHERE newer.target_key=outbox.target_key "
++                "AND newer.semantic_key=outbox.semantic_key)",
++                (now,),
++            )
++
++            # 3. Select oldest due PENDING row not blocked by IN_FLIGHT/UNKNOWN on same key
++            sql = (
++                "SELECT outbox_id,task_id,channel_account_id,target_key,target_json,semantic_key,"
++                "revision,payload_ref,payload_json,delivery_class,provider_idempotency_key,"
++                "attempt_count,version,deadline FROM outbox o "
++                "WHERE o.state='PENDING' AND o.not_before<=? "
++                "AND NOT EXISTS ("
++                "  SELECT 1 FROM outbox b WHERE b.target_key=o.target_key "
++                "  AND b.semantic_key=o.semantic_key AND b.state IN ('IN_FLIGHT','UNKNOWN')"
++                ") "
++            )
++            params: list[Any] = [now]
++            if target_key is not None:
++                sql += "AND o.target_key=? "
++                params.append(target_key)
++            sql += "ORDER BY o.not_before,o.created_at,o.revision LIMIT 1"
++            row = db.execute(sql, tuple(params)).fetchone()
++            if row is None:
++                return canonicalize({"claimed": None})
++
++            outbox_id = str(row[0])
++            old_ver = int(row[12])
++            new_attempts = int(row[11]) + 1
++            new_ver = old_ver + 1
++            lease_token = "ols_" + secrets.token_hex(16)
++            lease_until = now + lease_ttl_ms
++            upd = db.execute(
++                "UPDATE outbox SET state='IN_FLIGHT',attempt_count=?,version=?,"
++                "claim_runtime_epoch=?,lease_token=?,lease_until=?,updated_at=? "
++                "WHERE outbox_id=? AND version=? AND state='PENDING'",
++                (
++                    new_attempts,
++                    new_ver,
++                    runtime_epoch,
++                    lease_token,
++                    lease_until,
++                    now,
++                    outbox_id,
++                    old_ver,
++                ),
++            )
++            if upd.rowcount != 1:
++                raise RequestConflict("Outbox claim CAS conflict")
++
++            claim_dict: dict[str, Any] = {
++                "outbox_id": outbox_id,
++                "task_id": row[1],
++                "channel_account_id": row[2],
++                "target_key": str(row[3]),
++                "target": strict_json(str(row[4])),
++                "semantic_key": str(row[5]),
++                "revision": int(row[6]),
++                "payload_ref": row[7],
++                "payload": strict_json(str(row[8])),
++                "delivery_class": str(row[9]),
++                "provider_idempotency_key": row[10],
++                "attempt_count": new_attempts,
++                "version": new_ver,
++                "deadline": None if row[13] is None else int(row[13]),
++                "claim_runtime_epoch": runtime_epoch,
++                "lease_token": lease_token,
++                "lease_until": lease_until,
++            }
++            receipt = {"claimed": claim_dict}
++            append_outbox_event(
++                db,
++                context,
++                outbox_id,
++                new_ver,
++                None if row[1] is None else str(row[1]),
++                "OUTBOX_CLAIMED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        raw = self._writer.submit(
++            WriterCommand(request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup)
++        ).result(
++            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
++        )
++        parsed = strict_json(raw)
++        claimed = parsed["claimed"]
++        if claimed is None:
++            return None
++        return OutboxClaim(
++            outbox_id=str(claimed["outbox_id"]),
++            task_id=None if claimed["task_id"] is None else str(claimed["task_id"]),
++            channel_account_id=(
++                None
++                if claimed["channel_account_id"] is None
++                else str(claimed["channel_account_id"])
++            ),
++            target_key=str(claimed["target_key"]),
++            target=dict(claimed["target"]),
++            semantic_key=str(claimed["semantic_key"]),
++            revision=int(claimed["revision"]),
++            payload_ref=None if claimed["payload_ref"] is None else str(claimed["payload_ref"]),
++            payload=dict(claimed["payload"]),
++            delivery_class=str(claimed["delivery_class"]),
++            provider_idempotency_key=(
++                None
++                if claimed["provider_idempotency_key"] is None
++                else str(claimed["provider_idempotency_key"])
++            ),
++            attempt_count=int(claimed["attempt_count"]),
++            version=int(claimed["version"]),
++            deadline=None if claimed["deadline"] is None else int(claimed["deadline"]),
++            claim_runtime_epoch=str(claimed["claim_runtime_epoch"]),
++            lease_token=str(claimed["lease_token"]),
++            lease_until=int(claimed["lease_until"]),
++        )
++
++    def get(self, context: InboundContext, outbox_id: str) -> OutboxRecord:
++        def query(db: sqlite3.Connection) -> OutboxRecord:
++            authorize(db, context)
++            row = db.execute(
++                "SELECT outbox_id,task_id,channel_account_id,target_key,target_json,semantic_key,"
++                "revision,payload_ref,payload_json,delivery_class,provider_idempotency_key,state,"
++                "attempt_count,version,not_before,deadline,claim_runtime_epoch,lease_token,"
++                "lease_until,provider_receipt_json,error_code,created_at,updated_at "
++                "FROM outbox WHERE outbox_id=?",
++                (outbox_id,),
++            ).fetchone()
++            if row is None:
++                raise KeyError(f"Outbox record not found: {outbox_id}")
++            return _row_to_record(row)
++
++        return self._writer.read(query)
++
++    def list_by_semantic_key(
++        self, context: InboundContext, target_key: str, semantic_key: str
++    ) -> list[OutboxRecord]:
++        def query(db: sqlite3.Connection) -> list[OutboxRecord]:
++            authorize(db, context)
++            rows = db.execute(
++                "SELECT outbox_id,task_id,channel_account_id,target_key,target_json,semantic_key,"
++                "revision,payload_ref,payload_json,delivery_class,provider_idempotency_key,state,"
++                "attempt_count,version,not_before,deadline,claim_runtime_epoch,lease_token,"
++                "lease_until,provider_receipt_json,error_code,created_at,updated_at "
++                "FROM outbox WHERE target_key=? AND semantic_key=? ORDER BY revision",
++                (target_key, semantic_key),
++            ).fetchall()
++            return [_row_to_record(r) for r in rows]
++
++        return self._writer.read(query)
++
++    def highest_delivered_revision(
++        self, context: InboundContext, target_key: str, semantic_key: str
++    ) -> int:
++        def query(db: sqlite3.Connection) -> int:
++            authorize(db, context)
++            row = db.execute(
++                "SELECT coalesce(max(revision),0) FROM outbox "
++                "WHERE target_key=? AND semantic_key=? AND state='SENT'",
++                (target_key, semantic_key),
++            ).fetchone()
++            return int(row[0]) if row else 0
++
++        return self._writer.read(query)
+--- /dev/null
 +++ b/services/core/src/openbot/storage/writer.py
 @@ -0,0 +1,260 @@
 +"""One bounded writer owns whole transactions; cancellation of a waiter is not rollback."""
@@ -7713,7 +8872,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/031 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁与按副作用恢复器；上游 OB-015/093 与后续 OB-021/022/023 未闭合
++- [in_progress] OB-016/017/018/019/020/021/031 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器与 durable outbox；上游 OB-015/093 与后续 OB-022/023 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -7903,6 +9062,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
  
  **需求** [RQ04](requirements_traceability.md#rq04)
+ 
+@@ -1315,7 +1315,7 @@
+ 
+ **实现durable outbox及投递状态**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Integration · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
+ 
+ **需求** [RQ02](requirements_traceability.md#rq02)、[RQ08](requirements_traceability.md#rq08)
  
 @@ -1487,7 +1487,7 @@
  
@@ -8514,7 +9682,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1199,7 +1410,20 @@
+@@ -1199,14 +1410,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "提供恢复器安全重试决定、原grant全部复验字段、Attempt/dispatch/provider key关系，以及人工reconcile原始证据引用和验证决定；证明人工说明未直接覆盖权威状态。"
      ],
@@ -8536,7 +9704,37 @@
    },
    {
      "id": "OB-021",
-@@ -1848,7 +2072,7 @@
+     "title": "实现durable outbox及投递状态",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Integration",
+     "size": "M",
+     "req_ids": [
+@@ -1260,7 +1484,20 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第10、21页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第10、21页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 durable outbox storage and transaction-external delivery orchestration (semantic_key, monotonic revision, UPSERT_REVISION coalescing, terminal state protection, single retry owner, IN_FLIGHT crash recovery, and UNKNOWN reconciliation)",
++      "evidence": [
++        "docs/evidence/storage.md",
++        "tests/integration/storage/test_outbox.py",
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-017（正式认证入口与持久 challenge 完整闭合）尚未从 IN_PROGRESS 转为 VERIFIED/DONE；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs (tenacity), reuse_type (control_owned), and reuse_notes; implemented control-owned bounded backoff with single retry owner (sdk_max_retries=0 enforced) without tenacity decorators; verified no business operation re-execution on notification retry and no false exactly-once claims."
++    }
+   },
+   {
+     "id": "OB-022",
+@@ -1848,7 +2085,7 @@
      "title": "实现确定性策略评估器",
      "milestone": "M1",
      "priority": "P0",
@@ -8545,7 +9743,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1900,7 +2124,19 @@
+@@ -1900,7 +2137,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -8566,7 +9764,7 @@
    },
    {
      "id": "OB-032",
-@@ -2851,7 +3087,7 @@
+@@ -2851,7 +3100,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -8575,7 +9773,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3144,19 @@
+@@ -2908,7 +3157,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -8596,7 +9794,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4527,7 @@
+@@ -4279,7 +4540,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -8605,7 +9803,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4585,26 @@
+@@ -4337,14 +4598,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -8634,7 +9832,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4661,19 @@
+@@ -4401,7 +4674,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -8655,7 +9853,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5795,7 @@
+@@ -5523,7 +5808,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -8664,7 +9862,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5848,26 @@
+@@ -5576,14 +5861,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -8693,7 +9891,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +5926,26 @@
+@@ -5642,14 +5939,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -8722,7 +9920,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6000,26 @@
+@@ -5704,14 +6013,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -8751,7 +9949,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6086,25 @@
+@@ -5778,14 +6099,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -8779,7 +9977,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6172,19 @@
+@@ -5853,7 +6185,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -11795,6 +12993,630 @@
 +        )
 +    finally:
 +        db.close()
+--- /dev/null
++++ b/tests/integration/storage/test_outbox.py
+@@ -0,0 +1,621 @@
++import hashlib
++import json
++import time
++
++import pytest
++from openbot.application.dispatch import DispatchService
++from openbot.application.operations import OperationService
++from openbot.application.outbox import (
++    GatewaySendResult,
++    OutboxEnvelope,
++    OutboxService,
++)
++from openbot.application.resources import ResourceRequest
++from openbot.application.state_machine import TaskStateService
++from openbot.contracts import SchemaRegistry, canonicalize
++from openbot.policy.approvals import ApprovalService
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.outbox import OutboxStore
++from openbot.storage.writer import RequestConflict, Writer
++
++from tests.integration.storage.test_migrations import ROOT
++from tests.integration.storage.test_recovery import MemoryChallenges
++
++
++def _deadline() -> int:
++    return int(time.monotonic() * 1000) + 5000
++
++
++class ControlledGateway:
++    """Deterministic gateway stub outside SQLite transactions."""
++
++    def __init__(
++        self,
++        *,
++        capabilities: frozenset[str] = frozenset({"upsert_revision"}),
++        sdk_max_retries: int = 0,
++    ) -> None:
++        self._capabilities = capabilities
++        self.sdk_max_retries = sdk_max_retries
++        self.outcomes: list[GatewaySendResult | Exception] = []
++        self.calls: list[OutboxEnvelope] = []
++        self.in_transaction_Checks: list[bool] = []
++
++    def capabilities(self) -> frozenset[str]:
++        return self._capabilities
++
++    def send(self, envelope: OutboxEnvelope) -> GatewaySendResult:
++        self.calls.append(envelope)
++        if not self.outcomes:
++            return GatewaySendResult(
++                status="SENT",
++                provider_message_id=f"msg_{envelope.outbox_id}_{envelope.attempt_count}",
++                remote_revision=envelope.revision,
++                exact_once_supported="provider_idempotency" in self._capabilities,
++            )
++        nxt = self.outcomes.pop(0)
++        if isinstance(nxt, Exception):
++            raise nxt
++        return nxt
++
++
++@pytest.fixture
++def outbox_env(tmp_path):
++    path = tmp_path / "outbox.sqlite"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++        manifest = {
++            "name": "fs.write",
++            "version": "1.0.0",
++            "effect": "LOCAL_WRITE",
++            "retry_class": "IDEMPOTENT_WRITE",
++            "input_schema": {
++                "$schema": "https://json-schema.org/draft/2020-12/schema",
++                "type": "object",
++                "properties": {"path": {"type": "string"}},
++                "required": ["path"],
++                "additionalProperties": False,
++            },
++        }
++        raw = canonicalize(manifest)
++        db.execute(
++            "INSERT INTO tool_registry VALUES("
++            "'fs.write', '1.0.0', ?, NULL, 'builtin', ?, 'ACTIVE', 1000)",
++            (hashlib.sha256(raw).hexdigest(), raw.decode()),
++        )
++    finally:
++        db.close()
++
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    registry = SchemaRegistry.from_directory(ROOT / "contracts")
++    challenges = MemoryChallenges()
++    writer = Writer(path)
++    inbox = Inbox(writer, registry)
++    tasks = TaskStateService(writer)
++    ops = OperationService(writer, challenges, registry)
++    approvals = ApprovalService(writer, challenges, registry)
++    dispatcher = DispatchService(writer, registry)
++    store = OutboxStore(writer)
++    service = OutboxService(writer, store)
++    try:
++        yield (
++            path,
++            context,
++            writer,
++            inbox,
++            tasks,
++            ops,
++            approvals,
++            dispatcher,
++            store,
++            service,
++            challenges,
++        )
++    finally:
++        writer.close()
++
++
++def test_outbox_coalesces_pending_revisions_and_protects_terminal_state(outbox_env):
++    path, context, writer, inbox, _, _, _, _, store, service, _ = outbox_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "outbox-coalesce", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-ob-1", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++
++    # Enqueue 3 progress updates under the same (target_key, semantic_key)
++    r1 = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:chat_1",
++                target={"chat_id": "chat_1"},
++                semantic_key=f"card:{task_id}",
++                payload={"state": "RUNNING", "step": 1, "terminal": False},
++                delivery_class="UPSERT_REVISION",
++                request_id="ob-enq-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    r2 = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:chat_1",
++                target={"chat_id": "chat_1"},
++                semantic_key=f"card:{task_id}",
++                payload={"state": "RUNNING", "step": 2, "terminal": False},
++                delivery_class="UPSERT_REVISION",
++                request_id="ob-enq-2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    r3 = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:chat_1",
++                target={"chat_id": "chat_1"},
++                semantic_key=f"card:{task_id}",
++                payload={"state": "SUCCEEDED", "step": 3, "terminal": True},
++                delivery_class="UPSERT_REVISION",
++                request_id="ob-enq-3",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert (r1["revision"], r2["revision"], r3["revision"]) == (1, 2, 3)
++    records = store.list_by_semantic_key(context, "feishu:chat_1", f"card:{task_id}")
++    assert [rec.state for rec in records] == ["SUPERSEDED", "SUPERSEDED", "PENDING"]
++
++    # Terminal state protection: non-terminal progress cannot overwrite terminal revision
++    with pytest.raises(RequestConflict):
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:chat_1",
++                target={"chat_id": "chat_1"},
++                semantic_key=f"card:{task_id}",
++                payload={"state": "RUNNING", "step": 4, "terminal": False},
++                delivery_class="UPSERT_REVISION",
++                request_id="ob-enq-stale-non-terminal",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++
++    # Only revision 3 is delivered when gateway runs
++    gw = ControlledGateway()
++    dispatched = service.dispatch_next(
++        context,
++        runtime_epoch="ep_1",
++        gateway=gw,
++        target_key="feishu:chat_1",
++        request_id="ob-disp-3",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert dispatched is not None
++    assert dispatched["state"] == "SENT"
++    assert dispatched["revision"] == 3
++    assert dispatched["exact_once_guaranteed"] is False
++    assert len(gw.calls) == 1
++    assert gw.calls[0].revision == 3
++
++
++def test_late_or_duplicate_receipt_never_regresses_higher_delivered_revision(outbox_env):
++    path, context, writer, inbox, _, _, _, _, store, service, _ = outbox_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "outbox-late-receipt", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-ob-2", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++
++    # Enqueue revision 1 and claim it into IN_FLIGHT
++    r1 = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:chat_2",
++                target={"chat_id": "chat_2"},
++                semantic_key=f"card:{task_id}",
++                payload={"state": "RUNNING", "step": 1, "terminal": False},
++                delivery_class="UPSERT_REVISION",
++                request_id="ob-late-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    claim1 = store.claim_due(
++        context,
++        runtime_epoch="ep_1",
++        lease_ttl_ms=10_000,
++        target_key="feishu:chat_2",
++        request_id="ob-claim-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert claim1 is not None and claim1.outbox_id == r1["outbox_id"]
++
++    # While revision 1 is IN_FLIGHT, terminal revision 2 is enqueued
++    r2 = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:chat_2",
++                target={"chat_id": "chat_2"},
++                semantic_key=f"card:{task_id}",
++                payload={"state": "SUCCEEDED", "step": 2, "terminal": True},
++                delivery_class="UPSERT_REVISION",
++                request_id="ob-late-2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert r2["revision"] == 2
++
++    # Revision 1 receipt arrives after revision 2 already exists -> recorded as SUPERSEDED,
++    # so revision 2 remains PENDING and can then be delivered as the authoritative terminal state.
++    res1 = json.loads(
++        writer.submit(
++            service.complete_delivery(
++                context,
++                outbox_id=claim1.outbox_id,
++                lease_token=claim1.lease_token,
++                expected_version=claim1.version,
++                result=GatewaySendResult(
++                    status="SENT",
++                    provider_message_id="msg_rev1",
++                    remote_revision=1,
++                    exact_once_supported=False,
++                ),
++                request_id="ob-complete-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert res1["state"] == "SUPERSEDED"
++    assert res1["superseded_by_higher_revision"] is True
++
++    # Now revision 2 is delivered and becomes the highest delivered revision (2)
++    gw = ControlledGateway()
++    res2 = service.dispatch_next(
++        context,
++        runtime_epoch="ep_1",
++        gateway=gw,
++        target_key="feishu:chat_2",
++        request_id="ob-disp-rev2",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert res2 is not None and res2["state"] == "SENT" and res2["revision"] == 2
++    assert store.highest_delivered_revision(context, "feishu:chat_2", f"card:{task_id}") == 2
++
++    # Duplicate receipt submission for the same request_id is idempotent and does not regress
++    dup1 = json.loads(
++        writer.submit(
++            service.complete_delivery(
++                context,
++                outbox_id=claim1.outbox_id,
++                lease_token=claim1.lease_token,
++                expected_version=claim1.version,
++                result=GatewaySendResult(
++                    status="SENT",
++                    provider_message_id="msg_rev1",
++                    remote_revision=1,
++                    exact_once_supported=False,
++                ),
++                request_id="ob-complete-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert dup1 == res1
++    assert store.highest_delivered_revision(context, "feishu:chat_2", f"card:{task_id}") == 2
++
++
++def test_retry_budget_dead_letter_and_no_business_reexecution(outbox_env):
++    (
++        path,
++        context,
++        writer,
++        inbox,
++        tasks,
++        ops,
++        approvals,
++        dispatcher,
++        store,
++        service,
++        challenges,
++    ) = outbox_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "outbox-retry-dead", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-ob-3", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-ob-3", _deadline())).result(5)
++    proposed = json.loads(
++        ops.propose(
++            context,
++            task_id,
++            "fs.write",
++            '{"path":"a.txt"}',
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {"kind": "LOCAL", "resource_ref": context.workspace_id},
++            "prop-ob-3",
++            _deadline(),
++        )
++    )
++    op_id, apr_id = proposed["operation_id"], proposed["approval_id"]
++    nonce = challenges.get(apr_id).decode()
++    approvals.decide(
++        context,
++        apr_id,
++        json.dumps(
++            {
++                "expected_version": 1,
++                "expected_binding_hash": proposed["binding_hash"],
++                "decision": "APPROVE",
++                "nonce": nonce,
++            }
++        ),
++        "apr-ob-3",
++        _deadline(),
++    )
++    writer.submit(tasks.command(context, task_id, 3, "RUNNING", "run2-ob-3", _deadline())).result(5)
++    writer.submit(
++        dispatcher.claim(
++            context,
++            op_id,
++            "ep_1",
++            "exec_1",
++            [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1)],
++            30_000,
++            "claim-ob-3",
++            _deadline(),
++        )
++    ).result(5)
++
++    # Negative check: gateway with SDK auto-retry enabled is rejected (single retry owner invariant)
++    bad_gw = ControlledGateway(sdk_max_retries=3)
++    with pytest.raises(PermissionError, match="SDK retry"):
++        service.dispatch_next(
++            context,
++            runtime_epoch="ep_1",
++            gateway=bad_gw,
++            target_key="feishu:chat_3",
++            request_id="ob-bad-gw",
++            deadline_monotonic_ms=_deadline(),
++        )
++
++    # Enqueue notification with max_attempts=2
++    enq = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:chat_3",
++                target={"chat_id": "chat_3"},
++                semantic_key=f"notify:{task_id}",
++                payload={"state": "RUNNING", "op": op_id},
++                delivery_class="PROVIDER_IDEMPOTENT",
++                provider_idempotency_key=f"obk_{op_id}",
++                request_id="ob-enq-retry",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    outbox_id = enq["outbox_id"]
++
++    gw = ControlledGateway(
++        capabilities=frozenset({"provider_idempotency"}),
++        sdk_max_retries=0,
++    )
++    # Attempt 1: gateway raises a library RuntimeError -> caught outside DB txn, retryable
++    # with backoff_ms=0 so we can immediately test Attempt 2
++    gw.outcomes = [
++        RuntimeError("synthetic transport socket reset"),
++        GatewaySendResult(
++            status="RETRYABLE_ERROR",
++            error_code="HTTP_503",
++            retry_after_ms=0,
++            exact_once_supported=True,
++        ),
++    ]
++    attempt1 = service.dispatch_next(
++        context,
++        runtime_epoch="ep_1",
++        gateway=gw,
++        target_key="feishu:chat_3",
++        max_attempts=2,
++        base_backoff_ms=0,
++        request_id="ob-try-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert attempt1 is not None
++    assert attempt1["state"] == "PENDING"
++    assert attempt1["attempt_count"] == 1
++
++    # Attempt 2 exhausts max_attempts=2 -> moves to DEAD letter
++    attempt2 = service.dispatch_next(
++        context,
++        runtime_epoch="ep_1",
++        gateway=gw,
++        target_key="feishu:chat_3",
++        max_attempts=2,
++        base_backoff_ms=0,
++        request_id="ob-try-2",
++        deadline_monotonic_ms=_deadline(),
++    )
++    assert attempt2 is not None
++    assert attempt2["state"] == "DEAD"
++    assert attempt2["attempt_count"] == 2
++    assert store.get(context, outbox_id).state == "DEAD"
++
++    # Verify business operation_attempts count is STILL 1 (retries never re-run business ops)
++    db = connect(path, readonly=True)
++    try:
++        att_count = db.execute(
++            "SELECT count(*) FROM operation_attempts WHERE operation_id=?", (op_id,)
++        ).fetchone()[0]
++        assert att_count == 1
++    finally:
++        db.close()
++
++
++def test_in_flight_recovery_across_restart_and_delivery_classes(outbox_env):
++    path, context, writer, inbox, _, _, _, _, store, service, _ = outbox_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "outbox-recovery", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-ob-4", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++
++    # 1. UPSERT_REVISION item in IN_FLIGHT
++    u_enq = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:rec_upsert",
++                target={"chat_id": "rec_upsert"},
++                semantic_key=f"card:{task_id}",
++                payload={"state": "RUNNING", "step": 1},
++                delivery_class="UPSERT_REVISION",
++                request_id="ob-rec-enq-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    store.claim_due(
++        context,
++        runtime_epoch="ep_1",
++        lease_ttl_ms=10_000,
++        target_key="feishu:rec_upsert",
++        request_id="ob-rec-claim-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++
++    # 2. RECONCILE_ONLY item in IN_FLIGHT (no remote idempotency -> must become UNKNOWN on crash)
++    r_enq = json.loads(
++        writer.submit(
++            service.enqueue(
++                context,
++                task_id=task_id,
++                target_key="feishu:rec_only",
++                target={"chat_id": "rec_only"},
++                semantic_key=f"msg:{task_id}",
++                payload={"text": "non-idempotent notification"},
++                delivery_class="RECONCILE_ONLY",
++                request_id="ob-rec-enq-2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    store.claim_due(
++        context,
++        runtime_epoch="ep_1",
++        lease_ttl_ms=10_000,
++        target_key="feishu:rec_only",
++        request_id="ob-rec-claim-2",
++        deadline_monotonic_ms=_deadline(),
++    )
++
++    # While ep_1 is still ACTIVE, recovery is refused (cannot steal active epoch's IN_FLIGHT)
++    with pytest.raises(PermissionError, match="STOPPED"):
++        writer.submit(
++            service.recover_in_flight(
++                context,
++                runtime_epoch="ep_1",
++                request_id="ob-rec-active-fail",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++
++    # Simulate restart: mark ep_1 STOPPED and activate ep_2
++    db = connect(path)
++    try:
++        db.execute(
++            "UPDATE runtime_instances SET state='STOPPED',ended_at=2000 WHERE runtime_epoch='ep_1'"
++        )
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_2','boot_2','sup_2','ACTIVE',2000,2000)"
++        )
++        db.execute(
++            "UPDATE profile_config SET active_runtime_epoch='ep_2',"
++            "version=version+1,updated_at=2000 WHERE singleton=1"
++        )
++    finally:
++        db.close()
++
++    recovered = json.loads(
++        writer.submit(
++            service.recover_in_flight(
++                context,
++                runtime_epoch="ep_2",
++                request_id="ob-rec-ep2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert u_enq["outbox_id"] in recovered["requeued_ids"]
++    assert r_enq["outbox_id"] in recovered["unknown_ids"]
++    assert store.get(context, u_enq["outbox_id"]).state == "PENDING"
++    assert store.get(context, r_enq["outbox_id"]).state == "UNKNOWN"
++
++    # Reconcile UNKNOWN outbox item with verified gateway receipt -> SENT
++    reconciled = json.loads(
++        writer.submit(
++            service.reconcile_unknown(
++                context,
++                outbox_id=r_enq["outbox_id"],
++                expected_version=store.get(context, r_enq["outbox_id"]).version,
++                resolution="CONFIRMED_SENT",
++                provider_receipt={"provider_message_id": "msg_reconciled_1", "verified": True},
++                request_id="ob-reconcile-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert reconciled["state"] == "SENT"
++    assert reconciled["exact_once_guaranteed"] is False
 --- /dev/null
 +++ b/tests/integration/storage/test_recovery.py
 @@ -0,0 +1,558 @@
