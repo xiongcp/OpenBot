@@ -16,7 +16,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/unit-contract-protocol.log",
-      "log_sha256": "3350d7fb633df935c19d6142ce981693b4503f24a72e990f8a0f73feef48b1cc"
+      "log_sha256": "827ae914c73d1d1cb4e3cecb52059fea6c9ded433cfad7c2d40e1f4235efbfc6"
     },
     {
       "name": "lint",
@@ -41,7 +41,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/format.log",
-      "log_sha256": "3accebe6ea89f2c78ec6c12dbcaa6ecf88913ed058c8e2b2909b52889ac7ba20"
+      "log_sha256": "f971e9aa1333322e3b0728c8b85cab6add5a88b52ed8a2df7021bde22f86a5af"
     },
     {
       "name": "types",
@@ -52,7 +52,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/types.log",
-      "log_sha256": "8ba9873e22426bcc7f35d8a5ef8518b9b69fb138ee78730ab64693a64293352c"
+      "log_sha256": "fe0ce6e3b1983c3e150c09b415036599a0bee120f2cad38e219412ce21d84a67"
     },
     {
       "name": "components",
@@ -73,7 +73,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/design.log",
-      "log_sha256": "e733fb8a99ed0b0c9cbb37d4f02d4057ac3a0b2c2d7502b8dd853d1de83f8a73"
+      "log_sha256": "9022998fb4600afcaae3f0c0fa4e8b6d63784fee2150cee9d6652eecfc8120c8"
     },
     {
       "name": "design-components",
@@ -93,7 +93,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/database-design.log",
-      "log_sha256": "2e0c4b3578d061d566a00c3f1c56ff2900f05747108ce140db0dbbed5e7d46c2"
+      "log_sha256": "87791b69548d5d821498da2058fe6ad261e4655047e73d4c8073db87e70cb31e"
     }
   ],
   "passed": true

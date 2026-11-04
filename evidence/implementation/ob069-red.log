@@ -1,0 +1,16 @@
+
+==================================== ERRORS ====================================
+_ ERROR collecting tests/integration/platform/macos/test_macos_native_gate.py __
+ImportError while importing test module '/Users/admin-1234/work/OpenBot/tests/integration/platform/macos/test_macos_native_gate.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/platform/macos/test_macos_native_gate.py:3: in <module>
+    from openbot.application.macos_gate import MacOSNativePlatformGate
+E   ModuleNotFoundError: No module named 'openbot.application.macos_gate'
+=========================== short test summary info ============================
+ERROR tests/integration/platform/macos/test_macos_native_gate.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.05s

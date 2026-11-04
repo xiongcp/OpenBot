@@ -1,0 +1,12 @@
+name: platform-macos
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  macos-arm64-gate:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run macOS ARM64 native platform gate
+        run: |
+          python3 -m pytest tests/integration/platform/macos/test_macos_native_gate.py -q
