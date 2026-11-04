@@ -107,6 +107,10 @@
 实现（OB-053）：新增 `services/feishu_gateway/src/openbot_feishu/cardkit.py`（`FeishuCardChannelSelector`、`CardChannelPolicy`、`ChannelSelection`）与 `tests/unit/test_feishu_cardkit.py`：
 1. 回调 token 寿命从生成时刻（`token_minted_ms`）起算：任务创建 45 分钟后用户点击生成回调 token 时，不会因以任务创建时刻起算而误判 token 过期；当无 CardKit 权限、token 过期、使用次数耗尽或原消息不可更新时，平滑降级至 `MESSAGE_PATCH_API` 或 `PLAIN_RESEND`。
 
+实现（OB-054）：新增 `services/feishu_gateway/src/openbot_feishu/health.py`（`ExternalGatewaySupervisor`、`GatewayStageDeadlines`、`compute_jittered_backoff_ms`）与 `tests/unit/test_feishu_health.py`：
+1. 外部进程级监督与空闲不误判：独立于 SDK 事件循环监督初始化/发现/握手与传输心跳（`in_loop_wait_for_claimed_as_hard_kill=False`），无业务消息但心跳正常时判定为 `IDLE_BUT_HEARTBEAT_FRESH`。
+2. 单消费者硬门禁与带 jitter 有界退避：在旧消费者进程未确认退出前拒绝启动第二消费者（`OLD_CONSUMER_NOT_CONFIRMED_EXITED`），且重连退避绝不占用 daemon writer（`blocks_daemon_writer=False`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -125,6 +129,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cards.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_progress.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cardkit.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_health.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -196,3 +201,5 @@
   1. Coalesces rapid intermediate progress updates (100 updates merged into 1 emission), respects `retry_after` rate-limit backoff, and prevents late `RUNNING` updates from overwriting terminal states (`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`).
 - **OB-053 (`IN_PROGRESS`)**: CardKit capability selector and channel fallback (`services/feishu_gateway/src/openbot_feishu/cardkit.py` and `tests/unit/test_feishu_cardkit.py`, 1 passed):
   1. Tracks callback token TTL strictly from `token_minted_ms` (so clicking 45 minutes after task creation does not falsely expire the newly minted token) and degrades to `MESSAGE_PATCH_API` or `PLAIN_RESEND` when permissions, TTL, use count, or message updatability are unavailable.
+- **OB-054 (`IN_PROGRESS`)**: External gateway health watchdog and jittered reconnect (`services/feishu_gateway/src/openbot_feishu/health.py` and `tests/unit/test_feishu_health.py`, 1 passed):
+  1. Evaluates transport heartbeat outside the SDK event loop (`in_loop_wait_for_claimed_as_hard_kill=False`), treats idle business traffic with fresh heartbeat as healthy (`IDLE_BUT_HEARTBEAT_FRESH`), forbids spawning a second consumer before confirming old exit (`OLD_CONSUMER_NOT_CONFIRMED_EXITED`), and computes bounded jittered backoff without blocking the daemon writer.

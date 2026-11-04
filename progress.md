@@ -70,9 +70,10 @@
 - 推进 OB-051（实现普通卡片与结果回执）：实现 FeishuPlainCardBuilder（无 CardKit 依赖的纯函数普通卡片构造，当 data_class 为 SENSITIVE/SECRET 或 truncated=True 时强制 REQUIRE_LOCAL 并禁用远端批准按钮；对 UNKNOWN 结果明确标注 RECONCILIATION_REQUIRED）；新增单元测试通过，M0 增至 271 passed/3 skipped，M1 增至 290 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-051 记 IN_PROGRESS。
 - 推进 OB-052（实现进度卡节流与更新顺序）：实现 FeishuProgressCardCoordinator 与 CoalescedProgressUpdate（单调递增 card_revision，节流窗口内 100 次进度合并为 1 条更新，支持 retry_after 退避，且锁定终态防止迟到 RUNNING 进度覆盖 SUCCEEDED/FAILED/CANCELLED）；新增单元测试通过，M0 增至 272 passed/3 skipped，M1 增至 291 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-052 记 IN_PROGRESS。
 - 推进 OB-053（实现 CardKit 与更新通道降级）：实现 FeishuCardChannelSelector、CardChannelPolicy 与 ChannelSelection（回调 token 寿命严格自 token_minted_ms 起算，45 分钟后点击不误判过期；无权限、token 过期、次数耗尽或原消息不可更新时降级为 MESSAGE_PATCH_API 或 PLAIN_RESEND）；新增单元测试通过，M0 增至 273 passed/3 skipped，M1 增至 292 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-053 记 IN_PROGRESS。
+- 推进 OB-054（实现网关健康探测与重连）：实现 ExternalGatewaySupervisor、GatewayStageDeadlines 与 compute_jittered_backoff_ms（在 SDK 事件循环之外监督网关健康，空闲无业务消息但传输心跳新鲜时不判死；未确认旧消费者退出前严禁启动第二消费者 OLD_CONSUMER_NOT_CONFIRMED_EXITED，且带 jitter 退避不阻塞 daemon writer）；新增单元测试通过，M0 增至 274 passed/3 skipped，M1 增至 293 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-054 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed M2 `OB-094`, `OB-048`–`OB-053` (including CardKit channel selection and fallback); continuing with `OB-054`–`OB-056` and M3 tasks.
+- Completed M2 `OB-094`, `OB-048`–`OB-054` (including external gateway watchdog and single-consumer reconnect); continuing with `OB-055`–`OB-056` and M3 tasks.

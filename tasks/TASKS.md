@@ -3343,7 +3343,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **实现网关健康探测与重连**
 
-阶段 M2 · 优先级 P0 · 状态 TODO · 能力域 Integration · 规模 M
+阶段 M2 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
 
 **需求** [RQ01](requirements_traceability.md#rq01)、[RQ08](requirements_traceability.md#rq08)、[RQ12](requirements_traceability.md#rq12)
 
