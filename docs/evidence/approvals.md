@@ -143,6 +143,9 @@
 实现（OB-064）：新增 `services/core/src/openbot/tools/mcp/executor.py`（`McpIsolatedExecutor`、`ReviewedLocalMcpManifest`、`McpDispatchPlan`）与 `tests/unit/test_mcp_executor.py`：
 1. 隔离后端强制、环境剥离与忽略第三方注释：stdio MCP server 必须运行于已验证隔离后端（未验证直接返回 `CAPABILITY_UNAVAILABLE`），子进程仅保留 `allowed_env_keys`（剥离 `HOME` 与父进程密钥）；完全忽略第三方 `readOnlyHint`/`idempotentHint` 注释，仅由本地已审查 manifest 决定 `effective_retry_class` 与审批要求，并硬拒绝 MCP sampling（`MCP_SAMPLING_FORBIDDEN_IN_MVP`）。
 
+实现（OB-065）：新增 `services/core/src/openbot/tools/mcp/fault_harness.py`（`McpFaultAndMaliciousHarness`、`McpFaultReport`）与 `tests/integration/mcp/test_mcp_fault_and_malicious_server.py`：
+1. 恶意与故障 MCP 服务器回归：验证 `list_changed` 元数据篡改隔离、超长输出截断与秘密脱敏、深层嵌套 Schema 洪泛拦截、重复 JSON-RPC 请求 ID 拒绝、内建工具名称碰撞拦截、以及派发后 server 崩溃退出转入 `UNKNOWN` 且重试次数为 `0`（`post_dispatch_disconnect_retried_count=0`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -172,6 +175,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_client.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_registry.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_executor.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/mcp/test_mcp_fault_and_malicious_server.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -265,3 +269,5 @@
   1. Pins full MCP tool metadata via JCS SHA-256 (`jcs_hash_proves_server_code_safe=False`), blocks builtin tool name shadowing and remote `$ref` URIs, and quarantines tools (`MCP_METADATA_DRIFT_QUARANTINED`) if description, schema, or annotations change.
 - **OB-064 (`IN_PROGRESS`)**: MCP process and network isolation executor (`services/core/src/openbot/tools/mcp/executor.py` and `tests/unit/test_mcp_executor.py`, 1 passed):
   1. Requires a qualified isolation backend (`CAPABILITY_UNAVAILABLE` otherwise), strips parent environment variables outside `allowed_env_keys`, ignores third-party `readOnlyHint`/`idempotentHint` annotations in favor of `ReviewedLocalMcpManifest`, and forbids MCP sampling (`MCP_SAMPLING_FORBIDDEN_IN_MVP`).
+- **OB-065 (`IN_PROGRESS`)**: Malicious and fault MCP server test suite (`services/core/src/openbot/tools/mcp/fault_harness.py` and `tests/integration/mcp/test_mcp_fault_and_malicious_server.py`, 1 passed):
+  1. Covers `list_changed` metadata drift quarantine, oversized output truncation and secret redaction, schema depth flood rejection, duplicate JSON-RPC ID rejection, builtin name collision rejection, and post-dispatch crash `UNKNOWN` handling with `post_dispatch_disconnect_retried_count == 0`.
