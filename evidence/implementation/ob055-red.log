@@ -1,0 +1,16 @@
+
+==================================== ERRORS ====================================
+________ ERROR collecting tests/integration/feishu/test_dead_letter.py _________
+ImportError while importing test module '/Users/admin-1234/work/OpenBot/tests/integration/feishu/test_dead_letter.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/feishu/test_dead_letter.py:6: in <module>
+    from openbot_feishu.dead_letter import DeadLetterInspectorService
+E   ModuleNotFoundError: No module named 'openbot_feishu.dead_letter'
+=========================== short test summary info ============================
+ERROR tests/integration/feishu/test_dead_letter.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.09s

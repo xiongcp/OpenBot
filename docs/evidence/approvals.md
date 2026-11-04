@@ -111,6 +111,9 @@
 1. 外部进程级监督与空闲不误判：独立于 SDK 事件循环监督初始化/发现/握手与传输心跳（`in_loop_wait_for_claimed_as_hard_kill=False`），无业务消息但心跳正常时判定为 `IDLE_BUT_HEARTBEAT_FRESH`。
 2. 单消费者硬门禁与带 jitter 有界退避：在旧消费者进程未确认退出前拒绝启动第二消费者（`OLD_CONSUMER_NOT_CONFIRMED_EXITED`），且重连退避绝不占用 daemon writer（`blocks_daemon_writer=False`）。
 
+实现（OB-055）：新增 `services/feishu_gateway/src/openbot_feishu/dead_letter.py`（`DeadLetterInspectorService`、`DeadLetterRecord`）与 `tests/integration/feishu/test_dead_letter.py`：
+1. 死信检视、丢弃与安全重投分离：仅允许已授权 owner 查看 `DEAD`/`EXPIRED` 通知记录并重置通知为 `PENDING`（`business_operation_reexecuted=False`）；对 `UNKNOWN` 状态或 `APPEND_MESSAGE` 非幂等副作用记录直接拒绝并要求先执行 reconcile（`UNKNOWN_REQUIRES_RECONCILE`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -130,6 +133,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_progress.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cardkit.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_health.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_dead_letter.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -203,3 +207,5 @@
   1. Tracks callback token TTL strictly from `token_minted_ms` (so clicking 45 minutes after task creation does not falsely expire the newly minted token) and degrades to `MESSAGE_PATCH_API` or `PLAIN_RESEND` when permissions, TTL, use count, or message updatability are unavailable.
 - **OB-054 (`IN_PROGRESS`)**: External gateway health watchdog and jittered reconnect (`services/feishu_gateway/src/openbot_feishu/health.py` and `tests/unit/test_feishu_health.py`, 1 passed):
   1. Evaluates transport heartbeat outside the SDK event loop (`in_loop_wait_for_claimed_as_hard_kill=False`), treats idle business traffic with fresh heartbeat as healthy (`IDLE_BUT_HEARTBEAT_FRESH`), forbids spawning a second consumer before confirming old exit (`OLD_CONSUMER_NOT_CONFIRMED_EXITED`), and computes bounded jittered backoff without blocking the daemon writer.
+- **OB-055 (`IN_PROGRESS`)**: Dead-letter inspection and safe notification redelivery (`services/feishu_gateway/src/openbot_feishu/dead_letter.py` and `tests/integration/feishu/test_dead_letter.py`, 1 passed):
+  1. Restricts dead-letter listing to the active owner, redelivers `DEAD`/`EXPIRED` notifications without re-running business operations (`business_operation_reexecuted=False`), and refuses to discard or blindly retry `UNKNOWN` side effects (`UNKNOWN_REQUIRES_RECONCILE`).

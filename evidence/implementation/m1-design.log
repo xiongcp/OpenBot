@@ -5,7 +5,7 @@
     {
       "check": "JSON syntax",
       "result": "PASS",
-      "detail": "812 files parsed"
+      "detail": "814 files parsed"
     },
     {
       "check": "Schema references and required fields",
