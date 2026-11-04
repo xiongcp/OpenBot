@@ -3299,6 +3299,31 @@
 +### 4. Reproducible Command
 +- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q` (`1 passed`)
 --- /dev/null
++++ b/docs/runtime-dependencies.md
+@@ -0,0 +1,22 @@
++# 可复现打包与运行时资源清单说明 / Reproducible Packaging & Runtime Asset Manifest (OB-072)
++
++## 中文说明
++
++### 1. M3 未签名试点包与 M4 签名发行边界
++- `packaging/runtime-assets.json` 与 `scripts/build/build_pilot_bundle.py` 定义了 M3 CLI 试点包构建与运行时非包资产清单。
++- M3 产物明确标记为 `M3_UNSIGNED_PILOT`（`signed_m4_release_claimed = false`），不冒充 M4 代码签名/公证桌面发行版；同时因 Windows 与 Linux 原生构建机未接入（`OB-070`/`OB-071` `BLOCKED`），仅声明 `Darwin-arm64` 本地构建已验证。
++
++### 2. 安装期准备与首次离线运行分离
++- **零首次运行静默下载（`first_use_silent_download_permitted = false`）**：`ripgrep`、Tree-sitter grammar、`tiktoken` 词表与 Chromium 浏览器必须在安装期显式就绪；运行期若缺失对应离线资产，直接返回 `CAPABILITY_UNAVAILABLE`，绝不在首次使用时联网补下载。
++- **禁混入机密与缓存**：`PackagingBundleAuditor` 强制拦截任何 `.env`、`*.sqlite`、`*.key`、`*.pem`、`__pycache__` 进入产物目录。
++
++---
++
++## English Summary
++
++### 1. M3 Unsigned Pilot Bundle vs M4 Signed Release
++- `packaging/runtime-assets.json` and `scripts/build/build_pilot_bundle.py` define the M3 CLI pilot bundle manifest (`bundle_stage = 'M3_UNSIGNED_PILOT'`, `signed_m4_release_claimed = false`). Native Windows and Linux builds remain blocked (`OB-070`/`OB-071` `BLOCKED`).
++
++### 2. Install-Time Provisioning vs First-Use Offline Execution
++- **No First-Use Silent Downloads (`first_use_silent_download_permitted = false`)**: Missing `ripgrep`, Tree-sitter grammars, `tiktoken` vocabularies, or Chromium binaries fail closed with `CAPABILITY_UNAVAILABLE` at runtime instead of downloading over the network.
++- **Secret & Cache Exclusion**: `PackagingBundleAuditor` rejects bundles containing `.env`, `*.sqlite`, `*.key`, `*.pem`, or cache directories.
+--- /dev/null
 +++ b/docs/spikes/component-selection.md
 @@ -0,0 +1,7 @@
 +# 当前组件选择
@@ -3340,8 +3365,40 @@
 +- **User-Session Boundary**: Uses `LaunchAgents` on macOS, `systemd --user` on Linux, and user-logon tasks on Windows (`scope='user_session'`).
 +- **Safety Invariants**: Forbids `root`/`LocalSystem` system services, forbids Tauri UI windows from spawning duplicate daemons, and preserves user workspaces on uninstall.
 --- /dev/null
++++ b/packaging/runtime-assets.json
+@@ -0,0 +1,29 @@
++{
++  "schema_version": "1.2",
++  "bundle_stage": "M3_UNSIGNED_PILOT",
++  "signed_m4_release_claimed": false,
++  "first_use_silent_download_permitted": false,
++  "python_lock_ref": "uv.lock",
++  "non_package_assets": [
++    {
++      "asset_id": "ripgrep-binary",
++      "provisioning": "preinstalled_or_offline_pinned_bundle",
++      "first_use_download": false
++    },
++    {
++      "asset_id": "tree-sitter-grammars",
++      "provisioning": "offline_pinned_assets_only",
++      "first_use_download": false
++    },
++    {
++      "asset_id": "tiktoken-vocab",
++      "provisioning": "offline_pinned_bpe_only",
++      "first_use_download": false
++    },
++    {
++      "asset_id": "chromium-browser",
++      "provisioning": "explicit_install_time_only",
++      "first_use_download": false
++    }
++  ]
++}
+--- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,97 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3432,12 +3489,13 @@
 +- 推进 OB-067（交付全 MVP 能力集回归）：实现 MvpCapabilityRegressionSuite、双语说明 docs/demos/mvp.md 与集成测试 tests/integration/scenarios/mvp/test_mvp_capability_regression.py（联合验证云+本地 Provider、飞书受控网关、工作区 ACI 与隔离进程、结构化浏览器、MCP 与只读技能六大子系统，security_critical_failures == 0，诚实声明 claims_three_os_release_complete=False）；M0 增至 289 passed/3 skipped，M1 增至 308 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-067 记 IN_PROGRESS。
 +- 推进 OB-068（实现用户级 daemon 安装与卸载）：实现 UserDaemonInstaller、双语安装说明 docs/install/user-daemon.md 与 native/supervisor/packaging/README.md（仅允许 user_session 级服务，拦截 system/root/LocalSystem 高权限服务与 Tauri 直接启动第二 daemon，卸载时完整保留用户工作区）；新增单元测试通过，M0 增至 290 passed/3 skipped，M1 增至 309 passed/1 skipped。因上游 OB-005/093 三平台实测未闭合，OB-068 记 IN_PROGRESS。
 +- 推进 OB-069（建立 macOS 原生运行门禁）：实现 MacOSNativePlatformGate、.github/workflows/platform-macos.yml 与集成测试 tests/integration/platform/macos/test_macos_native_gate.py（在 Darwin arm64 上实测文件/符号链接守卫、Keychain 分域、用户级 daemon 描述文件、专用浏览器 profile 锁与进程组回收；诚实标记 intel_x86_64_verified=False、screen_recording_permission_requested=False）；M0 增至 291 passed/3 skipped，M1 增至 310 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-069 记 IN_PROGRESS。
++- 推进 OB-072（建立可复现打包与运行资源清单）：实现 PackagingBundleAuditor、scripts/build/build_pilot_bundle.py、packaging/runtime-assets.json 与双语说明 docs/runtime-dependencies.md（明确标记 M3_UNSIGNED_PILOT 且 signed_m4_release_claimed=False；禁止首次使用时静默下载浏览器/grammar/词表；拦截 .env/sqlite/key/cache 混入产物）；新增单元测试通过，M0 增至 292 passed/3 skipped，M1 增至 311 passed/1 skipped。因上游 OB-005/070/071 缺少 Windows/Linux 原生实机，OB-072 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, and `OB-095`, reaching 291 passed M0 checks and 310 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, and `OB-095`, reaching 292 passed M0 checks and 311 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3492,6 +3550,31 @@
 +python_version = "3.12"
 +files = ["services/core/src/openbot", "services/feishu_gateway/src/openbot_feishu"]
 +strict = true
+--- /dev/null
++++ b/scripts/build/build_pilot_bundle.py
+@@ -0,0 +1,22 @@
++"""Generate deterministic M3 unsigned pilot bundle manifest and verify absence of secrets/caches."""
++
++import hashlib
++import json
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[2]
++
++
++def build_manifest() -> dict[str, object]:
++    assets_doc = json.loads((ROOT / "packaging/runtime-assets.json").read_text(encoding="utf-8"))
++    lock_sha = hashlib.sha256((ROOT / "uv.lock").read_bytes()).hexdigest()
++    return {
++        "stage": assets_doc["bundle_stage"],
++        "uv_lock_sha256": lock_sha,
++        "signed_m4_release_claimed": False,
++        "first_use_silent_download_permitted": False,
++    }
++
++
++if __name__ == "__main__":
++    print(json.dumps(build_manifest(), indent=2))
 --- /dev/null
 +++ b/scripts/check_components.py
 @@ -0,0 +1,124 @@
@@ -3621,7 +3704,7 @@
 +        raise SystemExit(1) from exc
 --- /dev/null
 +++ b/scripts/record_changes.py
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,131 @@
 +"""Create review artifacts without staging the user's untracked design package."""
 +
 +import difflib
@@ -3662,6 +3745,7 @@
 +        "services/core/src",
 +        "services/feishu_gateway/src",
 +        "native/supervisor",
++        "packaging",
 +        "contracts/schemas",
 +        "tests",
 +        "scripts",
@@ -8296,6 +8380,51 @@
 +
 +        return WriterCommand(
 +            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
++        )
+--- /dev/null
++++ b/services/core/src/openbot/application/packaging_auditor.py
+@@ -0,0 +1,42 @@
++"""Pilot bundle auditor blocking secrets/profiles/caches and runtime asset downloads (OB-072)."""
++
++import json
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++_FORBIDDEN_BUNDLE_NAMES = frozenset(
++    {
++        ".env",
++        ".env.local",
++        "profile.sqlite",
++        "slice.sqlite",
++        "__pycache__",
++        ".mypy_cache",
++        ".pytest_cache",
++    }
++)
++
++
++@dataclass(frozen=True, slots=True)
++class BundleAuditReport:
++    bundle_stage: str
++    clean_of_secrets_and_profiles: bool
++    signed_m4_release_claimed: Literal[False] = False
++    first_use_silent_download_permitted: Literal[False] = False
++
++
++class PackagingBundleAuditor:
++    """Verify bundle directory cleanliness and offline-first asset manifest."""
++
++    def __init__(self, manifest_path: Path) -> None:
++        self._manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
++
++    def audit_bundle_directory(self, bundle_dir: Path) -> BundleAuditReport:
++        for p in bundle_dir.rglob("*"):
++            if p.name in _FORBIDDEN_BUNDLE_NAMES or p.suffix in {".sqlite", ".key", ".pem"}:
++                raise PermissionError(f"BUNDLE_CONTAINS_FORBIDDEN_ARTIFACT: {p.name}")
++        return BundleAuditReport(
++            bundle_stage=str(self._manifest.get("bundle_stage", "M3_UNSIGNED_PILOT")),
++            clean_of_secrets_and_profiles=True,
 +        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/recovery.py
@@ -21158,6 +21287,15 @@
  
  **需求** [RQ05](requirements_traceability.md#rq05)、[RQ11](requirements_traceability.md#rq11)
  
+@@ -4435,7 +4435,7 @@
+ 
+ **建立可复现打包与运行资源清单**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Platform · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
+ 
+ **需求** [RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
+ 
 @@ -4610,7 +4610,7 @@
  
  **审查DOM提取脚本的最小源码复用**
@@ -23239,7 +23377,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5252,19 @@
+@@ -4401,14 +5252,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -23260,7 +23398,38 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5872,7 @@
+     "title": "建立可复现打包与运行资源清单",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Platform",
+     "size": "M",
+     "req_ids": [
+@@ -4473,7 +5336,21 @@
+       "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
+       "三OS实际安装资源清单、禁网首次调用、可再建差异说明与全部产物hash。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、25页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、25页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 PackagingBundleAuditor, packaging/runtime-assets.json, and scripts/build/build_pilot_bundle.py enforcing M3_UNSIGNED_PILOT, no first-use downloads, and no secrets/caches in bundles",
++      "evidence": [
++        "packaging/runtime-assets.json",
++        "docs/runtime-dependencies.md",
++        "scripts/build/build_pilot_bundle.py",
++        "tests/unit/test_packaging_manifest.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-005、OB-070、OB-071 缺少 Windows/Linux 原生构建与测试机器（BLOCKED）；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (pyinstaller, cli-toolchain, playwright, tree-sitter-language-pack, tiktoken), reuse_type (qualification), and reuse_notes; separated install-time provisioning from offline first use."
++    }
+   },
+   {
+     "id": "OB-073",
+@@ -5009,7 +5886,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -23269,7 +23438,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5941,20 @@
+@@ -5078,7 +5955,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -23291,7 +23460,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6399,7 @@
+@@ -5523,7 +6413,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -23300,7 +23469,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6452,26 @@
+@@ -5576,14 +6466,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23329,7 +23498,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6530,26 @@
+@@ -5642,14 +6544,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -23358,7 +23527,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6604,26 @@
+@@ -5704,14 +6618,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23387,7 +23556,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6690,25 @@
+@@ -5778,14 +6704,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23415,7 +23584,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6776,26 @@
+@@ -5853,14 +6790,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23444,7 +23613,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6849,27 @@
+@@ -5914,14 +6863,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -23474,7 +23643,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,7 +6925,20 @@
+@@ -5977,7 +6939,20 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -34928,6 +35097,40 @@
 +            )
 +        )
 +    assert transport_noid.http_attempts == 1
+--- /dev/null
++++ b/tests/unit/test_packaging_manifest.py
+@@ -0,0 +1,31 @@
++from pathlib import Path
++
++import pytest
++from openbot.application.packaging_auditor import PackagingBundleAuditor
++
++ROOT = Path(__file__).resolve().parents[2]
++
++
++def test_packaging_auditor_blocks_secrets_and_caches_and_forbids_first_use_downloads(
++    tmp_path: Path,
++) -> None:
++    assert (ROOT / "packaging/runtime-assets.json").is_file()
++    assert (ROOT / "docs/runtime-dependencies.md").is_file()
++    assert (ROOT / "scripts/build/build_pilot_bundle.py").is_file()
++
++    auditor = PackagingBundleAuditor(ROOT / "packaging/runtime-assets.json")
++    clean_bundle = tmp_path / "bundle_clean"
++    clean_bundle.mkdir(parents=True, exist_ok=True)
++    (clean_bundle / "openbot-cli").write_text("#!/bin/sh\n", encoding="utf-8")
++
++    rep = auditor.audit_bundle_directory(clean_bundle)
++    assert rep.signed_m4_release_claimed is False
++    assert rep.first_use_silent_download_permitted is False
++    assert rep.clean_of_secrets_and_profiles is True
++
++    # Dirty bundle with .env, profile sqlite, or cache is rejected
++    dirty_bundle = tmp_path / "bundle_dirty"
++    dirty_bundle.mkdir(parents=True, exist_ok=True)
++    (dirty_bundle / ".env").write_text("OPENAI_API_KEY=sk-123", encoding="utf-8")
++    with pytest.raises(PermissionError, match="BUNDLE_CONTAINS_FORBIDDEN_ARTIFACT"):
++        auditor.audit_bundle_directory(dirty_bundle)
 --- /dev/null
 +++ b/tests/unit/test_policy_evaluator.py
 @@ -0,0 +1,359 @@

@@ -38,6 +38,7 @@ def run():
         "services/core/src",
         "services/feishu_gateway/src",
         "native/supervisor",
+        "packaging",
         "contracts/schemas",
         "tests",
         "scripts",

@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.2",
+  "bundle_stage": "M3_UNSIGNED_PILOT",
+  "signed_m4_release_claimed": false,
+  "first_use_silent_download_permitted": false,
+  "python_lock_ref": "uv.lock",
+  "non_package_assets": [
+    {
+      "asset_id": "ripgrep-binary",
+      "provisioning": "preinstalled_or_offline_pinned_bundle",
+      "first_use_download": false
+    },
+    {
+      "asset_id": "tree-sitter-grammars",
+      "provisioning": "offline_pinned_assets_only",
+      "first_use_download": false
+    },
+    {
+      "asset_id": "tiktoken-vocab",
+      "provisioning": "offline_pinned_bpe_only",
+      "first_use_download": false
+    },
+    {
+      "asset_id": "chromium-browser",
+      "provisioning": "explicit_install_time_only",
+      "first_use_download": false
+    }
+  ]
+}
