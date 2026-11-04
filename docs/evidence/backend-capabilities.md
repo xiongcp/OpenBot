@@ -1,4 +1,4 @@
-# OB-093 / OB-040：首发平台隔离能力与结构化进程执行协议 / First-Platform Isolation Capabilities and Structured Process Execution Protocol
+# OB-093 / OB-040 / OB-041：首发平台隔离能力、结构化进程执行与容器沙箱上限 / First-Platform Isolation, Structured Process Execution, and Container Sandbox Limits
 
 ## 中文说明
 
@@ -24,6 +24,10 @@
 1. 锁定不可变执行计划与禁止裸 Shell：锁定 `executable`、`argv`、`workspace_snapshot_digest`、`execution_backend`（仅允许 `ISOLATED_CONTAINER`/`ISOLATED_WORKER`，拒绝宿主后端）、固定 `sha256:...` `image_digest`、`network_mode`、干净 `isolated_home`/`isolated_tmpdir`、最小 `env` 与资源限制；硬拒绝 `sh -c`/`bash -c`/`cmd /c` 等 Shell 包装与 `--pre` 隐藏预处理器；`pytest`、`python`、`npm`、`git` 等一律归类为 `CODE_EXECUTION`，绝不因动作名叫 `search`、`snapshot` 或 `lint` 而放行未隔离执行。
 2. 无隔离后端拒绝降级宿主与双受管标识映射：当 `isolation_backend_qualified=False` 时立即抛出 `PermissionError`（绝不自动回退宿主 Shell）；结果同时记录 `client_pid` 与 `container_id`，若客户端退出或超时但 `container_confirmed_stopped=False`，严格映射为 `UNKNOWN`（停止客户端不自动认定容器已停止）；输出经 `RedactionPipeline` 流式脱敏并受 `max_output_bytes` 截断保护。
 
+实现（OB-041）：新增 `services/core/src/openbot/tools/executors/sandbox.py`（`ContainerSandboxBroker`、`ContainerOwnership`、`validate_and_extract_tar_export`）与 `native/supervisor/src/worker_control.rs`：
+1. 固定隔离参数与拒绝自动兜底：强制 `--pull=never`、`--network=none`、`--read-only`、`--cap-drop=ALL`、`--security-opt=no-new-privileges`、`--user=65532:65532`（非 root）、`--memory`、`--cpus`、`--pids-limit`、只读 `/input` 与独立 `/out`，绝不使用 `--rm` 自动删除证据；拒绝挂载 `docker.sock` 或宿主 `HOME`；未认证后端（如 `podman`、`nerdctl`、`bubblewrap` 或宿主）立即返回 `CAPABILITY_UNAVAILABLE`，绝不自动降级兜底。
+2. 独立归属登记与 `stop -> wait -> export_verified -> remove` 严格时序：创建前登记 `openbot.profile_id`/`operation_id`/`attempt_id`/`runtime_epoch` 标签；客户端进程退出（`notify_client_exited`）绝不将容器标为已回收；导出前强制要求容器已 `stop` 且 `wait` 确认完成，经 `validate_and_extract_tar_export` 拒绝符号链接、硬链接、设备文件、路径穿越（`..` 或 `/`）、可执行权限位（`0o111`）及超限归档后，才允许 `remove` 本 profile 登记的容器（拒绝触碰未登记用户容器）。
+
 影响：OB-029 正式隔离执行门禁尚未通过；原生进程/后端组合需完成上述缺口。存储、合同与 SDK 故障验证可继续，不以该门禁代替全部 M1 工作。
 
 ## English Summary
@@ -32,3 +36,6 @@
 - **OB-040 (`IN_PROGRESS`)**: Structured process execution protocol (`contracts/schemas/dispatch.schema.json`, `services/core/src/openbot/tools/executors/process.py`, and `tests/unit/test_process_executor.py`, 2 passed):
   1. `ProcessExecutionPlan` & `classify_command_security`: Locks `executable`, `argv`, `workspace_snapshot_digest`, `execution_backend`, pinned `image_digest`, `isolated_home`/`isolated_tmpdir`, `env`, and `ProcessResourceLimits`; rejects raw shell wrappers (`sh -c`, `bash -c`, `cmd /c`) and `--pre` flags; classifies `pytest`, `python`, `npm`, and `git` as `CODE_EXECUTION` regardless of action label (`search`/`snapshot`/`lint`).
   2. `ControlledProcessExecutor`: Refuses execution when `isolation_backend_qualified=False` (zero host fallback); tracks `client_pid` and `container_id` separately so `container_confirmed_stopped=False` maps to `UNKNOWN`; enforces `max_output_bytes` and `RedactionPipeline` on `stdout`/`stderr`.
+- **OB-041 (`IN_PROGRESS`)**: Worker container sandbox broker and resource limits (`services/core/src/openbot/tools/executors/sandbox.py`, `native/supervisor/src/worker_control.rs`, and `tests/unit/test_container_sandbox.py`, 3 passed):
+  1. `ContainerSandboxBroker`: Enforces non-root (`65532:65532`), `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--read-only`, `--network=none`, `--pull=never`, memory/CPU/PID limits, and read-only `/input` without `--rm`; blocks `docker.sock` and host `HOME` mounts; fails closed with `CAPABILITY_UNAVAILABLE` for unqualified or unapproved backends (`podman`, `nerdctl`, `bubblewrap`, `host`).
+  2. Independent lifecycle & `validate_and_extract_tar_export`: Tracks `ContainerOwnership` labels (`profile_id`, `operation_id`, `attempt_id`, `runtime_epoch`), never treats CLI client exit as container reclamation, enforces `stop -> wait -> export_verified -> remove` order, rejects symlinks/traversal/executable bits in exported tar streams, and refuses to remove unregistered user containers.

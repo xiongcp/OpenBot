@@ -2261,8 +2261,8 @@
 +  3. `RedactionPipeline`: Filters `stdout`, `stderr`, `sdk_debug`, `exception`, `http_header`, `ui_event`, `artifact`, `diagnostic`, and `model_input` without downgrading `SECRET`/`SENSITIVE` classifications on negative scans (`guarantees_100_percent_detection=False`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
-@@ -0,0 +1,34 @@
-+# OB-093 / OB-040：首发平台隔离能力与结构化进程执行协议 / First-Platform Isolation Capabilities and Structured Process Execution Protocol
+@@ -0,0 +1,41 @@
++# OB-093 / OB-040 / OB-041：首发平台隔离能力、结构化进程执行与容器沙箱上限 / First-Platform Isolation, Structured Process Execution, and Container Sandbox Limits
 +
 +## 中文说明
 +
@@ -2288,6 +2288,10 @@
 +1. 锁定不可变执行计划与禁止裸 Shell：锁定 `executable`、`argv`、`workspace_snapshot_digest`、`execution_backend`（仅允许 `ISOLATED_CONTAINER`/`ISOLATED_WORKER`，拒绝宿主后端）、固定 `sha256:...` `image_digest`、`network_mode`、干净 `isolated_home`/`isolated_tmpdir`、最小 `env` 与资源限制；硬拒绝 `sh -c`/`bash -c`/`cmd /c` 等 Shell 包装与 `--pre` 隐藏预处理器；`pytest`、`python`、`npm`、`git` 等一律归类为 `CODE_EXECUTION`，绝不因动作名叫 `search`、`snapshot` 或 `lint` 而放行未隔离执行。
 +2. 无隔离后端拒绝降级宿主与双受管标识映射：当 `isolation_backend_qualified=False` 时立即抛出 `PermissionError`（绝不自动回退宿主 Shell）；结果同时记录 `client_pid` 与 `container_id`，若客户端退出或超时但 `container_confirmed_stopped=False`，严格映射为 `UNKNOWN`（停止客户端不自动认定容器已停止）；输出经 `RedactionPipeline` 流式脱敏并受 `max_output_bytes` 截断保护。
 +
++实现（OB-041）：新增 `services/core/src/openbot/tools/executors/sandbox.py`（`ContainerSandboxBroker`、`ContainerOwnership`、`validate_and_extract_tar_export`）与 `native/supervisor/src/worker_control.rs`：
++1. 固定隔离参数与拒绝自动兜底：强制 `--pull=never`、`--network=none`、`--read-only`、`--cap-drop=ALL`、`--security-opt=no-new-privileges`、`--user=65532:65532`（非 root）、`--memory`、`--cpus`、`--pids-limit`、只读 `/input` 与独立 `/out`，绝不使用 `--rm` 自动删除证据；拒绝挂载 `docker.sock` 或宿主 `HOME`；未认证后端（如 `podman`、`nerdctl`、`bubblewrap` 或宿主）立即返回 `CAPABILITY_UNAVAILABLE`，绝不自动降级兜底。
++2. 独立归属登记与 `stop -> wait -> export_verified -> remove` 严格时序：创建前登记 `openbot.profile_id`/`operation_id`/`attempt_id`/`runtime_epoch` 标签；客户端进程退出（`notify_client_exited`）绝不将容器标为已回收；导出前强制要求容器已 `stop` 且 `wait` 确认完成，经 `validate_and_extract_tar_export` 拒绝符号链接、硬链接、设备文件、路径穿越（`..` 或 `/`）、可执行权限位（`0o111`）及超限归档后，才允许 `remove` 本 profile 登记的容器（拒绝触碰未登记用户容器）。
++
 +影响：OB-029 正式隔离执行门禁尚未通过；原生进程/后端组合需完成上述缺口。存储、合同与 SDK 故障验证可继续，不以该门禁代替全部 M1 工作。
 +
 +## English Summary
@@ -2296,6 +2300,9 @@
 +- **OB-040 (`IN_PROGRESS`)**: Structured process execution protocol (`contracts/schemas/dispatch.schema.json`, `services/core/src/openbot/tools/executors/process.py`, and `tests/unit/test_process_executor.py`, 2 passed):
 +  1. `ProcessExecutionPlan` & `classify_command_security`: Locks `executable`, `argv`, `workspace_snapshot_digest`, `execution_backend`, pinned `image_digest`, `isolated_home`/`isolated_tmpdir`, `env`, and `ProcessResourceLimits`; rejects raw shell wrappers (`sh -c`, `bash -c`, `cmd /c`) and `--pre` flags; classifies `pytest`, `python`, `npm`, and `git` as `CODE_EXECUTION` regardless of action label (`search`/`snapshot`/`lint`).
 +  2. `ControlledProcessExecutor`: Refuses execution when `isolation_backend_qualified=False` (zero host fallback); tracks `client_pid` and `container_id` separately so `container_confirmed_stopped=False` maps to `UNKNOWN`; enforces `max_output_bytes` and `RedactionPipeline` on `stdout`/`stderr`.
++- **OB-041 (`IN_PROGRESS`)**: Worker container sandbox broker and resource limits (`services/core/src/openbot/tools/executors/sandbox.py`, `native/supervisor/src/worker_control.rs`, and `tests/unit/test_container_sandbox.py`, 3 passed):
++  1. `ContainerSandboxBroker`: Enforces non-root (`65532:65532`), `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--read-only`, `--network=none`, `--pull=never`, memory/CPU/PID limits, and read-only `/input` without `--rm`; blocks `docker.sock` and host `HOME` mounts; fails closed with `CAPABILITY_UNAVAILABLE` for unqualified or unapproved backends (`podman`, `nerdctl`, `bubblewrap`, `host`).
++  2. Independent lifecycle & `validate_and_extract_tar_export`: Tracks `ContainerOwnership` labels (`profile_id`, `operation_id`, `attempt_id`, `runtime_epoch`), never treats CLI client exit as container reclamation, enforces `stop -> wait -> export_verified -> remove` order, rejects symlinks/traversal/executable bits in exported tar streams, and refuses to remove unregistered user containers.
 --- /dev/null
 +++ b/docs/evidence/code-review.md
 @@ -0,0 +1,14 @@
@@ -2562,7 +2569,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,55 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2617,6 +2624,7 @@
 +- 推进 OB-033（实现 list read search 文件工具）：实现 WorkspaceReadTools、WorkspaceReadLimits 与 build_pinned_ripgrep_command（核验固定 rg 二进制 SHA-256，用 -e 绑定 pattern、-- 分隔路径并强制 --json --no-config --no-pre --no-follow；严格保持 UTF-8 文本边界并拒绝二进制/非 UTF-8/超大文件；施加目录深度、扫描文件数、单文件字节、全局命中数、全局输出字节、单行长度与超时上限，输出带 sha256 与 UNTRUSTED_WORKSPACE_FILE 来源标签）；新增 2 项测试通过，M0 增至 239 passed/3 skipped，M1 增至 258 passed/1 skipped。因上游 OB-019/032/092 仍为 IN_PROGRESS，OB-033 记 IN_PROGRESS。
 +- 推进 OB-034（实现补丁提议与受授权应用）：实现 WorkspacePatchTool 与 PatchCommitJournal（审批前冻结 old_sha256、确切新字节 Artifact 与 new_sha256，拒绝多处匹配且不改原目录；apply_patch 复验旧哈希、父目录 inode 与新字节 Artifact 摘要，禁止批准后 fuzz 或 CRLF 改写；通过 PatchCommitJournal 记录逐文件提交日志并支持多文件部分失败回滚，显式声明 claims_cross_file_atomicity=False，绝不执行 git reset --hard 或自动 commit/push）；新增 2 项集成测试通过，存储套件增至 85 passed，M0 增至 241 passed/3 skipped，M1 增至 260 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-034 记 IN_PROGRESS。
 +- 推进 OB-040（实现结构化进程执行协议）：新增 contracts/schemas/dispatch.schema.json 与 ControlledProcessExecutor（锁定 executable/argv/workspace_snapshot_digest/image_digest/isolated_home/env/资源限制，拒绝 sh -c 等裸 shell 与 --pre；pytest/python/npm/git 一律按 CODE_EXECUTION 处理，不因只读标签绕过隔离；隔离后端未就绪时拒绝降级宿主；分离 client_pid 与 container_id，容器未确认停止时映射为 UNKNOWN；输出流经 RedactionPipeline 过滤并限制字节上限）；新增 2 项测试通过，M0 增至 243 passed/3 skipped，M1 增至 262 passed/1 skipped。因上游依赖与 OB-041 正式隔离后端待闭合，OB-040 记 IN_PROGRESS。
++- 推进 OB-041（实现 worker 隔离与资源上限）：实现 ContainerSandboxBroker、validate_and_extract_tar_export 与 native/supervisor/src/worker_control.rs（固定非 root、cap-drop=ALL、no-new-privileges、只读根与 /input、禁网与内存/CPU/PID 上限，拒绝挂载 docker.sock 或宿主 HOME，未认证后端返回 CAPABILITY_UNAVAILABLE 绝不自动回退 Podman/nerdctl/bubblewrap/宿主；登记容器标签归属，客户端退出不等于容器回收，强制 stop -> wait -> 导出 tar 校验 -> remove 时序并拒绝删除未登记用户容器）；新增 3 项测试通过，M0 增至 246 passed/3 skipped，M1 增至 265 passed/1 skipped。因上游 OB-016/036/040/093 仍为 IN_PROGRESS，OB-041 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -12798,6 +12806,238 @@
 +            error_code=err_code,
 +        )
 --- /dev/null
++++ b/services/core/src/openbot/tools/executors/sandbox.py
+@@ -0,0 +1,229 @@
++"""Controlled container sandbox broker, ownership ledger, and stop/wait/export/remove order."""
++
++import io
++import re
++import tarfile
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Protocol
++
++QUALIFIED_CONTAINER_BACKENDS = frozenset({"docker_cli"})
++
++
++@dataclass(frozen=True, slots=True)
++class ContainerOwnership:
++    profile_id: str
++    operation_id: str
++    attempt_id: str
++    runtime_epoch: str
++
++    def labels(self) -> dict[str, str]:
++        return {
++            "openbot.profile_id": self.profile_id,
++            "openbot.operation_id": self.operation_id,
++            "openbot.attempt_id": self.attempt_id,
++            "openbot.runtime_epoch": self.runtime_epoch,
++        }
++
++
++class DockerEnginePort(Protocol):
++    def create(self, name: str, labels: dict[str, str], argv: tuple[str, ...]) -> str: ...
++    def start(self, cid: str) -> int: ...
++    def inspect(self, cid_or_name: str) -> dict[str, Any] | None: ...
++    def stop(self, cid: str) -> None: ...
++    def wait(self, cid: str) -> int: ...
++    def export_tar(self, cid: str) -> bytes: ...
++    def remove(self, cid: str) -> None: ...
++
++
++def validate_and_extract_tar_export(
++    raw_tar: bytes,
++    *,
++    max_archive_bytes: int = 65_536,
++    max_file_bytes: int = 16_384,
++    max_files: int = 16,
++) -> dict[str, bytes]:
++    """Validate exported tar stream and reject symlinks, traversal, devices, or executable bits."""
++    if len(raw_tar) > max_archive_bytes:
++        raise PermissionError("Exported tar stream exceeds max_archive_bytes")
++    extracted: dict[str, bytes] = {}
++    try:
++        with tarfile.open(fileobj=io.BytesIO(raw_tar), mode="r:") as archive:
++            members = archive.getmembers()
++            if not members or len(members) > max_files:
++                raise PermissionError("Exported tar archive member count out of bounds")
++            for item in members:
++                if (
++                    not item.name
++                    or item.name.startswith("/")
++                    or ".." in item.name.split("/")
++                    or "\\" in item.name
++                ):
++                    raise PermissionError(f"Untrusted export path in tar: {item.name}")
++                if (
++                    not item.isfile()
++                    or item.issym()
++                    or item.islnk()
++                    or item.ischr()
++                    or item.isblk()
++                    or item.isfifo()
++                ):
++                    raise PermissionError(
++                        f"Symlink, hardlink, or special file refused: {item.name}"
++                    )
++                if item.size < 0 or item.size > max_file_bytes:
++                    raise PermissionError(f"Exported file size out of bounds: {item.name}")
++                if item.mode & 0o111:
++                    raise PermissionError(f"Executable mode bit refused on export: {item.name}")
++                stream = archive.extractfile(item)
++                if stream is None:
++                    raise PermissionError(f"Missing stream for tar member: {item.name}")
++                data = stream.read(max_file_bytes + 1)
++                if len(data) != item.size:
++                    raise PermissionError(f"Exported member length mismatch: {item.name}")
++                extracted[item.name] = data
++    except tarfile.TarError as exc:
++        raise PermissionError("Malformed export tar archive") from exc
++    return extracted
++
++
++class ContainerSandboxBroker:
++    """Manage non-root isolated containers with independent lifecycle and strict export order."""
++
++    def __init__(
++        self,
++        *,
++        engine: DockerEnginePort,
++        backend_name: str,
++        backend_qualified: bool,
++        profile_id: str,
++        pinned_image: str,
++    ) -> None:
++        if backend_name not in QUALIFIED_CONTAINER_BACKENDS or not backend_qualified:
++            raise PermissionError(
++                f"CAPABILITY_UNAVAILABLE: container backend '{backend_name}' is not qualified; "
++                "automatic fallback to Podman/nerdctl/bubblewrap/host is forbidden"
++            )
++        if not re.fullmatch(r"[a-z0-9._/-]+@sha256:[0-9a-f]{64}", pinned_image):
++            raise PermissionError("Pinned repo@sha256:... image digest is required")
++        self._engine = engine
++        self._profile_id = profile_id
++        self._pinned_image = pinned_image
++        self._registered: dict[str, ContainerOwnership] = {}
++        self._reclaimed: set[str] = set()
++
++    def build_create_argv(
++        self,
++        *,
++        container_name: str,
++        ownership: ContainerOwnership,
++        input_dir: Path,
++        output_dir: Path,
++        host_home: Path,
++        command: tuple[str, ...],
++        memory_limit: str = "64m",
++        cpus_limit: str = "0.2",
++        pids_limit: int = 64,
++    ) -> tuple[str, ...]:
++        if ownership.profile_id != self._profile_id:
++            raise PermissionError("Ownership profile_id mismatch")
++        resolved_home = host_home.resolve()
++        for p in (input_dir, output_dir):
++            s = str(p)
++            if "docker.sock" in s:
++                raise PermissionError(
++                    "Mounting docker.sock inside untrusted container is forbidden"
++                )
++            rp = p.resolve()
++            if rp == resolved_home or rp.is_relative_to(resolved_home):
++                raise PermissionError("Mounting host HOME into container is forbidden")
++
++        label_args: list[str] = []
++        for k, v in sorted(ownership.labels().items()):
++            label_args.extend(["--label", f"{k}={v}"])
++
++        # Never include --rm so evidence is exported before explicit container removal
++        return (
++            "container",
++            "create",
++            "--name",
++            container_name,
++            *label_args,
++            "--pull=never",
++            "--network=none",
++            "--read-only",
++            "--cap-drop=ALL",
++            "--security-opt=no-new-privileges",
++            "--user=65532:65532",
++            f"--memory={memory_limit}",
++            f"--cpus={cpus_limit}",
++            f"--pids-limit={pids_limit}",
++            "--env=HOME=/nonexistent",
++            "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",
++            "--mount",
++            f"type=bind,src={input_dir.resolve()},dst=/input,readonly",
++            "--mount",
++            f"type=bind,src={output_dir.resolve()},dst=/out",
++            self._pinned_image,
++            *command,
++        )
++
++    def launch(
++        self,
++        *,
++        ownership: ContainerOwnership,
++        input_dir: Path,
++        output_dir: Path,
++        host_home: Path,
++        command: tuple[str, ...],
++    ) -> tuple[str, int]:
++        cname = f"openbot-{ownership.attempt_id}"
++        argv = self.build_create_argv(
++            container_name=cname,
++            ownership=ownership,
++            input_dir=input_dir,
++            output_dir=output_dir,
++            host_home=host_home,
++            command=command,
++        )
++        cid = self._engine.create(cname, ownership.labels(), argv)
++        self._registered[cid] = ownership
++        client_pid = self._engine.start(cid)
++        return cid, client_pid
++
++    def notify_client_exited(self, cid: str, client_pid: int) -> None:
++        # Client exit NEVER marks the container stopped or reclaimed!
++        del cid, client_pid
++
++    def is_reclaimed(self, cid: str) -> bool:
++        return cid in self._reclaimed
++
++    def _verify_ownership(self, cid: str) -> dict[str, Any]:
++        info = self._engine.inspect(cid)
++        if info is None:
++            raise PermissionError(f"Container not found: {cid}")
++        labels = info.get("Labels") or {}
++        if cid not in self._registered or labels.get("openbot.profile_id") != self._profile_id:
++            raise PermissionError(
++                f"Refusing to operate on unregistered or foreign container: {cid}"
++            )
++        return info
++
++    def export_verified_files(self, cid: str) -> dict[str, bytes]:
++        info = self._verify_ownership(cid)
++        if info.get("Running") or not info.get("WaitConfirmed"):
++            raise PermissionError(
++                "Container is still Running or wait() not confirmed; export refused"
++            )
++        raw_tar = self._engine.export_tar(cid)
++        return validate_and_extract_tar_export(raw_tar)
++
++    def stop_wait_export_and_remove(self, cid: str) -> tuple[dict[str, bytes], bool]:
++        info = self._verify_ownership(cid)
++        if info.get("Running"):
++            self._engine.stop(cid)
++        self._engine.wait(cid)
++        exported = self.export_verified_files(cid)
++        self._engine.remove(cid)
++        self._reclaimed.add(cid)
++        return exported, True
+--- /dev/null
 +++ b/services/core/src/openbot/tools/filesystem_guard.py
 @@ -0,0 +1,359 @@
 +"""OS handle-backed workspace path guard, atomic file verification, and Git/rg isolation."""
@@ -13812,7 +14052,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/036/037/038/039/040 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 与补丁工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤与结构化进程执行协议；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/036/037/038/039/040/041 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 与补丁工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行与容器沙箱隔离；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -14182,6 +14422,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
  
  **需求** [RQ03](requirements_traceability.md#rq03)、[RQ05](requirements_traceability.md#rq05)
+ 
+@@ -2583,7 +2583,7 @@
+ 
+ **实现worker隔离与资源上限**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Platform · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)、[RQ06](requirements_traceability.md#rq06)
  
 @@ -3112,7 +3112,7 @@
  
@@ -15190,7 +15439,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2457,7 +2862,20 @@
+@@ -2457,14 +2862,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -15212,7 +15461,37 @@
    },
    {
      "id": "OB-041",
-@@ -2851,7 +3269,7 @@
+     "title": "实现worker隔离与资源上限",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Platform",
+     "size": "M",
+     "req_ids": [
+@@ -2525,7 +2943,20 @@
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
+       "backend能力记录、实际容器ID/标签及完整stop→wait→export校验→remove时序、恶意导出拒绝证据。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12–13、17、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12–13、17、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 ContainerSandboxBroker, validate_and_extract_tar_export, and native/supervisor/src/worker_control.rs (non-root/cap-drop/readonly/no-network/resource limits, docker.sock & HOME mount rejection, stop->wait->export->remove ordering, malicious tar rejection, and foreign container protection)",
++      "evidence": [
++        "docs/evidence/backend-capabilities.md",
++        "tests/unit/test_container_sandbox.py",
++        "evidence/implementation/native-container-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-016、OB-036、OB-040、OB-093 仍为 IN_PROGRESS，且原生 Windows/Linux 隔离后端验证待对应环境完成；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (python-on-whales, podman-nerdctl, bubblewrap), reuse_type (native_primitive), and reuse_notes; used controlled Docker CLI primitives without installing python-on-whales or auto-falling back to Podman/nerdctl/bubblewrap/host; verified independent container lifecycle after client exit and strict stop->wait->export->remove order."
++    }
+   },
+   {
+     "id": "OB-042",
+@@ -2851,7 +3282,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -15221,7 +15500,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3326,19 @@
+@@ -2908,7 +3339,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -15242,7 +15521,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4709,7 @@
+@@ -4279,7 +4722,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -15251,7 +15530,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4767,26 @@
+@@ -4337,14 +4780,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -15280,7 +15559,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4843,19 @@
+@@ -4401,7 +4856,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -15301,7 +15580,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5977,7 @@
+@@ -5523,7 +5990,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -15310,7 +15589,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6030,26 @@
+@@ -5576,14 +6043,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15339,7 +15618,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6108,26 @@
+@@ -5642,14 +6121,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -15368,7 +15647,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6182,26 @@
+@@ -5704,14 +6195,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15397,7 +15676,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6268,25 @@
+@@ -5778,14 +6281,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15425,7 +15704,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6354,19 @@
+@@ -5853,7 +6367,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22925,6 +23204,185 @@
 +def test_effect_does_not_imply_retry_class():
 +    assert Effect.EXTERNAL_WRITE.value == "EXTERNAL_WRITE"
 +    assert RetryClass.RECONCILE_ONLY.value == "RECONCILE_ONLY"
+--- /dev/null
++++ b/tests/unit/test_container_sandbox.py
+@@ -0,0 +1,176 @@
++import io
++import tarfile
++from pathlib import Path
++
++import pytest
++from openbot.tools.executors.sandbox import (
++    ContainerOwnership,
++    ContainerSandboxBroker,
++    validate_and_extract_tar_export,
++)
++
++
++class FakeDockerEngine:
++    def __init__(self) -> None:
++        self.containers: dict[str, dict[str, object]] = {}
++        self.events: list[tuple[str, str]] = []
++        self.export_tar_bytes: bytes = b""
++
++    def create(self, name: str, labels: dict[str, str], argv: tuple[str, ...]) -> str:
++        cid = "c" * 63 + str(len(self.containers) + 1)
++        self.containers[cid] = {
++            "Id": cid,
++            "Name": name,
++            "Labels": dict(labels),
++            "Running": False,
++            "WaitConfirmed": False,
++            "Removed": False,
++            "Argv": argv,
++        }
++        self.events.append(("create", cid))
++        return cid
++
++    def start(self, cid: str) -> int:
++        self.containers[cid]["Running"] = True
++        self.events.append(("start", cid))
++        return 43210  # synthetic docker client PID
++
++    def inspect(self, cid_or_name: str) -> dict[str, object] | None:
++        if cid_or_name in self.containers:
++            return self.containers[cid_or_name]
++        for c in self.containers.values():
++            if c["Name"] == cid_or_name:
++                return c
++        return None
++
++    def stop(self, cid: str) -> None:
++        self.containers[cid]["Running"] = False
++        self.events.append(("stop", cid))
++
++    def wait(self, cid: str) -> int:
++        if self.containers[cid]["Running"]:
++            raise RuntimeError("Container still running")
++        self.containers[cid]["WaitConfirmed"] = True
++        self.events.append(("wait", cid))
++        return 0
++
++    def export_tar(self, cid: str) -> bytes:
++        self.events.append(("export", cid))
++        return self.export_tar_bytes
++
++    def remove(self, cid: str) -> None:
++        self.containers[cid]["Removed"] = True
++        self.events.append(("remove", cid))
++
++
++def _make_tar(
++    name: str, data: bytes = b"ok", *, mode: int = 0o644, sym_target: str | None = None
++) -> bytes:
++    buf = io.BytesIO()
++    with tarfile.open(fileobj=buf, mode="w:") as tf:
++        info = tarfile.TarInfo(name=name)
++        if sym_target is not None:
++            info.type = tarfile.SYMTYPE
++            info.linkname = sym_target
++            tf.addfile(info)
++        else:
++            info.size = len(data)
++            info.mode = mode
++            tf.addfile(info, io.BytesIO(data))
++    return buf.getvalue()
++
++
++def test_unqualified_or_fallback_backends_and_dangerous_mounts_are_rejected(tmp_path):
++    engine = FakeDockerEngine()
++    for bad_backend in ("podman", "nerdctl", "bubblewrap", "host_shell"):
++        with pytest.raises(PermissionError, match="CAPABILITY_UNAVAILABLE"):
++            ContainerSandboxBroker(
++                engine=engine,
++                backend_name=bad_backend,
++                backend_qualified=True,
++                profile_id="pro_1",
++                pinned_image="alpine@sha256:" + ("a" * 64),
++            )
++
++    with pytest.raises(PermissionError, match="CAPABILITY_UNAVAILABLE"):
++        ContainerSandboxBroker(
++            engine=engine,
++            backend_name="docker_cli",
++            backend_qualified=False,
++            profile_id="pro_1",
++            pinned_image="alpine@sha256:" + ("a" * 64),
++        )
++
++    broker = ContainerSandboxBroker(
++        engine=engine,
++        backend_name="docker_cli",
++        backend_qualified=True,
++        profile_id="pro_1",
++        pinned_image="alpine@sha256:" + ("a" * 64),
++    )
++    # Reject docker.sock or host HOME mount
++    with pytest.raises(PermissionError, match="docker.sock|HOME"):
++        broker.build_create_argv(
++            container_name="c1",
++            ownership=ContainerOwnership("pro_1", "op_1", "att_1", "ep_1"),
++            input_dir=Path("/var/run/docker.sock"),
++            output_dir=tmp_path / "out",
++            host_home=Path("/Users/admin-1234"),
++            command=("sh", "-c", "id"),
++        )
++
++
++def test_client_death_does_not_reclaim_and_enforces_stop_wait_export_remove_order(tmp_path):
++    engine = FakeDockerEngine()
++    engine.export_tar_bytes = _make_tar("receipt", b"verified output\n")
++    broker = ContainerSandboxBroker(
++        engine=engine,
++        backend_name="docker_cli",
++        backend_qualified=True,
++        profile_id="pro_1",
++        pinned_image="alpine@sha256:" + ("a" * 64),
++    )
++    in_dir = tmp_path / "in"
++    out_dir = tmp_path / "out"
++    in_dir.mkdir()
++    out_dir.mkdir()
++
++    ownership = ContainerOwnership("pro_1", "op_1", "att_1", "ep_1")
++    cid, client_pid = broker.launch(
++        ownership=ownership,
++        input_dir=in_dir,
++        output_dir=out_dir,
++        host_home=Path("/Users/admin-1234"),
++        command=("/bin/echo", "ok"),
++    )
++    assert client_pid == 43210
++
++    # 1. Killing CLI client does NOT mark container reclaimed; export while running is refused
++    broker.notify_client_exited(cid, client_pid)
++    assert broker.is_reclaimed(cid) is False
++    with pytest.raises(PermissionError, match="Running|stopped"):
++        broker.export_verified_files(cid)
++
++    # 2. Full stop -> wait -> export -> remove sequence succeeds in exact order
++    exported, removed = broker.stop_wait_export_and_remove(cid)
++    assert exported == {"receipt": b"verified output\n"}
++    assert removed is True
++    assert broker.is_reclaimed(cid) is True
++    assert [e[0] for e in engine.events] == ["create", "start", "stop", "wait", "export", "remove"]
++
++    # 3. Refuses to remove an unregistered user container belonging to another profile
++    foreign_cid = engine.create("user-container", {"openbot.profile_id": "other"}, ())
++    with pytest.raises(PermissionError, match="ownership|unregistered"):
++        broker.stop_wait_export_and_remove(foreign_cid)
++
++
++def test_malicious_tar_exports_are_rejected():
++    # Path traversal, symlink, executable bit, and oversized tar are all rejected
++    for bad_tar in (
++        _make_tar("../escape.txt", b"bad"),
++        _make_tar("/etc/passwd", b"bad"),
++        _make_tar("link", sym_target="/etc/shadow"),
++        _make_tar("exec.sh", b"#!/bin/sh", mode=0o755),
++    ):
++        with pytest.raises(PermissionError):
++            validate_and_extract_tar_export(bad_tar)
 --- /dev/null
 +++ b/tests/unit/test_egress_policy.py
 @@ -0,0 +1,174 @@

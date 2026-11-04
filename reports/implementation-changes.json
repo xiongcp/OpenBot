@@ -150,7 +150,7 @@
     {
       "path": "docs/evidence/backend-capabilities.md",
       "before_sha256": null,
-      "after_sha256": "b901dd8eea133337bf01da9966db47eaa3820a8e09de043a40ce760d3aaf30ca",
+      "after_sha256": "c2da77e83f0cb286c8075f3b67ecd3869a8f3bfc20cfda5c218dfddafe81aa25",
       "included_in_patch": true
     },
     {
@@ -240,7 +240,7 @@
     {
       "path": "evidence/implementation/database-design.log",
       "before_sha256": null,
-      "after_sha256": "bcf967af271850ad61b00beb7a83c512db65fa248b9cc8acb02180dfe0fefa2c",
+      "after_sha256": "9530d641c7f5d50b4c84cacb01e70e787be2ad7b1bc1ef01ce100460ea54d06b",
       "included_in_patch": false
     },
     {
@@ -252,7 +252,7 @@
     {
       "path": "evidence/implementation/design.log",
       "before_sha256": null,
-      "after_sha256": "002544d9875c01e0ef91a4d2d750d0f7aef77cb16a171a2c3d0b2506d68d3cfc",
+      "after_sha256": "3f32dc95a093d4c76ad7224c9aabe1c434d75e24105a99aaac391a32b301debc",
       "included_in_patch": false
     },
     {
@@ -264,7 +264,7 @@
     {
       "path": "evidence/implementation/format.log",
       "before_sha256": null,
-      "after_sha256": "7f3da2bcc8322b1f7a5cd484d184d90cc4d8cf31a2e46927ad3b83962a3c2a51",
+      "after_sha256": "c0e5e25bab31b3d55ca20587ad32a798a72f9d0cca80c542239bf4d1472695fc",
       "included_in_patch": false
     },
     {
@@ -546,13 +546,13 @@
     {
       "path": "evidence/implementation/m1-design.log",
       "before_sha256": null,
-      "after_sha256": "002544d9875c01e0ef91a4d2d750d0f7aef77cb16a171a2c3d0b2506d68d3cfc",
+      "after_sha256": "3f32dc95a093d4c76ad7224c9aabe1c434d75e24105a99aaac391a32b301debc",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-format.log",
       "before_sha256": null,
-      "after_sha256": "7f3da2bcc8322b1f7a5cd484d184d90cc4d8cf31a2e46927ad3b83962a3c2a51",
+      "after_sha256": "c0e5e25bab31b3d55ca20587ad32a798a72f9d0cca80c542239bf4d1472695fc",
       "included_in_patch": false
     },
     {
@@ -582,19 +582,19 @@
     {
       "path": "evidence/implementation/m1-types.log",
       "before_sha256": null,
-      "after_sha256": "b1fdd8413863455c6896d811c9ab42dc9256d679a668643bb18df2318c3bc875",
+      "after_sha256": "cd9c340faf049f23b702d9a64d1ac922e06d74db0f0721886b346ae6282a3aad",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "5f6c4bee2de8bc6616b93ee0a768a97e8bf6c7beb1ec2c318cc623e11f5397cf",
+      "after_sha256": "55c75fd223d3ec5e14bfc66186096e8e71137d7014a66a403d34cc3ca744812a",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-verification.json",
       "before_sha256": null,
-      "after_sha256": "4e32393d816c8d2612a2b9938c47d78e51185e4d58e1592b8b58a7e6b9ba6bd0",
+      "after_sha256": "7ca2180ef12966d356a8f5f00baf98d0eb0f03bc5d20ec76d5416d86329cebf5",
       "included_in_patch": false
     },
     {
@@ -730,6 +730,12 @@
       "included_in_patch": false
     },
     {
+      "path": "evidence/implementation/ob041-red.log",
+      "before_sha256": null,
+      "after_sha256": "64e9877cc0d58b12eeeedc2ebbbaac9b25d5270742a4b07e828a79e622a922c8",
+      "included_in_patch": false
+    },
+    {
       "path": "evidence/implementation/probe-file-green.log",
       "before_sha256": null,
       "after_sha256": "87a60d5f0e877f12a64ce616288d296d98c12639c9d5ed55dc65a5ecd1c118d6",
@@ -750,19 +756,19 @@
     {
       "path": "evidence/implementation/types.log",
       "before_sha256": null,
-      "after_sha256": "b1fdd8413863455c6896d811c9ab42dc9256d679a668643bb18df2318c3bc875",
+      "after_sha256": "cd9c340faf049f23b702d9a64d1ac922e06d74db0f0721886b346ae6282a3aad",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "fe9f8ee99c6ae3688f88970e6c43da7f69c793cab6e8ab5043f5b7574e581577",
+      "after_sha256": "40a0f420c24a18a28be20a3724a93055dc4473f01a8b6dfae1f1f6ee649b191c",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/verification.json",
       "before_sha256": null,
-      "after_sha256": "ce928a7375763104ae115e65dadcc4af4b9ba9f9a1d080b6adbf63ee5309b23e",
+      "after_sha256": "e578e702a2d68d606dd3c314387a29c327f6ed54a28858461002fa443d053c7a",
       "included_in_patch": false
     },
     {
@@ -774,7 +780,7 @@
     {
       "path": "progress.md",
       "before_sha256": null,
-      "after_sha256": "ea3c25b3953a80229c54d5a46d7355ba66ed043ac54e4563a0bf7e3211830bb3",
+      "after_sha256": "88c44845a399571f7ea342d929641a462d14b9921078f0a36c5811c3bd9d3e9f",
       "included_in_patch": true
     },
     {
@@ -1084,6 +1090,12 @@
       "included_in_patch": true
     },
     {
+      "path": "services/core/src/openbot/tools/executors/sandbox.py",
+      "before_sha256": null,
+      "after_sha256": "5a585b65e22e282177d4ebd1dbdb757dc7253dfa33f09b7791b27483684ed3c0",
+      "included_in_patch": true
+    },
+    {
       "path": "services/core/src/openbot/tools/filesystem_guard.py",
       "before_sha256": null,
       "after_sha256": "7c318af015bf74eaba3f9cebcc6ccea280de63964233449a6ba6c94593581d81",
@@ -1116,19 +1128,19 @@
     {
       "path": "task_plan.md",
       "before_sha256": null,
-      "after_sha256": "8ee6badc97068ab27730955fa3e2b5a30e4bcda41da54a813cf9485869013172",
+      "after_sha256": "9e1f74f8db1d21c35d5962823da58605b9f62215baaf9d3138c9207b6a01725d",
       "included_in_patch": true
     },
     {
       "path": "tasks/TASKS.md",
       "before_sha256": "62011244f45e5fc158ac1528b2bf737a2bd80c937751744c1059e6899a7c43ae",
-      "after_sha256": "099c60f028a1d7b5e7d28fe9b3f4d7d0c2022e1d6532f2251f9503a4ce10e3bb",
+      "after_sha256": "e7f112cd408daedb92f0727f55c2afdff2431aff156854243e7328171d839dff",
       "included_in_patch": true
     },
     {
       "path": "tasks/backlog.json",
       "before_sha256": "343bc2c906a0f19539db16609498bf63f796069c75995944833089a6ae550e20",
-      "after_sha256": "db71b637a30224491a74aa4ae879b5ae719fbff5c5f8c4f03f02023f1ac27166",
+      "after_sha256": "51abf211ab86fe1b2ca664f1b4af6539b5843da2d34b0ac10ce12a96d4ee848c",
       "included_in_patch": true
     },
     {
@@ -1321,6 +1333,12 @@
       "path": "tests/unit/test_config_and_domain.py",
       "before_sha256": null,
       "after_sha256": "af056fee3cce1726163afa1b325645f09409b4fe4d0074d1fa911142c12a9673",
+      "included_in_patch": true
+    },
+    {
+      "path": "tests/unit/test_container_sandbox.py",
+      "before_sha256": null,
+      "after_sha256": "1b038c6b08cd00ba5134c14e45798239cebb82e62135b4f6ed3a0e8894d8d417",
       "included_in_patch": true
     },
     {
