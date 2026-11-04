@@ -2160,8 +2160,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,42 @@
-+# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031：不可变提案、审批决定、确定性策略评估器、两次短事务派发、恢复与取消传播 / Immutable Proposals, Approvals, 6D Policy, Two-Phase Dispatch, Recovery, and Cancellation Propagation
+@@ -0,0 +1,52 @@
++# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031 / OB-032：提案、审批、六维策略、两次短事务派发、恢复、取消与文件句柄守卫 / Proposals, Approvals, 6D Policy, Two-Phase Dispatch, Recovery, Cancellation, and Workspace File Guard
 +
 +## 中文说明
 +
@@ -2186,12 +2186,18 @@
 +2. `propagate_cancel` 与终态保护：先等待短事务落盘确认（未确认落盘绝不谎报取消成功），再在事务外通过 `WorkerStopPort` 向所有在途 `DISPATCHING` 执行器发送停止信号；任何停止回执均显式标记 `effect_rolled_back=False`，并保留已成功操作列表 `preserved_succeeded_operations`（绝不伪称已发生的外部副作用已回滚）；存在 `DISPATCHING` 或 `UNKNOWN` 时任务保持 `RECONCILING`。
 +3. `finalize_cancelled` 与 `inspect_cancel_status`：仅当所有在途/未知操作均已核对闭合后才允许 `RECONCILING -> CANCELLED`；客户端超时/断连后可通过稳定 `request_id` 幂等重查或调用 `inspect_cancel_status` 读取真实 `cancel_revision` 持久状态，绝不把客户端等待取消当作撤销已提交取消请求。
 +
++实现（OB-032）：新增 `services/core/src/openbot/tools/filesystem_guard.py`（`WorkspaceFileGuard`、`ObservedFileSnapshot`、`validate_relative_workspace_path`、`build_safe_git_worktree_env_and_argv`、`build_safe_ripgrep_argv`）：
++1. 攻击路径语料拒绝（`validate_relative_workspace_path`）：拒绝空路径、控制字符/NUL、绝对路径、`..` 越界、Windows 盘符/UNC（`\\server\share`）/Win32 设备前缀（`\\?\`、`\\.\`）/ADS 数据流（`:`）/保留设备名（`CON`、`NUL`、`COM1` 等）、尾随点或空格，以及工作区内 `.git`、`.env`、私钥（`id_rsa`、`id_ed25519`、`*.pem`、`*.key`）等敏感路径。
++2. OS 目录句柄与 `O_NOFOLLOW` 逐步核验（`WorkspaceFileGuard`）：从工作区根 `dir_fd` 逐段执行 `os.lstat(..., dir_fd=cur_fd)` 与 `os.open(..., O_DIRECTORY | O_NOFOLLOW, dir_fd=cur_fd)` 校验 `st_dev` 与 `st_ino`，任何中间或末端 symlink、跨设备挂载、非普通文件或多硬链接写覆盖均立即拒绝；`observe` 记录父目录 inode、文件 inode 与 SHA-256，`write_atomic` 在同父目录句柄内复验父目录 inode 与旧文件 SHA-256 后经同目录临时文件 `fsync` + `os.replace(..., src_dir_fd=parent_fd, dst_dir_fd=parent_fd)` 原子替换，阻断观测后父目录被替换为外部符号链接的竞态。
++3. Git worktree 与 ripgrep 安全隔离（`build_safe_git_worktree_env_and_argv`、`build_safe_ripgrep_argv`）：在调用 Git 前审计 `.git/config` 与 `.gitattributes`，拒绝 `fsmonitor`、`hooksPath`、`sshCommand`、`filter.*` 等可执行指令，并强制 `-c core.hooksPath=/dev/null -c core.fsmonitor=false -c protocol.allow=never` 与 `GIT_CONFIG_NOSYSTEM=1`；ripgrep 构建器剥离 `RIPGREP_CONFIG_PATH` 并强制 `--no-config --no-pre --no-follow --`，确保模式串不注入 `--pre` 预处理器。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 尚未闭合。因此 OB-017/018/019/020/022/031 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
++当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及 Windows/Linux 原生句柄测试尚未闭合。因此 OB-017/018/019/020/022/031/032 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 +
 +## English Summary
 +
@@ -2203,6 +2209,10 @@
 +  1. `request_cancel`: Persists `cancel_revision` and `cancel_requested_at` first, releases undispatched `CLAIMED` leases, revokes `PENDING/APPROVED` approvals (`CONSUMED` untouched), and cancels `PROPOSED/AWAITING_APPROVAL/READY/CLAIMED` operations so `begin_dispatch` is blocked.
 +  2. `propagate_cancel`: Commits DB state before propagating stop signals via `WorkerStopPort` outside the transaction; always reports `effects_rolled_back=False` and `preserved_succeeded_operations`, keeping the task in `RECONCILING` when `DISPATCHING`/`UNKNOWN` operations exist.
 +  3. `finalize_cancelled` & `inspect_cancel_status`: Transitions `RECONCILING -> CANCELLED` only after all unknown effects are reconciled, and allows disconnected callers to inspect durable `cancel_revision` without rolling back committed cancellations.
++- **OB-032 (`IN_PROGRESS`)**: OS handle-backed workspace file guard (`services/core/src/openbot/tools/filesystem_guard.py`):
++  1. `validate_relative_workspace_path`: Rejects traversal, absolute paths, UNC/Win32 device prefixes (`\\?\`, `\\.\`), ADS (`:`), reserved Windows device names (`CON`, `NUL`, `COM1`, etc.), trailing dots/spaces, and `.git`/`.env`/private key paths.
++  2. `WorkspaceFileGuard`: Walks directory descriptors step-by-step with `O_NOFOLLOW` and `dir_fd`, verifying `st_dev` and `st_ino` at every hop; `observe` and `write_atomic` re-verify parent directory inode and old SHA-256 before writing via `fsync` + `os.replace(..., src_dir_fd=parent_fd, dst_dir_fd=parent_fd)` to defeat symlink swap races.
++  3. `build_safe_git_worktree_env_and_argv` & `build_safe_ripgrep_argv`: Rejects `.git/config` hooks/filters/fsmonitor and enforces `-c core.hooksPath=/dev/null`; strips `RIPGREP_CONFIG_PATH` and forces `--no-config --no-pre --no-follow --`.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,21 @@
@@ -2462,7 +2472,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,45 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2507,6 +2517,7 @@
 +- 推进 OB-022（实现取消和停止传播）：实现 CancellationService（先落盘 cancel_revision 与 cancel_requested_at、释放未派发 CLAIMED 租约、撤销未消费批准、阻断 CLAIMED->DISPATCHING 第二短事务；事务外向在途 worker 发送停止信号且显式保持 effects_rolled_back=False 与 preserved_succeeded_operations；存在 DISPATCHING/UNKNOWN 时驻留 RECONCILING 直至核对闭合后 finalize_cancelled；提供断连后 inspect_cancel_status 与稳定 request_id 幂等重查）；新增 3 项集成测试通过，存储套件增至 75 passed，M0 增至 196 passed/3 skipped，M1 增至 215 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-022 记 IN_PROGRESS。
 +- 推进 OB-023（实现任务预算和熔断）：实现 BudgetService、TaskBudgetPolicy 与 OfflineVocabularyEstimator（steps/模型/工具/重试/时长/产物大小与金额/Token 预留，耗尽时原子转 PAUSED；真实用量结算与估算偏差记录，断流未知费用保守保留；离线词表 SHA-256 核验且禁网，不将 OpenAI 分词充当通用精确计费；重复提案/连续错误/空转熔断与显式恢复）；新增 3 项集成测试通过，存储套件增至 78 passed，M0 增至 199 passed/3 skipped，M1 增至 218 passed/1 skipped。因上游 OB-017 仍为 IN_PROGRESS，OB-023 记 IN_PROGRESS。
 +- 推进 OB-024（实现上下文快照与摘要）：实现 ContextService（拒绝 SECRET 与 hidden_reasoning 持久化，强制 ASSISTANT+TOOL tool_call_id 配对；summarize_window 继承最高敏感分类与最不可信 provenance 污点、保留 source_refs 与未决动作且禁止将外部文本升级为授权；build_model_context 跨重启恢复、成对截断旧消息并计入包装/tool schema/多模态预算开销）；新增 2 项集成测试通过，存储套件增至 80 passed，M0 增至 201 passed/3 skipped，M1 增至 220 passed/1 skipped。因上游 OB-017/023 仍为 IN_PROGRESS，OB-024 记 IN_PROGRESS。
++- 推进 OB-032（实现工作区路径与文件访问守卫）：实现 WorkspaceFileGuard、validate_relative_workspace_path、build_safe_git_worktree_env_and_argv 与 build_safe_ripgrep_argv（拒绝绝对/越界/UNC/Win32 设备前缀/ADS/保留名与 .git/.env/私钥路径；使用 dir_fd + O_NOFOLLOW 逐段校验 inode/dev 并通过 write_atomic 复验父目录 inode 与旧文件 SHA-256 阻断父目录符号链接替换竞态；审计 .git/config 禁用 hooks/filter/fsmonitor，剥离 RIPGREP_CONFIG_PATH 并强制 --no-config --no-pre）；新增 22 项测试通过，M0 增至 223 passed/3 skipped，M1 增至 242 passed/1 skipped。因上游 OB-031 及 Windows/Linux 原生句柄验证待完成，OB-032 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -10667,6 +10678,372 @@
 +    ) -> None:
 +        self.close()
 --- /dev/null
++++ b/services/core/src/openbot/tools/__init__.py
+@@ -0,0 +1 @@
++"""Controlled workspace and execution tool primitives."""
+--- /dev/null
++++ b/services/core/src/openbot/tools/filesystem_guard.py
+@@ -0,0 +1,359 @@
++"""OS handle-backed workspace path guard, atomic file verification, and Git/rg isolation."""
++
++import hashlib
++import os
++import re
++import secrets
++import stat
++from dataclasses import dataclass
++from pathlib import Path
++
++_WIN_RESERVED_NAMES = frozenset(
++    {
++        "CON",
++        "PRN",
++        "AUX",
++        "NUL",
++        "COM1",
++        "COM2",
++        "COM3",
++        "COM4",
++        "COM5",
++        "COM6",
++        "COM7",
++        "COM8",
++        "COM9",
++        "LPT1",
++        "LPT2",
++        "LPT3",
++        "LPT4",
++        "LPT5",
++        "LPT6",
++        "LPT7",
++        "LPT8",
++        "LPT9",
++    }
++)
++_SENSITIVE_LEAF_NAMES = frozenset({"id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".env"})
++_SENSITIVE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
++_UNSAFE_GIT_CONFIG_PATTERN = re.compile(
++    r"(?im)^\s*(fsmonitor|hookspath|sshcommand|gitproxy|askpass|editor|pager)\s*=|"
++    r"^\s*\[\s*filter\s+",
++)
++
++
++def validate_relative_workspace_path(
++    raw_path: str, *, allow_sensitive: bool = False
++) -> tuple[str, ...]:
++    """Reject absolute, traversal, UNC, Win32 device/ADS, and sensitive workspace paths."""
++    if not raw_path or not isinstance(raw_path, str):
++        raise PermissionError("Workspace path must be a non-empty string")
++    if any(ord(ch) < 32 or ord(ch) == 127 for ch in raw_path):
++        raise PermissionError("Workspace path contains control or NUL characters")
++    if raw_path.startswith(("/", "\\")) or "\\" in raw_path:
++        raise PermissionError("Absolute, UNC, or backslash paths are forbidden")
++    if re.match(r"^[A-Za-z]:", raw_path):
++        raise PermissionError("Windows drive-letter paths are forbidden")
++
++    parts = tuple(raw_path.split("/"))
++    if any(p in {"", ".", ".."} for p in parts):
++        raise PermissionError("Empty, current-dir, or parent-traversal segments are forbidden")
++
++    for part in parts:
++        if ":" in part:
++            raise PermissionError("Windows Alternate Data Stream (ADS) syntax is forbidden")
++        if part.endswith((".", " ")):
++            raise PermissionError("Trailing dot or space in path segment is forbidden")
++        stem = part.split(".", 1)[0].upper()
++        if stem in _WIN_RESERVED_NAMES:
++            raise PermissionError(f"Windows reserved device name forbidden: {part}")
++
++    lowered = tuple(p.lower() for p in parts)
++    if lowered[0] == ".git":
++        raise PermissionError("Direct access to .git metadata/hooks is forbidden")
++    if not allow_sensitive:
++        leaf = lowered[-1]
++        if (
++            leaf in _SENSITIVE_LEAF_NAMES
++            or leaf.startswith(".env.")
++            or leaf.endswith(_SENSITIVE_SUFFIXES)
++        ):
++            raise PermissionError(f"Sensitive credential path refused: {raw_path}")
++    return parts
++
++
++@dataclass(frozen=True, slots=True)
++class ObservedFileSnapshot:
++    relative_path: str
++    exists: bool
++    sha256: str | None
++    size_bytes: int
++    parent_dev: int
++    parent_ino: int
++    file_ino: int | None
++
++
++class WorkspaceFileGuard:
++    """Step-by-step directory descriptor walker using O_NOFOLLOW and inode verification."""
++
++    def __init__(self, workspace_root: Path) -> None:
++        if workspace_root.is_symlink() or not workspace_root.is_dir():
++            raise PermissionError("Workspace root must be a real directory, not a symlink")
++        self._root = workspace_root.resolve()
++        st = os.lstat(self._root)
++        if not stat.S_ISDIR(st.st_mode):
++            raise PermissionError("Workspace root is not a directory")
++        self._root_dev = st.st_dev
++        self._root_ino = st.st_ino
++
++    def _open_root_fd(self) -> int:
++        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
++        fd = os.open(self._root, flags)
++        try:
++            st = os.fstat(fd)
++            if st.st_dev != self._root_dev or st.st_ino != self._root_ino:
++                raise PermissionError("Workspace root inode/device changed unexpectedly")
++            return fd
++        except BaseException:
++            os.close(fd)
++            raise
++
++    def _walk_parent_fd(
++        self, parts: tuple[str, ...], *, create_dirs: bool
++    ) -> tuple[int, os.stat_result]:
++        cur_fd = self._open_root_fd()
++        dir_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
++        try:
++            for seg in parts[:-1]:
++                try:
++                    st = os.lstat(seg, dir_fd=cur_fd)
++                except FileNotFoundError:
++                    if not create_dirs:
++                        raise
++                    os.mkdir(seg, 0o755, dir_fd=cur_fd)
++                    st = os.lstat(seg, dir_fd=cur_fd)
++                if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
++                    raise PermissionError(f"Symlink or non-directory intermediate segment: {seg}")
++                if st.st_dev != self._root_dev:
++                    raise PermissionError("Cross-device mount inside workspace is forbidden")
++                next_fd = os.open(seg, dir_flags, dir_fd=cur_fd)
++                next_st = os.fstat(next_fd)
++                if next_st.st_ino != st.st_ino or next_st.st_dev != self._root_dev:
++                    os.close(next_fd)
++                    raise PermissionError("Directory race detected during walk")
++                os.close(cur_fd)
++                cur_fd = next_fd
++            parent_st = os.fstat(cur_fd)
++            return cur_fd, parent_st
++        except BaseException:
++            os.close(cur_fd)
++            raise
++
++    def _read_from_parent_fd(self, parent_fd: int, leaf: str) -> tuple[bytes, os.stat_result]:
++        lst = os.lstat(leaf, dir_fd=parent_fd)
++        if stat.S_ISLNK(lst.st_mode) or not stat.S_ISREG(lst.st_mode):
++            raise PermissionError(f"Symlink or non-regular file refused: {leaf}")
++        if lst.st_dev != self._root_dev:
++            raise PermissionError("Cross-device file refused")
++        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
++        fd = os.open(leaf, flags, dir_fd=parent_fd)
++        try:
++            fst = os.fstat(fd)
++            if (
++                not stat.S_ISREG(fst.st_mode)
++                or fst.st_ino != lst.st_ino
++                or fst.st_dev != self._root_dev
++            ):
++                raise PermissionError("File inode changed between lstat and open")
++            chunks: list[bytes] = []
++            while True:
++                buf = os.read(fd, 65536)
++                if not buf:
++                    break
++                chunks.append(buf)
++            return b"".join(chunks), fst
++        finally:
++            os.close(fd)
++
++    def read_bytes(self, rel_path: str) -> bytes:
++        parts = validate_relative_workspace_path(rel_path)
++        parent_fd, _ = self._walk_parent_fd(parts, create_dirs=False)
++        try:
++            data, _ = self._read_from_parent_fd(parent_fd, parts[-1])
++            return data
++        finally:
++            os.close(parent_fd)
++
++    def observe(self, rel_path: str) -> ObservedFileSnapshot:
++        parts = validate_relative_workspace_path(rel_path)
++        parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=True)
++        try:
++            try:
++                data, fst = self._read_from_parent_fd(parent_fd, parts[-1])
++            except FileNotFoundError:
++                return ObservedFileSnapshot(
++                    relative_path=rel_path,
++                    exists=False,
++                    sha256=None,
++                    size_bytes=0,
++                    parent_dev=parent_st.st_dev,
++                    parent_ino=parent_st.st_ino,
++                    file_ino=None,
++                )
++            return ObservedFileSnapshot(
++                relative_path=rel_path,
++                exists=True,
++                sha256=hashlib.sha256(data).hexdigest(),
++                size_bytes=len(data),
++                parent_dev=parent_st.st_dev,
++                parent_ino=parent_st.st_ino,
++                file_ino=fst.st_ino,
++            )
++        finally:
++            os.close(parent_fd)
++
++    def write_atomic(
++        self, rel_path: str, data: bytes, expected: ObservedFileSnapshot
++    ) -> ObservedFileSnapshot:
++        parts = validate_relative_workspace_path(rel_path)
++        if expected.relative_path != rel_path:
++            raise PermissionError("Snapshot relative_path mismatch")
++        parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=False)
++        leaf = parts[-1]
++        try:
++            if parent_st.st_dev != expected.parent_dev or parent_st.st_ino != expected.parent_ino:
++                raise PermissionError("Parent directory inode changed since observation")
++            if expected.exists:
++                try:
++                    cur_bytes, cur_st = self._read_from_parent_fd(parent_fd, leaf)
++                except FileNotFoundError as exc:
++                    raise PermissionError("Expected existing file disappeared") from exc
++                if cur_st.st_nlink > 1:
++                    raise PermissionError("Refusing to overwrite multi-hardlinked file")
++                if (
++                    cur_st.st_ino != expected.file_ino
++                    or hashlib.sha256(cur_bytes).hexdigest() != expected.sha256
++                ):
++                    raise PermissionError("Target file hash or inode changed since observation")
++            else:
++                try:
++                    os.lstat(leaf, dir_fd=parent_fd)
++                except FileNotFoundError:
++                    pass
++                else:
++                    raise PermissionError("Target file already exists; expected new file")
++
++            tmp_name = f".openbot_tmp_{secrets.token_hex(12)}"
++            tmp_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
++            tmp_fd = os.open(tmp_name, tmp_flags, 0o600, dir_fd=parent_fd)
++            try:
++                view = memoryview(data)
++                written = 0
++                while written < len(view):
++                    n = os.write(tmp_fd, view[written:])
++                    if n <= 0:
++                        raise OSError("Short write to temporary workspace file")
++                    written += n
++                os.fsync(tmp_fd)
++            except BaseException:
++                os.close(tmp_fd)
++                try:
++                    os.unlink(tmp_name, dir_fd=parent_fd)
++                except OSError:
++                    pass
++                raise
++            os.close(tmp_fd)
++            os.replace(tmp_name, leaf, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
++            new_st = os.lstat(leaf, dir_fd=parent_fd)
++            return ObservedFileSnapshot(
++                relative_path=rel_path,
++                exists=True,
++                sha256=hashlib.sha256(data).hexdigest(),
++                size_bytes=len(data),
++                parent_dev=parent_st.st_dev,
++                parent_ino=parent_st.st_ino,
++                file_ino=new_st.st_ino,
++            )
++        finally:
++            os.close(parent_fd)
++
++
++def build_safe_git_worktree_env_and_argv(
++    repo_root: Path, worktree_dest: Path, commit_ref: str
++) -> tuple[dict[str, str], tuple[str, ...]]:
++    """Audit .git/config and construct a hook/filter-disabled git worktree command."""
++    if repo_root.is_symlink() or not repo_root.is_dir():
++        raise PermissionError("Repository root must be a real directory")
++    git_config = repo_root / ".git/config"
++    if git_config.exists():
++        if git_config.is_symlink():
++            raise PermissionError("Symlink .git/config refused")
++        cfg_text = git_config.read_text(encoding="utf-8", errors="replace")
++        if _UNSAFE_GIT_CONFIG_PATTERN.search(cfg_text):
++            raise PermissionError(
++                "Unsafe Git config directive (hook/fsmonitor/filter/sshCommand) refused"
++            )
++    gitattributes = repo_root / ".gitattributes"
++    if gitattributes.exists():
++        attr_text = gitattributes.read_text(encoding="utf-8", errors="replace")
++        if "filter=" in attr_text:
++            raise PermissionError("Git filter attributes in .gitattributes refused")
++
++    env = {
++        "GIT_CONFIG_NOSYSTEM": "1",
++        "GIT_TERMINAL_PROMPT": "0",
++        "GIT_ATTR_NOSYSTEM": "1",
++        "LC_ALL": "C",
++    }
++    argv = (
++        "git",
++        "-C",
++        str(repo_root.resolve()),
++        "-c",
++        "core.hooksPath=/dev/null",
++        "-c",
++        "core.fsmonitor=false",
++        "-c",
++        "protocol.allow=never",
++        "worktree",
++        "add",
++        "--detach",
++        str(worktree_dest),
++        commit_ref,
++    )
++    return env, argv
++
++
++def build_safe_ripgrep_argv(
++    workspace_root: Path,
++    pattern: str,
++    *,
++    relative_subpath: str = ".",
++    max_filesize: str = "1M",
++    ambient_env: dict[str, str] | None = None,
++) -> tuple[dict[str, str], tuple[str, ...]]:
++    """Strip RIPGREP_CONFIG_PATH and force --no-config / --no-pre for safe search."""
++    if workspace_root.is_symlink() or not workspace_root.is_dir():
++        raise PermissionError("Workspace root must be a real directory")
++    if not pattern:
++        raise ValueError("Search pattern must be non-empty")
++    if relative_subpath != ".":
++        validate_relative_workspace_path(relative_subpath)
++    clean_env = {
++        k: v
++        for k, v in (ambient_env or {}).items()
++        if k in {"PATH", "LANG", "LC_ALL"} and k != "RIPGREP_CONFIG_PATH"
++    }
++    argv = (
++        "rg",
++        "--no-config",
++        "--no-pre",
++        "--no-follow",
++        "--color=never",
++        "--line-number",
++        f"--max-filesize={max_filesize}",
++        "--",
++        pattern,
++        relative_subpath,
++    )
++    return clean_env, argv
+--- /dev/null
 +++ b/task_plan.md
 @@ -0,0 +1,36 @@
 +# OpenBot v1.2 实施计划
@@ -10695,7 +11072,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/031 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断与上下文快照/摘要；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/031/032 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要与工作区文件句柄守卫；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -10921,6 +11298,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
  
  **需求** [RQ04](requirements_traceability.md#rq04)
+ 
+@@ -1544,7 +1544,7 @@
+ 
+ **实现工作区路径与文件访问守卫**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Security · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)
  
 @@ -1771,7 +1771,7 @@
  
@@ -11683,7 +12069,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1900,7 +2176,19 @@
+@@ -1900,14 +2176,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -11704,7 +12090,37 @@
    },
    {
      "id": "OB-032",
-@@ -2851,7 +3139,7 @@
+     "title": "实现工作区路径与文件访问守卫",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Security",
+     "size": "M",
+     "req_ids": [
+@@ -1960,7 +2248,20 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 OS handle-backed WorkspaceFileGuard (dir_fd + O_NOFOLLOW step walk, parent inode and old SHA-256 atomic write verification, native attack path corpus, and Git worktree / ripgrep config isolation)",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_filesystem_guard.py",
++        "evidence/implementation/unit-contract-protocol.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-031 仍为 IN_PROGRESS，且原生 Windows（Win32 句柄/reparse point）与 Linux 实机验证待对应环境执行；保持 IN_PROGRESS，不越过上游与跨平台门禁宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs (pathspec, git-worktree), reuse_type (native_primitive), and reuse_notes; implemented control-owned dir_fd + O_NOFOLLOW handle walker without relying on Path.resolve or string prefixes; verified parent symlink swap race defense, old hash check, Git hook/filter config rejection, and ripgrep --no-config/--no-pre isolation."
++    }
+   },
+   {
+     "id": "OB-033",
+@@ -2851,7 +3152,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -11713,7 +12129,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3196,19 @@
+@@ -2908,7 +3209,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -11734,7 +12150,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4579,7 @@
+@@ -4279,7 +4592,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -11743,7 +12159,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4637,26 @@
+@@ -4337,14 +4650,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -11772,7 +12188,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4713,19 @@
+@@ -4401,7 +4726,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -11793,7 +12209,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5847,7 @@
+@@ -5523,7 +5860,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -11802,7 +12218,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5900,26 @@
+@@ -5576,14 +5913,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -11831,7 +12247,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +5978,26 @@
+@@ -5642,14 +5991,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -11860,7 +12276,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6052,26 @@
+@@ -5704,14 +6065,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -11889,7 +12305,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6138,25 @@
+@@ -5778,14 +6151,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -11917,7 +12333,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6224,19 @@
+@@ -5853,7 +6237,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -18704,6 +19120,125 @@
 +def test_effect_does_not_imply_retry_class():
 +    assert Effect.EXTERNAL_WRITE.value == "EXTERNAL_WRITE"
 +    assert RetryClass.RECONCILE_ONLY.value == "RECONCILE_ONLY"
+--- /dev/null
++++ b/tests/unit/test_filesystem_guard.py
+@@ -0,0 +1,116 @@
++import hashlib
++import os
++
++import pytest
++from openbot.tools.filesystem_guard import (
++    WorkspaceFileGuard,
++    build_safe_git_worktree_env_and_argv,
++    build_safe_ripgrep_argv,
++    validate_relative_workspace_path,
++)
++
++
++@pytest.mark.parametrize(
++    "bad_path",
++    [
++        "",
++        "/etc/passwd",
++        "../outside.txt",
++        "a/../../outside.txt",
++        "\\server\\share\\file.txt",
++        "//server/share/file.txt",
++        "\\\\?\\C:\\Windows\\System32",
++        "\\\\.\\PhysicalDrive0",
++        "C:\\Users\\admin\\secret.txt",
++        "dir/file.txt:secret:$DATA",
++        "CON",
++        "sub/NUL.txt",
++        "sub/COM1",
++        "sub/trailingdot.",
++        "sub/trailingspace ",
++        "file\x00.txt",
++        ".git/hooks/post-checkout",
++        ".git/config",
++        ".env",
++        "keys/id_ed25519",
++    ],
++)
++def test_native_os_attack_corpus_and_sensitive_paths_are_rejected(bad_path: str):
++    with pytest.raises(PermissionError):
++        validate_relative_workspace_path(bad_path)
++
++
++def test_handle_guard_blocks_symlink_escape_and_parent_swap_race_and_verifies_old_hash(tmp_path):
++    ws_root = tmp_path / "workspace"
++    ws_root.mkdir()
++    outside = tmp_path / "outside_secret.txt"
++    outside.write_text("top-secret", encoding="utf-8")
++
++    guard = WorkspaceFileGuard(ws_root)
++
++    # 1. Symlink inside workspace pointing outside is rejected by O_NOFOLLOW / lstat step walk
++    (ws_root / "link_out.txt").symlink_to(outside)
++    with pytest.raises(PermissionError, match="Symlink"):
++        guard.read_bytes("link_out.txt")
++
++    # 2. Create new file verifies parent inode and non-existence, then writes atomically
++    snap_new = guard.observe("sub/hello.txt")
++    assert snap_new.exists is False
++    written_snap = guard.write_atomic("sub/hello.txt", b"v1", snap_new)
++    assert written_snap.exists is True
++    assert written_snap.sha256 == hashlib.sha256(b"v1").hexdigest()
++    assert guard.read_bytes("sub/hello.txt") == b"v1"
++
++    # 3. Stale old_sha256 is rejected on replacement
++    with pytest.raises(PermissionError, match="hash|exists"):
++        guard.write_atomic("sub/hello.txt", b"v2-stale", snap_new)
++
++    # 4. Parent directory swapped with a symlink to outside directory between observe and write
++    snap_v1 = guard.observe("sub/hello.txt")
++    outside_dir = tmp_path / "outside_dir"
++    outside_dir.mkdir()
++    (outside_dir / "hello.txt").write_bytes(b"v1")
++    os.unlink(ws_root / "sub/hello.txt")
++    os.rmdir(ws_root / "sub")
++    (ws_root / "sub").symlink_to(outside_dir)
++
++    with pytest.raises(PermissionError, match="Symlink|inode"):
++        guard.write_atomic("sub/hello.txt", b"pwned", snap_v1)
++    assert (outside_dir / "hello.txt").read_bytes() == b"v1"
++
++
++def test_git_worktree_and_ripgrep_guards_block_hooks_filters_and_user_config(tmp_path):
++    repo = tmp_path / "repo"
++    git_dir = repo / ".git"
++    hooks_dir = git_dir / "hooks"
++    hooks_dir.mkdir(parents=True)
++    canary = tmp_path / "hook_executed.canary"
++    hook = hooks_dir / "post-checkout"
++    hook.write_text(f"#!/bin/sh\ntouch {canary}\n", encoding="utf-8")
++    hook.chmod(0o755)
++
++    # 1. Malicious filter or fsmonitor in .git/config is rejected BEFORE any git invocation
++    (git_dir / "config").write_text(
++        '[core]\n\tfsmonitor = "touch /tmp/pwn"\n[filter "evil"]\n\tclean = "sh -c evil"\n',
++        encoding="utf-8",
++    )
++    with pytest.raises(PermissionError, match="Unsafe Git config"):
++        build_safe_git_worktree_env_and_argv(repo, tmp_path / "wt_out", "HEAD")
++
++    # 2. Clean .git/config produces isolated env + argv with core.hooksPath=/dev/null
++    (git_dir / "config").write_text("[core]\n\trepositoryformatversion = 0\n", encoding="utf-8")
++    env, argv = build_safe_git_worktree_env_and_argv(repo, tmp_path / "wt_out", "HEAD")
++    assert "core.hooksPath=/dev/null" in argv
++    assert env["GIT_CONFIG_NOSYSTEM"] == "1"
++    assert not canary.exists()
++
++    # 3. Ripgrep builder strips RIPGREP_CONFIG_PATH, forces --no-config/--no-pre, and rejects --pre
++    rg_env, rg_argv = build_safe_ripgrep_argv(
++        repo, "--pre=sh", ambient_env={"RIPGREP_CONFIG_PATH": "/tmp/evil.rgrc", "PATH": "/usr/bin"}
++    )
++    assert "RIPGREP_CONFIG_PATH" not in rg_env
++    assert "--no-config" in rg_argv
++    assert "--no-pre" in rg_argv
++    # Pattern is placed after '--' so leading-dash patterns cannot inject flags like --pre
++    dash_idx = rg_argv.index("--")
++    assert rg_argv[dash_idx + 1] == "--pre=sh"
 --- /dev/null
 +++ b/tests/unit/test_policy_evaluator.py
 @@ -0,0 +1,359 @@
