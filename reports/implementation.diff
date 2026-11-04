@@ -2321,7 +2321,7 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,267 @@
 +# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
@@ -2464,6 +2464,9 @@
 +实现（OB-063）：新增 `services/core/src/openbot/tools/mcp/registry.py`（`McpToolPinRegistry`、`McpToolSnapshot`、`PinnedMcpToolRecord`）与 `tests/unit/test_mcp_registry.py`：
 +1. 全量元数据 JCS 锁定与漂移隔离：对 `server_id`、`package_digest`、`command_argv`、`env_keys`、`transport`、`tool_name`、`description`、`input_schema`、`output_schema`、`annotations` 计算完整 JCS SHA-256（同时声明 `jcs_hash_proves_server_code_safe=False`）；禁止覆盖内建工具名称（`BUILTIN_TOOL_SHADOWING_FORBIDDEN`），阻断远程 `$ref`（`REMOTE_SCHEMA_REF_FORBIDDEN`），且任何描述/Schema/注释变化立即将工具转入 `QUARANTINED_ON_DRIFT` 并使旧批准失效。
 +
++实现（OB-064）：新增 `services/core/src/openbot/tools/mcp/executor.py`（`McpIsolatedExecutor`、`ReviewedLocalMcpManifest`、`McpDispatchPlan`）与 `tests/unit/test_mcp_executor.py`：
++1. 隔离后端强制、环境剥离与忽略第三方注释：stdio MCP server 必须运行于已验证隔离后端（未验证直接返回 `CAPABILITY_UNAVAILABLE`），子进程仅保留 `allowed_env_keys`（剥离 `HOME` 与父进程密钥）；完全忽略第三方 `readOnlyHint`/`idempotentHint` 注释，仅由本地已审查 manifest 决定 `effective_retry_class` 与审批要求，并硬拒绝 MCP sampling（`MCP_SAMPLING_FORBIDDEN_IN_MVP`）。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2492,6 +2495,7 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/browser/test_browser_outcome_regression.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_client.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_registry.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_executor.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
@@ -2583,6 +2587,8 @@
 +  1. Enforces pinned `sha256` package digests and explicit stdio protocol versions, blocks `npx`/`uvx`/`@latest` dynamic package runners (`DYNAMIC_MCP_PACKAGE_RUNNER_FORBIDDEN`), rejects protocol mismatches without silent transport downgrade, and bounds output bytes.
 +- **OB-063 (`IN_PROGRESS`)**: MCP tool registration and JCS metadata pinning (`services/core/src/openbot/tools/mcp/registry.py` and `tests/unit/test_mcp_registry.py`, 1 passed):
 +  1. Pins full MCP tool metadata via JCS SHA-256 (`jcs_hash_proves_server_code_safe=False`), blocks builtin tool name shadowing and remote `$ref` URIs, and quarantines tools (`MCP_METADATA_DRIFT_QUARANTINED`) if description, schema, or annotations change.
++- **OB-064 (`IN_PROGRESS`)**: MCP process and network isolation executor (`services/core/src/openbot/tools/mcp/executor.py` and `tests/unit/test_mcp_executor.py`, 1 passed):
++  1. Requires a qualified isolation backend (`CAPABILITY_UNAVAILABLE` otherwise), strips parent environment variables outside `allowed_env_keys`, ignores third-party `readOnlyHint`/`idempotentHint` annotations in favor of `ReviewedLocalMcpManifest`, and forbids MCP sampling (`MCP_SAMPLING_FORBIDDEN_IN_MVP`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -3068,7 +3074,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,91 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3153,12 +3159,13 @@
 +- 推进 OB-061（建立浏览器结果验证回归）：实现 BrowserOutcomeRegressionHarness 与 BrowserRegressionReport（覆盖购物金额漂移阻断、表单回执丢失转 UNKNOWN、下载检疫净化、重定向至元数据阻断、登录过期跳转拒绝 5 类夹具场景，绝不将模型文字或驱动无异常当作业务成功证明）；新增集成测试通过，M0 增至 283 passed/3 skipped，M1 增至 302 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-061 记 IN_PROGRESS。
 +- 推进 OB-062（实现 MCP 版本协商与生命周期）：实现 McpStdioLifecycleClient 与 McpCompatibilityManifest（强制 sha256 包摘要与显式 stdio 协议版本，拦截 npx/uvx/@latest 动态拉包 DYNAMIC_MCP_PACKAGE_RUNNER_FORBIDDEN，版本不匹配立即拒绝且不静默切换 transport，限制输出字节上限）；新增单元测试通过，M0 增至 284 passed/3 skipped，M1 增至 303 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-062 记 IN_PROGRESS。
 +- 推进 OB-063（实现 MCP 注册与工具元数据锁定）：实现 McpToolPinRegistry、McpToolSnapshot 与 PinnedMcpToolRecord（对包摘要、命令、环境、transport、description、input/output schema 与 annotations 计算完整 JCS SHA-256 锁定，且声明 jcs_hash_proves_server_code_safe=False；禁止覆盖内建工具名称与远程 $ref 解析，list_changed 或元数据漂移时自动隔离工具并使旧批准失效）；新增单元测试通过，M0 增至 285 passed/3 skipped，M1 增至 304 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-063 记 IN_PROGRESS。
++- 推进 OB-064（实现 MCP 进程和网络权限）：实现 McpIsolatedExecutor、ReviewedLocalMcpManifest 与 McpDispatchPlan（要求已验证隔离后端，剥离父进程 HOME 与密钥环境，忽略第三方 readOnlyHint/idempotentHint 注释而由本地已审 manifest 决定 retry_class，并禁用 MCP sampling）；新增单元测试通过，M0 增至 286 passed/3 skipped，M1 增至 305 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-064 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-063`, and `OB-095`, reaching 285 passed M0 checks and 304 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-064`, and `OB-095`, reaching 286 passed M0 checks and 305 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -17111,6 +17118,77 @@
 +            return raw[:limit], True
 +        return raw, False
 --- /dev/null
++++ b/services/core/src/openbot/tools/mcp/executor.py
+@@ -0,0 +1,68 @@
++"""Isolated MCP process executor ignoring untrusted hints and blocking sampling (OB-064)."""
++
++from dataclasses import dataclass
++from typing import Any, Literal
++
++
++@dataclass(frozen=True, slots=True)
++class ReviewedLocalMcpManifest:
++    server_id: str
++    tool_name: str
++    reviewed_retry_class: str
++    requires_approval: bool
++    allowed_env_keys: frozenset[str]
++    network_mode: Literal["NONE", "RESTRICTED_EGRESS"]
++
++
++@dataclass(frozen=True, slots=True)
++class McpDispatchPlan:
++    server_id: str
++    tool_name: str
++    effective_retry_class: str
++    requires_approval: bool
++    child_env: dict[str, str]
++    network_mode: str
++    sampling_enabled: Literal[False] = False
++
++
++class McpIsolatedExecutor:
++    """Enforce isolated MCP execution, clean env, local retry_class, and sampling prohibition."""
++
++    def __init__(
++        self,
++        *,
++        reviewed_manifests: dict[str, ReviewedLocalMcpManifest],
++        isolation_backend_qualified: bool,
++    ) -> None:
++        self._manifests = dict(reviewed_manifests)
++        self._qualified = isolation_backend_qualified
++
++    def prepare_dispatch(
++        self,
++        *,
++        tool_name: str,
++        server_annotations: dict[str, Any],
++        parent_env: dict[str, str],
++        sampling_requested: bool,
++    ) -> McpDispatchPlan:
++        del server_annotations  # Third-party readOnlyHint/idempotentHint NEVER grant authority!
++        if not self._qualified:
++            raise PermissionError(
++                "CAPABILITY_UNAVAILABLE: isolated execution backend required for MCP stdio server"
++            )
++        if sampling_requested:
++            raise PermissionError("MCP_SAMPLING_FORBIDDEN_IN_MVP")
++        manifest = self._manifests.get(tool_name)
++        if manifest is None:
++            raise PermissionError(f"UNREVIEWED_MCP_TOOL: {tool_name}")
++
++        clean_env = {k: v for k, v in parent_env.items() if k in manifest.allowed_env_keys}
++        return McpDispatchPlan(
++            server_id=manifest.server_id,
++            tool_name=manifest.tool_name,
++            effective_retry_class=manifest.reviewed_retry_class,
++            requires_approval=manifest.requires_approval,
++            child_env=clean_env,
++            network_mode=manifest.network_mode,
++            sampling_enabled=False,
++        )
+--- /dev/null
 +++ b/services/core/src/openbot/tools/mcp/registry.py
 @@ -0,0 +1,100 @@
 +"""MCP tool metadata JCS pinning, remote $ref blocking, and list_changed quarantine (OB-063)."""
@@ -20195,6 +20273,15 @@
  
  **需求** [RQ04](requirements_traceability.md#rq04)、[RQ09](requirements_traceability.md#rq09)
  
+@@ -4031,7 +4031,7 @@
+ 
+ **实现MCP进程和网络权限**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Security · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)、[RQ06](requirements_traceability.md#rq06)、[RQ09](requirements_traceability.md#rq09)
+ 
 @@ -4319,7 +4319,7 @@
  
  **建立Windows原生运行门禁**
@@ -22051,7 +22138,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -3892,7 +4645,19 @@
+@@ -3892,14 +4645,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -22072,7 +22159,36 @@
    },
    {
      "id": "OB-064",
-@@ -4279,7 +5044,7 @@
+     "title": "实现MCP进程和网络权限",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Security",
+     "size": "M",
+     "req_ids": [
+@@ -3958,7 +4723,19 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、18、24–25页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、18、24–25页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 McpIsolatedExecutor requiring qualified isolation backend, stripping parent env, ignoring third-party annotations, and blocking MCP sampling",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_mcp_executor.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-019、OB-037、OB-038、OB-041、OB-042、OB-062、OB-063 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (mcp-sdk, python-on-whales), reuse_type (dependency_adapter), and reuse_notes; enforced isolated MCP execution and ignored untrusted annotations."
++    }
+   },
+   {
+     "id": "OB-065",
+@@ -4279,7 +5056,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -22081,7 +22197,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +5102,26 @@
+@@ -4337,14 +5114,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -22110,7 +22226,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5178,19 @@
+@@ -4401,7 +5190,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -22131,7 +22247,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5798,7 @@
+@@ -5009,7 +5810,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -22140,7 +22256,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5867,20 @@
+@@ -5078,7 +5879,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -22162,7 +22278,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6325,7 @@
+@@ -5523,7 +6337,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -22171,7 +22287,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6378,26 @@
+@@ -5576,14 +6390,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22200,7 +22316,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6456,26 @@
+@@ -5642,14 +6468,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -22229,7 +22345,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6530,26 @@
+@@ -5704,14 +6542,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22258,7 +22374,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6616,25 @@
+@@ -5778,14 +6628,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22286,7 +22402,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6702,26 @@
+@@ -5853,14 +6714,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22315,7 +22431,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6775,27 @@
+@@ -5914,14 +6787,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -22345,7 +22461,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,7 +6851,20 @@
+@@ -5977,7 +6863,20 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -33180,6 +33296,69 @@
 +    bounded, trunc = client.bound_response_bytes(b"X" * 1024)
 +    assert len(bounded) == 256
 +    assert trunc is True
+--- /dev/null
++++ b/tests/unit/test_mcp_executor.py
+@@ -0,0 +1,60 @@
++import pytest
++from openbot.tools.mcp.executor import (
++    McpIsolatedExecutor,
++    ReviewedLocalMcpManifest,
++)
++
++
++def test_mcp_executor_ignores_untrusted_hints_requires_isolation_and_blocks_sampling() -> None:
++    manifest = ReviewedLocalMcpManifest(
++        server_id="mcp_1",
++        tool_name="mcp_1.write_row",
++        reviewed_retry_class="RECONCILE_ONLY",
++        requires_approval=True,
++        allowed_env_keys=frozenset({"LC_ALL"}),
++        network_mode="NONE",
++    )
++    executor = McpIsolatedExecutor(
++        reviewed_manifests={"mcp_1.write_row": manifest},
++        isolation_backend_qualified=True,
++    )
++
++    # 1. Untrusted server annotations NEVER override local manifest!
++    plan = executor.prepare_dispatch(
++        tool_name="mcp_1.write_row",
++        server_annotations={"readOnlyHint": True, "idempotentHint": True},
++        parent_env={"OPENAI_API_KEY": "sk-secret", "HOME": "/Users/admin", "LC_ALL": "C.UTF-8"},
++        sampling_requested=False,
++    )
++    assert plan.effective_retry_class == "RECONCILE_ONLY"
++    assert plan.requires_approval is True
++    assert "OPENAI_API_KEY" not in plan.child_env
++    assert "HOME" not in plan.child_env
++    assert plan.sampling_enabled is False
++
++    # 2. Server sampling request, unreviewed server, or unqualified sandbox is rejected
++    with pytest.raises(PermissionError, match="MCP_SAMPLING_FORBIDDEN_IN_MVP"):
++        executor.prepare_dispatch(
++            tool_name="mcp_1.write_row",
++            server_annotations={},
++            parent_env={},
++            sampling_requested=True,
++        )
++    with pytest.raises(PermissionError, match="UNREVIEWED_MCP_TOOL"):
++        executor.prepare_dispatch(
++            tool_name="mcp_unknown.tool",
++            server_annotations={"readOnlyHint": True},
++            parent_env={},
++            sampling_requested=False,
++        )
++    unqualified = McpIsolatedExecutor(
++        reviewed_manifests={"mcp_1.write_row": manifest},
++        isolation_backend_qualified=False,
++    )
++    with pytest.raises(PermissionError, match="CAPABILITY_UNAVAILABLE"):
++        unqualified.prepare_dispatch(
++            tool_name="mcp_1.write_row",
++            server_annotations={},
++            parent_env={},
++            sampling_requested=False,
++        )
 --- /dev/null
 +++ b/tests/unit/test_mcp_registry.py
 @@ -0,0 +1,70 @@
