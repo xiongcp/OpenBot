@@ -89,6 +89,10 @@
 1. 本地挑战与待确认候选分离：由本地生成绑定 `profile_id`、`expected_tenant_key`、`expected_app_id` 的短 TTL 限次挑战，远端飞书回传仅生成 `PENDING_LOCAL_CONFIRMATION` 候选；首个陌生远端发信人绝不自动成为 owner（`auto_paired=False`）；本地确认（`confirm_candidate_locally`）才写入 `channel_accounts` 与 `channel_identities`。
 2. Owner 撤销与 `identity_epoch` 递增：`revoke_owner` 原子将 `channel_identities` 置为 `REVOKED` 并将 `profile_config.identity_epoch` 加 1，使旧 `InboundContext` 立即被 `authorize()` 拒绝。
 
+实现（OB-049）：新增 `services/feishu_gateway/src/openbot_feishu/inbound.py`（`FeishuInboundAdapter`、`FeishuInboundConfig`、`InboundEventOutcome`）与 `tests/integration/feishu/test_inbound.py`：
+1. 持久化提交后才 ACK：通过内部受限 API 提交 `/v1/tasks`，仅当 daemon `Inbox` 返回 200/201 时 `ws_ack=True`；持久化失败时 `ws_ack=False`（`INBOX_PERSIST_FAILED`），且回调线程从不阻塞等待 LLM（`llm_waited_in_callback=False`）。
+2. 群聊、陌生发信人、跨租户与超限附件拦截：默认禁用群聊（`GROUP_CHAT_DISABLED`），拒绝未配对/已撤销发信人（`UNPAIRED_SENDER`）与超限附件（`ATTACHMENT_TOO_LARGE`），重复事件幂等返回相同 `task_id`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -102,6 +106,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/security/test_m1_threat_regression.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_pairing.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_inbound.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -163,3 +168,5 @@
   1. Runs the M1 local Alpha workflow from an empty directory (`workspace.read`, `workspace.propose_patch`, CLI approval, `workspace.apply_patch`, supervised worker reclaim, and crash recovery) and emits an honest capability report (`pilot_os='Darwin-arm64'`, `claims_full_mvp_complete=False`).
 - **OB-048 (`IN_PROGRESS`)**: Control-owned pairing and owner revocation (`services/core/src/openbot/policy/pairing.py`, `services/feishu_gateway/src/openbot_feishu/pairing.py`, and `tests/integration/feishu/test_pairing.py`, 1 passed):
   1. Local short-TTL limited-attempt challenge bound to `profile_id`/`tenant_key`/`app_id`; remote claim only produces `PENDING_LOCAL_CONFIRMATION`; first sender never auto-pairs; `revoke_owner` increments `profile_config.identity_epoch` to invalidate stale contexts.
+- **OB-049 (`IN_PROGRESS`)**: Feishu WebSocket inbound adapter (`services/feishu_gateway/src/openbot_feishu/inbound.py` and `tests/integration/feishu/test_inbound.py`, 1 passed):
+  1. Enforces persist-before-ACK via the daemon's `/v1/tasks` endpoint (`ws_ack=False` on persistence failure), rejects group chats (`GROUP_CHAT_DISABLED`), unpaired senders (`UNPAIRED_SENDER`), cross-tenant events, and oversized attachments (`ATTACHMENT_TOO_LARGE`), and never waits on LLMs inside callbacks.

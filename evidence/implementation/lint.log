@@ -1,1 +1,11 @@
-All checks passed!
+E501 Line too long (101 > 100)
+  --> services/feishu_gateway/src/openbot_feishu/inbound.py:35:101
+   |
+34 | class FeishuInboundAdapter:
+35 |     """Normalize Feishu WS events, enforce group/tenant/attachment guards, ACK after Inbox commit."""
+   |                                                                                                     ^
+36 |
+37 |     def __init__(
+   |
+
+Found 1 error.
