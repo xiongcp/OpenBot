@@ -34,3 +34,4 @@
 - 独立审批审查发现 canonical Operation ID 与 SQL 主键漏比对；自查发现 schema 异常链可能打印 nonce。两个失败反例均已修复，合成 nonce 的 RED 摘录明确脱敏，正式异常不再带原始值。
 - 当前完整本机验证：M0 150 passed/3 skipped；M1 169 passed/1 skipped；存储子集 49 passed；容器独立资格 8 passed。lint/format/mypy/组件及原设计/DDL检查通过。未通过 OB-029，未进入 M3 验收。
 - 完成 OB-014 完整 Task 11×11 跃迁矩阵、OutcomeVerifier（DIAGNOSIS/PATCH/TEST 产物与未决项核对）、cancel（UNKNOWN/DISPATCHING 驻留 RECONCILING）与 resume_reconciled 核对恢复守卫，以及 complete 提交前后真实子进程崩溃测试；存储套件增至 54 passed，M0 155 passed/3 skipped，M1 174 passed/1 skipped。OB-014 更新为 VERIFIED。
+- 推进 OB-016（执行资源锁与会话排队）：实现四类资源键与固定加锁顺序、单活动 Task FIFO 排队、WAITING_APPROVAL 原子释锁、重获锁时工作区 generation/version 复核、租约到期不抢占（须旧 epoch STOPPED 且未派发）及 UNKNOWN 资源 quarantine；存储套件增至 59 passed，M0 160 passed/3 skipped，M1 179 passed/1 skipped。因上游 OB-015/093 未闭合，OB-016 记 IN_PROGRESS。

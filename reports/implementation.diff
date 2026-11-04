@@ -2280,10 +2280,10 @@
 +CONNECTED / LOCAL_MODEL / OFFLINE 为独立版本配置；不允许 cloud fallback、SDK 重试叠加、宿主执行、运行期下载。没有真实本地推理 / runner / 出口证据时连接工厂返回 CAPABILITY_UNAVAILABLE；loopback 地址不作证明。UTC/monotonic/boot 变化测试使旧敏感 TTL 失效；派发后 timeout/cancel 映射 UNKNOWN，未把所有异常设为 retryable。
 --- /dev/null
 +++ b/docs/evidence/storage.md
-@@ -0,0 +1,13 @@
-+# OB-011—014：持久化验收范围
+@@ -0,0 +1,15 @@
++# OB-011—014、OB-016：持久化与资源锁验收范围
 +
-+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫及提案/审批回归共 54 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
++实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队及提案/审批回归共 59 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 +
 +OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 +
@@ -2292,6 +2292,8 @@
 +OB-013：source_scope 包含 channel/tenant/app/profile，100 次同事件仅一个 Task；不同 app 不互相去重，同 key 改 payload 拒绝。Task/budget/inbox/event/outbox 同事务，outbox 失败全部回滚。真实子进程分别在提交前与提交后 ACK 前 os._exit，重试后五表各一条；未提交不 ACK。模型/入站 body 不得赋 owner 或扩展网络权限。附件入口等待 OB-036，明确不可用。
 +
 +OB-014：完整覆盖 docs/03 的 11×11 Task 跃迁矩阵与 version CAS、source_scope 请求去重、只读无副作用审计回放与快照；实现 OutcomeVerifier（complete 用例核对 DIAGNOSIS/PATCH/TEST 产物、AVAILABLE 状态、零未决 Operation/Approval/BudgetReservation 及 PARTIAL 缺失项披露）、cancel 用例（无 UNKNOWN/DISPATCHING 时直接 CANCELLED 并撤销待决审批/未派发动作；存在 UNKNOWN/DISPATCHING 时递增 cancel_revision 并驻留 RECONCILING）以及 resume_reconciled 用例（核对未知结果证据与工作区 quarantine 后才允许 RECONCILING -> QUEUED）。真实子进程在 complete 提交前和提交后 ACK 前 os._exit，重查同一 request_id 结果一致且无重复事件/outbox。
++
++OB-016（持久化资源锁与会话排队子集，保持 IN_PROGRESS）：实现 WORKSPACE、BROWSER_PROFILE、DESKTOP_SESSION、EXTERNAL_ACCOUNT 四类资源键及固定加锁顺序（按类型优先级与字典序排序防死锁），fencing_token 由 profile_config 单调递增分配；实现单活动 Task 串行槽位与会话内 FIFO 排队（claim_next_task）、人工审批/输入等待时的原子释锁点（park_for_wait，禁止在途 DISPATCHING/UNKNOWN 释锁）、重获锁时的工作区 generation/version 校验，以及租约过期不等于可抢占（仅旧 runtime_epoch=STOPPED 且未派发 attempt 可回收）与 UNKNOWN/DISPATCHING 资源 quarantine 阻断。因上游 OB-015 / OB-093 正式 Supervisor 代际交接尚未闭合，OB-016 记为 IN_PROGRESS。
 +
 +OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
 --- /dev/null
@@ -2388,7 +2390,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,37 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2425,6 +2427,7 @@
 +- 独立审批审查发现 canonical Operation ID 与 SQL 主键漏比对；自查发现 schema 异常链可能打印 nonce。两个失败反例均已修复，合成 nonce 的 RED 摘录明确脱敏，正式异常不再带原始值。
 +- 当前完整本机验证：M0 150 passed/3 skipped；M1 169 passed/1 skipped；存储子集 49 passed；容器独立资格 8 passed。lint/format/mypy/组件及原设计/DDL检查通过。未通过 OB-029，未进入 M3 验收。
 +- 完成 OB-014 完整 Task 11×11 跃迁矩阵、OutcomeVerifier（DIAGNOSIS/PATCH/TEST 产物与未决项核对）、cancel（UNKNOWN/DISPATCHING 驻留 RECONCILING）与 resume_reconciled 核对恢复守卫，以及 complete 提交前后真实子进程崩溃测试；存储套件增至 54 passed，M0 155 passed/3 skipped，M1 174 passed/1 skipped。OB-014 更新为 VERIFIED。
++- 推进 OB-016（执行资源锁与会话排队）：实现四类资源键与固定加锁顺序、单活动 Task FIFO 排队、WAITING_APPROVAL 原子释锁、重获锁时工作区 generation/version 复核、租约到期不抢占（须旧 epoch STOPPED 且未派发）及 UNKNOWN 资源 quarantine；存储套件增至 59 passed，M0 160 passed/3 skipped，M1 179 passed/1 skipped。因上游 OB-015/093 未闭合，OB-016 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3428,6 +3431,492 @@
 +        )
 +        return self._writer.submit(command).result(
 +            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
++        )
+--- /dev/null
++++ b/services/core/src/openbot/application/resources.py
+@@ -0,0 +1,483 @@
++"""Durable resource leases, deterministic multi-lock ordering, and session queueing."""
++
++import hashlib
++import sqlite3
++import time
++from collections.abc import Sequence
++from dataclasses import dataclass
++from typing import Any
++
++from openbot.contracts import canonicalize, strict_json
++from openbot.storage.inbox import InboundContext, authorize, emit_state
++from openbot.storage.writer import LookupResult, RequestConflict, Writer, WriterCommand
++
++_TYPE_SPECS: dict[str, tuple[int, str]] = {
++    "WORKSPACE": (0, "workspace"),
++    "BROWSER_PROFILE": (1, "browser_profile"),
++    "DESKTOP_SESSION": (2, "desktop_session"),
++    "EXTERNAL_ACCOUNT": (3, "external_account"),
++}
++_WAIT_STATES = frozenset({"WAITING_APPROVAL", "WAITING_INPUT", "WAITING_RESOURCE", "PAUSED"})
++
++
++class ResourceBusyError(RuntimeError):
++    pass
++
++
++class ResourcePreconditionError(PermissionError):
++    pass
++
++
++class ResourceQuarantinedError(PermissionError):
++    pass
++
++
++@dataclass(frozen=True, slots=True)
++class ResourceRequest:
++    resource_type: str
++    resource_id: str
++    expected_generation: int | None = None
++    expected_version: int | None = None
++
++    @property
++    def resource_key(self) -> str:
++        spec = _TYPE_SPECS.get(self.resource_type)
++        if spec is None or not self.resource_id or not self.resource_id.strip():
++            raise ValueError("Invalid resource_type or resource_id")
++        return f"{spec[1]}:{self.resource_id.strip()}"
++
++    def to_payload(self) -> dict[str, Any]:
++        return {
++            "resource_type": self.resource_type,
++            "resource_id": self.resource_id.strip(),
++            "resource_key": self.resource_key,
++            "expected_generation": self.expected_generation,
++            "expected_version": self.expected_version,
++        }
++
++
++OrderedResources = tuple[ResourceRequest, ...]
++
++
++def order_resources(requests: Sequence[ResourceRequest]) -> OrderedResources:
++    if not requests:
++        raise ValueError("At least one resource request is required")
++    seen: set[str] = set()
++    validated: list[ResourceRequest] = []
++    for req in requests:
++        key = req.resource_key
++        if key in seen:
++            raise ValueError(f"Duplicate resource key in acquisition set: {key}")
++        seen.add(key)
++        validated.append(req)
++    return tuple(
++        sorted(validated, key=lambda item: (_TYPE_SPECS[item.resource_type][0], item.resource_key))
++    )
++
++
++def _verify_active_epoch(db: sqlite3.Connection, runtime_epoch: str) -> None:
++    cfg = db.execute("SELECT active_runtime_epoch FROM profile_config WHERE singleton=1").fetchone()
++    inst = db.execute(
++        "SELECT state FROM runtime_instances WHERE runtime_epoch=?", (runtime_epoch,)
++    ).fetchone()
++    if not cfg or cfg[0] != runtime_epoch or inst != ("ACTIVE",):
++        raise PermissionError("Runtime epoch is not the active owner")
++
++
++def _allocate_fence(db: sqlite3.Connection, now: int) -> int:
++    row = db.execute("SELECT last_fencing_token FROM profile_config WHERE singleton=1").fetchone()
++    if row is None:
++        raise PermissionError("Profile config missing")
++    fence = int(row[0]) + 1
++    db.execute(
++        "UPDATE profile_config SET last_fencing_token=?,version=version+1,updated_at=? "
++        "WHERE singleton=1",
++        (fence, now),
++    )
++    return fence
++
++
++def _check_quarantine(db: sqlite3.Connection, req: ResourceRequest) -> None:
++    if req.resource_type == "WORKSPACE":
++        row = db.execute(
++            "SELECT 1 FROM operations WHERE workspace_id=? AND state IN ('UNKNOWN','DISPATCHING')",
++            (req.resource_id,),
++        ).fetchone()
++        if row is not None:
++            raise ResourceQuarantinedError("Workspace is quarantined by unresolved external effect")
++
++    for (lease_json,) in db.execute(
++        "SELECT a.lease_set_json FROM operation_attempts a "
++        "JOIN operations o ON o.operation_id=a.operation_id "
++        "WHERE a.status IN ('DISPATCHING','UNKNOWN') OR o.state IN ('DISPATCHING','UNKNOWN')"
++    ):
++        keys = strict_json(lease_json)
++        if isinstance(keys, list) and req.resource_key in keys:
++            raise ResourceQuarantinedError(
++                f"Resource {req.resource_key} is quarantined by unresolved external effect"
++            )
++
++
++def _check_preconditions(db: sqlite3.Connection, req: ResourceRequest) -> None:
++    if req.resource_type == "WORKSPACE":
++        ws = db.execute(
++            "SELECT generation,version,status FROM workspaces WHERE workspace_id=?",
++            (req.resource_id,),
++        ).fetchone()
++        if not ws or ws[2] != "ACTIVE":
++            raise ResourcePreconditionError("Workspace is not active")
++        if req.expected_generation is not None and int(ws[0]) != req.expected_generation:
++            raise ResourcePreconditionError("Workspace generation changed while unlocked")
++        if req.expected_version is not None and int(ws[1]) != req.expected_version:
++            raise ResourcePreconditionError("Workspace version changed while unlocked")
++
++
++class ResourceCoordinator:
++    def __init__(self, writer: Writer):
++        self._writer = writer
++
++    @staticmethod
++    def _lookup(
++        db: sqlite3.Connection, context: InboundContext, request_id: str
++    ) -> LookupResult | None:
++        authorize(db, context)
++        row = db.execute(
++            "SELECT payload_json FROM events WHERE json_extract(payload_json,'$.request_id')=?",
++            (request_id,),
++        ).fetchone()
++        if not row:
++            return None
++        payload = strict_json(row[0])
++        return LookupResult(payload["command_hash"], canonicalize(payload["receipt"]))
++
++    def claim_next_task(
++        self,
++        context: InboundContext,
++        runtime_epoch: str,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "claim_next_task",
++                    "epoch": runtime_epoch,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            _verify_active_epoch(db, runtime_epoch)
++            running = db.execute("SELECT task_id FROM tasks WHERE state='RUNNING'").fetchone()
++            if running is not None:
++                raise ResourceBusyError("Single active task slot is already occupied")
++            queued = db.execute(
++                "SELECT task_id,version FROM tasks "
++                "WHERE owner_id=? AND session_id=? AND state='QUEUED' "
++                "ORDER BY created_at,rowid,task_id LIMIT 1",
++                (context.principal_id, context.session_id),
++            ).fetchone()
++            if queued is None:
++                raise ResourceBusyError("No queued task available in session")
++            task_id, version = str(queued[0]), int(queued[1])
++            now = time.time_ns() // 1_000_000
++            cursor = db.execute(
++                "UPDATE tasks SET state='RUNNING',version=version+1,updated_at=? "
++                "WHERE task_id=? AND version=?",
++                (now, task_id, version),
++            )
++            if cursor.rowcount != 1:
++                raise RequestConflict("Task version changed during schedule claim")
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": "RUNNING",
++                "version": version + 1,
++                "runtime_epoch": runtime_epoch,
++            }
++            emit_state(db, context, receipt, request_id, fingerprint, "TASK_STATE_CHANGED", now)
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
++        )
++
++    def acquire_leases(
++        self,
++        context: InboundContext,
++        task_id: str,
++        attempt_id: str,
++        runtime_epoch: str,
++        requests: Sequence[ResourceRequest],
++        lease_ttl_ms: int,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if type(lease_ttl_ms) is not int or lease_ttl_ms <= 0:
++            raise ValueError("lease_ttl_ms must be a positive integer")
++        ordered = order_resources(requests)
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "acquire_leases",
++                    "task": task_id,
++                    "attempt": attempt_id,
++                    "epoch": runtime_epoch,
++                    "ttl_ms": lease_ttl_ms,
++                    "resources": [r.to_payload() for r in ordered],
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            _verify_active_epoch(db, runtime_epoch)
++            task_row = db.execute(
++                "SELECT owner_id,session_id,state,version FROM tasks WHERE task_id=?", (task_id,)
++            ).fetchone()
++            if not task_row or task_row[:2] != (context.principal_id, context.session_id):
++                raise PermissionError("Task scope mismatch")
++            if task_row[2] != "RUNNING":
++                raise ResourceBusyError("Task must hold active RUNNING slot before leasing")
++            task_version = int(task_row[3])
++
++            att_row = db.execute(
++                "SELECT a.operation_id,a.runtime_epoch,a.status,a.dispatch_started_at,"
++                "a.lease_set_json,o.task_id "
++                "FROM operation_attempts a JOIN operations o ON o.operation_id=a.operation_id "
++                "WHERE a.attempt_id=?",
++                (attempt_id,),
++            ).fetchone()
++            if (
++                not att_row
++                or att_row[5] != task_id
++                or att_row[1] != runtime_epoch
++                or att_row[2] != "CLAIMED"
++                or att_row[3] is not None
++            ):
++                raise PermissionError("Attempt is not eligible to acquire resource leases")
++            operation_id = str(att_row[0])
++            declared_keys = strict_json(att_row[4])
++            expected_keys = [item.resource_key for item in ordered]
++            if declared_keys and declared_keys != expected_keys:
++                raise PermissionError("Attempt lease_set_json does not match ordered resource keys")
++
++            now = time.time_ns() // 1_000_000
++            acquired: list[dict[str, Any]] = []
++            for req in ordered:
++                _check_quarantine(db, req)
++                _check_preconditions(db, req)
++                existing = db.execute(
++                    "SELECT holder_attempt_id,runtime_epoch,fencing_token,state,version "
++                    "FROM resource_leases WHERE resource_key=?",
++                    (req.resource_key,),
++                ).fetchone()
++                if existing is not None and existing[3] == "HELD":
++                    held_attempt, held_epoch = str(existing[0]), str(existing[1])
++                    if (held_attempt, held_epoch) != (attempt_id, runtime_epoch):
++                        old_inst = db.execute(
++                            "SELECT state FROM runtime_instances WHERE runtime_epoch=?",
++                            (held_epoch,),
++                        ).fetchone()
++                        old_att = db.execute(
++                            "SELECT status,dispatch_started_at FROM operation_attempts "
++                            "WHERE attempt_id=?",
++                            (held_attempt,),
++                        ).fetchone()
++                        if (
++                            old_inst != ("STOPPED",)
++                            or not old_att
++                            or old_att[0] not in {"CLAIMED", "ABANDONED", "CANCELLED"}
++                            or old_att[1] is not None
++                        ):
++                            raise ResourceBusyError(
++                                f"Resource {req.resource_key} is held; "
++                                "expiry alone cannot steal lease"
++                            )
++                fence = _allocate_fence(db, now)
++                expires_at = now + lease_ttl_ms
++                if existing is None:
++                    db.execute(
++                        "INSERT INTO resource_leases("
++                        "resource_key,resource_type,holder_attempt_id,runtime_epoch,fencing_token,"
++                        "state,acquired_at,expires_at,version,updated_at) "
++                        "VALUES(?,?,?,?,?,'HELD',?,?,0,?)",
++                        (
++                            req.resource_key,
++                            req.resource_type,
++                            attempt_id,
++                            runtime_epoch,
++                            fence,
++                            now,
++                            expires_at,
++                            now,
++                        ),
++                    )
++                else:
++                    old_ver = int(existing[4])
++                    updated = db.execute(
++                        "UPDATE resource_leases SET holder_attempt_id=?,runtime_epoch=?,"
++                        "fencing_token=?,state='HELD',acquired_at=?,expires_at=?,"
++                        "version=version+1,updated_at=? WHERE resource_key=? AND version=?",
++                        (
++                            attempt_id,
++                            runtime_epoch,
++                            fence,
++                            now,
++                            expires_at,
++                            now,
++                            req.resource_key,
++                            old_ver,
++                        ),
++                    )
++                    if updated.rowcount != 1:
++                        raise RequestConflict("Resource lease version changed")
++                acquired.append(
++                    {
++                        "resource_key": req.resource_key,
++                        "resource_type": req.resource_type,
++                        "fencing_token": fence,
++                        "expires_at_ms": expires_at,
++                    }
++                )
++
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "attempt_id": attempt_id,
++                "version": task_version,
++                "leases": acquired,
++            }
++            payload = canonicalize(
++                {"request_id": request_id, "command_hash": fingerprint, "receipt": receipt}
++            ).decode()
++            db.execute(
++                "INSERT INTO events(event_id,aggregate_kind,aggregate_id,aggregate_version,task_id,"
++                "operation_id,actor_principal_id,event_type,schema_version,trace_id,payload_json,"
++                "created_at) VALUES(?,'ResourceLease',?,?,?,?,?,'OPERATION_CLAIMED',1,?,?,?)",
++                (
++                    "evt_" + hashlib.sha256(f"{request_id}:{attempt_id}".encode()).hexdigest()[:32],
++                    attempt_id,
++                    acquired[-1]["fencing_token"],
++                    task_id,
++                    operation_id,
++                    context.principal_id,
++                    "trc_" + hashlib.sha256(request_id.encode()).hexdigest()[:32],
++                    payload,
++                    now,
++                ),
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
++        )
++
++    def park_for_wait(
++        self,
++        context: InboundContext,
++        task_id: str,
++        expected_version: int,
++        target_wait_state: str,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if (
++            target_wait_state not in _WAIT_STATES
++            or type(expected_version) is not int
++            or expected_version < 0
++        ):
++            raise ValueError("Invalid wait state or expected_version")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "park_for_wait",
++                    "task": task_id,
++                    "expected": expected_version,
++                    "target": target_wait_state,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, context)
++            row = db.execute(
++                "SELECT owner_id,session_id,state,version FROM tasks WHERE task_id=?", (task_id,)
++            ).fetchone()
++            if not row or row[:2] != (context.principal_id, context.session_id):
++                raise PermissionError("Task scope mismatch")
++            state, version = str(row[2]), int(row[3])
++            if version != expected_version or state != "RUNNING":
++                raise RequestConflict("Task must be RUNNING at expected_version to park for wait")
++
++            in_flight = db.execute(
++                "SELECT 1 FROM operation_attempts a "
++                "JOIN operations o ON o.operation_id=a.operation_id "
++                "WHERE o.task_id=? AND (a.status IN ('DISPATCHING','UNKNOWN') "
++                "OR o.state IN ('DISPATCHING','UNKNOWN'))",
++                (task_id,),
++            ).fetchone()
++            if in_flight is not None:
++                raise PermissionError("Cannot release leases for wait while dispatch is in flight")
++
++            now = time.time_ns() // 1_000_000
++            held_rows = db.execute(
++                "SELECT resource_key,version FROM resource_leases "
++                "WHERE state='HELD' AND holder_attempt_id IN ("
++                "SELECT a.attempt_id FROM operation_attempts a "
++                "JOIN operations o ON o.operation_id=a.operation_id WHERE o.task_id=?) "
++                "ORDER BY resource_key",
++                (task_id,),
++            ).fetchall()
++            released_keys: list[str] = []
++            for r_key, r_ver in held_rows:
++                db.execute(
++                    "UPDATE resource_leases SET holder_attempt_id=NULL,runtime_epoch=NULL,"
++                    "state='RELEASED',acquired_at=NULL,expires_at=NULL,version=version+1,"
++                    "updated_at=? WHERE resource_key=? AND version=?",
++                    (now, r_key, r_ver),
++                )
++                released_keys.append(str(r_key))
++
++            cursor = db.execute(
++                "UPDATE tasks SET state=?,version=version+1,updated_at=? "
++                "WHERE task_id=? AND version=?",
++                (target_wait_state, now, task_id, expected_version),
++            )
++            if cursor.rowcount != 1:
++                raise RequestConflict("Task version changed")
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": target_wait_state,
++                "version": version + 1,
++                "released_keys": released_keys,
++            }
++            emit_state(db, context, receipt, request_id, fingerprint, "TASK_STATE_CHANGED", now)
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
 +        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/state_machine.py
@@ -5749,7 +6238,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-017/018 内部提案/决定子集；正式策略引擎 OB-016 与 claim/dispatch/recovery 未实现
++- [in_progress] OB-016/017/018 持久资源锁与会话排队、内部提案/决定子集；上游 OB-015/093 与正式策略评估器 OB-031、claim/dispatch/recovery 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -5957,6 +6446,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
  
  **需求** [RQ01](requirements_traceability.md#rq01)、[RQ03](requirements_traceability.md#rq03)、[RQ05](requirements_traceability.md#rq05)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
+ 
+@@ -2119,7 +2119,7 @@
+ 
+ **实现执行资源锁与会话排队**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Runtime · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
+ 
+ **需求** [RQ03](requirements_traceability.md#rq03)、[RQ05](requirements_traceability.md#rq05)、[RQ09](requirements_traceability.md#rq09)
  
 @@ -3112,7 +3112,7 @@
  
@@ -6384,7 +6882,36 @@
    },
    {
      "id": "OB-015",
-@@ -967,7 +1125,7 @@
+@@ -916,7 +1074,7 @@
+     "title": "实现执行资源锁与会话排队",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Runtime",
+     "size": "M",
+     "req_ids": [
+@@ -960,14 +1118,26 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第3、21页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第3、21页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 durable resource_leases, deterministic 4-type ordering, single-active-Task FIFO queueing, approval wait release, workspace version recheck, and UNKNOWN quarantine ledger",
++      "evidence": [
++        "docs/evidence/storage.md",
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-015（单实例 daemon 调度租约）与 OB-093（正式 Supervisor 旧执行域隔离）尚未闭合；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs/reuse_type/reuse_notes; control_owned with zero external lock library; verified positive and negative lease/quarantine/wait-release paths."
++    }
+   },
+   {
+     "id": "OB-017",
      "title": "实现动作意图与执行attempt日志",
      "milestone": "M1",
      "priority": "P0",
@@ -6393,7 +6920,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1018,14 +1176,28 @@
+@@ -1018,14 +1188,28 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "提供Operation/Attempt/dispatch/provider幂等键/grant关联快照，证明CONSUMED单向性与两次短事务的检查点。"
      ],
@@ -6424,7 +6951,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1081,7 +1253,21 @@
+@@ -1081,7 +1265,21 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
      ],
@@ -6447,7 +6974,7 @@
    },
    {
      "id": "OB-019",
-@@ -2851,7 +3037,7 @@
+@@ -2851,7 +3049,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -6456,7 +6983,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3094,19 @@
+@@ -2908,7 +3106,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -6477,7 +7004,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4477,7 @@
+@@ -4279,7 +4489,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -6486,7 +7013,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4535,26 @@
+@@ -4337,14 +4547,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -6515,7 +7042,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4611,19 @@
+@@ -4401,7 +4623,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -6536,7 +7063,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5745,7 @@
+@@ -5523,7 +5757,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -6545,7 +7072,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5798,26 @@
+@@ -5576,14 +5810,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -6574,7 +7101,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +5876,26 @@
+@@ -5642,14 +5888,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -6603,7 +7130,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +5950,26 @@
+@@ -5704,14 +5962,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -6632,7 +7159,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6036,25 @@
+@@ -5778,14 +6048,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -6660,7 +7187,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6122,19 @@
+@@ -5853,7 +6134,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -9236,6 +9763,451 @@
 +        )
 +    finally:
 +        db.close()
+--- /dev/null
++++ b/tests/integration/storage/test_resources.py
+@@ -0,0 +1,442 @@
++import json
++import time
++
++import pytest
++from openbot.application.resources import (
++    OrderedResources,
++    ResourceBusyError,
++    ResourceCoordinator,
++    ResourcePreconditionError,
++    ResourceQuarantinedError,
++    ResourceRequest,
++    order_resources,
++)
++from openbot.contracts import SchemaRegistry
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.writer import Writer
++
++from tests.integration.storage.test_migrations import ROOT
++
++
++def _deadline() -> int:
++    return int(time.monotonic() * 1000) + 5000
++
++
++def _task_payload(goal: str = "resource test") -> str:
++    return json.dumps({"workspace_id": "wsp_test1", "goal": goal, "network_mode": "OFFLINE"})
++
++
++@pytest.fixture
++def env(tmp_path):
++    path = tmp_path / "resources.sqlite"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_active1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_active1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO tool_registry VALUES("
++            "'browser.write','1.0.0',?,NULL,'builtin','{\"name\":\"browser.write\"}','ACTIVE',1000)",
++            ("c" * 64,),
++        )
++    finally:
++        db.close()
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    writer = Writer(path)
++    inbox = Inbox(writer, SchemaRegistry.from_directory(ROOT / "contracts"))
++    try:
++        yield path, context, writer, inbox
++    finally:
++        writer.close()
++
++
++def _seed_op_and_attempt(
++    path,
++    task_id: str,
++    operation_id: str,
++    attempt_id: str,
++    ordinal: int = 1,
++    runtime_epoch: str = "ep_active1",
++    op_state: str = "CLAIMED",
++    attempt_status: str = "CLAIMED",
++    lease_keys: list[str] | None = None,
++    unknown_reason: str | None = None,
++) -> None:
++    db = connect(path)
++    try:
++        dispatch_started = (
++            1200 if attempt_status in {"DISPATCHING", "SUCCEEDED", "FAILED", "UNKNOWN"} else None
++        )
++        finished_at = (
++            1500 if attempt_status in {"SUCCEEDED", "FAILED", "ABANDONED", "CANCELLED"} else None
++        )
++        completed_at = (
++            1500
++            if op_state in {"SUCCEEDED", "FAILED", "REJECTED", "EXPIRED", "REVOKED", "CANCELLED"}
++            else None
++        )
++        db.execute(
++            "INSERT INTO operations("
++            "operation_id,task_id,ordinal,requested_by,workspace_id,workspace_generation,"
++            "tool_id,tool_version,tool_manifest_digest,canonical_args_json,resource_snapshot_json,"
++            "destination_json,data_class,authorization_kind,policy_version,identity_epoch,"
++            "authorization_expires_at,binding_hash,retry_class,state,unknown_reason,"
++            "created_at,updated_at,completed_at,proposal_canonical_json) "
++            "VALUES(?,?,?,'pri_test1','wsp_test1',1,'browser.write','1.0.0',?,'{}','{}','{}',"
++            "'WORKSPACE','POLICY_ALLOW',1,1,9000,?,'RECONCILE_ONLY',?,?,1000,1200,?,'{}')",
++            (
++                operation_id,
++                task_id,
++                ordinal,
++                "c" * 64,
++                f"{hash(operation_id) & ((1 << 256) - 1):064x}",
++                op_state,
++                unknown_reason,
++                completed_at,
++            ),
++        )
++        db.execute(
++            "INSERT INTO operation_attempts("
++            "attempt_id,operation_id,attempt_no,runtime_epoch,fencing_token,dispatch_id,"
++            "executor_id,claim_cancel_revision,claim_policy_version,claim_identity_epoch,"
++            "lease_set_json,status,created_at,dispatch_started_at,finished_at) "
++            "VALUES(?,?,1,?,1,?,'exec_1',0,1,1,?,?,1000,?,?)",
++            (
++                attempt_id,
++                operation_id,
++                runtime_epoch,
++                f"dsp_{attempt_id}",
++                json.dumps(lease_keys or []),
++                attempt_status,
++                dispatch_started,
++                finished_at,
++            ),
++        )
++    finally:
++        db.close()
++
++
++def test_deterministic_resource_key_ordering_across_four_types():
++    unordered = [
++        ResourceRequest("EXTERNAL_ACCOUNT", "feishu_main"),
++        ResourceRequest("DESKTOP_SESSION", "display_0"),
++        ResourceRequest("BROWSER_PROFILE", "prof_b"),
++        ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1, expected_version=0),
++        ResourceRequest("BROWSER_PROFILE", "prof_a"),
++    ]
++    ordered: OrderedResources = order_resources(unordered)
++    assert [item.resource_key for item in ordered] == [
++        "workspace:wsp_test1",
++        "browser_profile:prof_a",
++        "browser_profile:prof_b",
++        "desktop_session:display_0",
++        "external_account:feishu_main",
++    ]
++    # Reversing input order produces identical canonical acquisition order
++    assert order_resources(list(reversed(unordered))) == ordered
++
++
++def test_single_active_task_fifo_queue_and_approval_wait_releases_locks(env):
++    path, context, writer, inbox = env
++    coord = ResourceCoordinator(writer)
++
++    t1 = json.loads(inbox.submit(context, "evt-q1", _task_payload("first"), _deadline()).result(5))[
++        "task_id"
++    ]
++    t2 = json.loads(
++        inbox.submit(context, "evt-q2", _task_payload("second"), _deadline()).result(5)
++    )["task_id"]
++
++    # First claim_next_task picks t1 in FIFO order; second call while t1 is RUNNING cannot start t2
++    claimed1 = json.loads(
++        writer.submit(coord.claim_next_task(context, "ep_active1", "claim-1", _deadline())).result(
++            5
++        )
++    )
++    assert claimed1["task_id"] == t1 and claimed1["state"] == "RUNNING"
++    with pytest.raises(ResourceBusyError):
++        writer.submit(coord.claim_next_task(context, "ep_active1", "claim-2", _deadline())).result(
++            5
++        )
++
++    # t1 acquires WORKSPACE + BROWSER_PROFILE leases
++    _seed_op_and_attempt(path, t1, "op_t1", "att_t1")
++    reqs = [
++        ResourceRequest("BROWSER_PROFILE", "chrome_default"),
++        ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1, expected_version=0),
++    ]
++    leased = json.loads(
++        writer.submit(
++            coord.acquire_leases(
++                context, t1, "att_t1", "ep_active1", reqs, 30_000, "acq-1", _deadline()
++            )
++        ).result(5)
++    )
++    assert [entry["resource_key"] for entry in leased["leases"]] == [
++        "workspace:wsp_test1",
++        "browser_profile:chrome_default",
++    ]
++    assert [entry["fencing_token"] for entry in leased["leases"]] == [1, 2]
++
++    # Parking t1 into WAITING_APPROVAL atomically releases HELD leases and frees the active slot
++    parked = json.loads(
++        writer.submit(
++            coord.park_for_wait(context, t1, 1, "WAITING_APPROVAL", "park-t1-approval", _deadline())
++        ).result(5)
++    )
++    assert parked["state"] == "WAITING_APPROVAL"
++    assert parked["released_keys"] == ["browser_profile:chrome_default", "workspace:wsp_test1"]
++
++    # Now t2 can claim the active slot and acquire browser_profile:chrome_default with fence > 2
++    claimed2 = json.loads(
++        writer.submit(coord.claim_next_task(context, "ep_active1", "claim-2b", _deadline())).result(
++            5
++        )
++    )
++    assert claimed2["task_id"] == t2 and claimed2["state"] == "RUNNING"
++
++
++def test_concurrent_browser_writes_blocked_and_expired_lease_requires_stopped_epoch(env):
++    path, context, writer, inbox = env
++    coord = ResourceCoordinator(writer)
++
++    t1 = json.loads(inbox.submit(context, "evt-b1", _task_payload("b1"), _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(coord.claim_next_task(context, "ep_active1", "claim-b1", _deadline())).result(5)
++    _seed_op_and_attempt(path, t1, "op_b1", "att_b1", ordinal=1)
++    _seed_op_and_attempt(path, t1, "op_b2", "att_b2", ordinal=2)
++
++    browser_req = [ResourceRequest("BROWSER_PROFILE", "prof_shared")]
++    writer.submit(
++        coord.acquire_leases(
++            context, t1, "att_b1", "ep_active1", browser_req, 10, "acq-b1", _deadline()
++        )
++    ).result(5)
++
++    # Even if expires_at passed, a second attempt cannot steal a HELD lease while epoch is ACTIVE
++    db = connect(path)
++    db.execute(
++        "UPDATE resource_leases SET acquired_at=100,expires_at=200,version=version+1 "
++        "WHERE resource_key='browser_profile:prof_shared'"
++    )
++    db.close()
++    with pytest.raises(ResourceBusyError):
++        writer.submit(
++            coord.acquire_leases(
++                context,
++                t1,
++                "att_b2",
++                "ep_active1",
++                browser_req,
++                30_000,
++                "acq-b2-steal",
++                _deadline(),
++            )
++        ).result(5)
++
++    # Reclaim requires old epoch STOPPED and old attempt never dispatched (CLAIMED/ABANDONED)
++    db = connect(path)
++    db.execute(
++        "UPDATE runtime_instances SET state='STOPPED',ended_at=2000 "
++        "WHERE runtime_epoch='ep_active1'"
++    )
++    db.execute(
++        "INSERT INTO runtime_instances("
++        "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++        "VALUES('ep_active2','boot_2','sup_2','ACTIVE',2000,2000)"
++    )
++    db.execute(
++        "UPDATE profile_config SET active_runtime_epoch='ep_active2',version=version+1,"
++        "updated_at=2000 WHERE singleton=1"
++    )
++    db.execute(
++        "UPDATE operation_attempts SET status='ABANDONED',version=version+1,"
++        "recovery_evidence_ref='ev_stopped',finished_at=2000 WHERE attempt_id='att_b1'"
++    )
++    db.close()
++
++    _seed_op_and_attempt(path, t1, "op_b3", "att_b3", ordinal=3, runtime_epoch="ep_active2")
++    reclaimed = json.loads(
++        writer.submit(
++            coord.acquire_leases(
++                context,
++                t1,
++                "att_b3",
++                "ep_active2",
++                browser_req,
++                30_000,
++                "acq-b3-reclaim",
++                _deadline(),
++            )
++        ).result(5)
++    )
++    assert reclaimed["leases"][0]["fencing_token"] > 1
++
++
++def test_reacquire_verifies_workspace_version_and_unknown_quarantine_blocks_new_ids(env):
++    path, context, writer, inbox = env
++    coord = ResourceCoordinator(writer)
++
++    t1 = json.loads(inbox.submit(context, "evt-v1", _task_payload("v1"), _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(coord.claim_next_task(context, "ep_active1", "claim-v1", _deadline())).result(5)
++    _seed_op_and_attempt(path, t1, "op_v1", "att_v1", ordinal=1)
++
++    ws_req = [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1, expected_version=0)]
++    writer.submit(
++        coord.acquire_leases(
++            context, t1, "att_v1", "ep_active1", ws_req, 30_000, "acq-v1", _deadline()
++        )
++    ).result(5)
++    writer.submit(
++        coord.park_for_wait(context, t1, 1, "WAITING_APPROVAL", "park-v1", _deadline())
++    ).result(5)
++
++    # User modifies workspace while task waits for approval (generation bumps to 2, version to 1)
++    db = connect(path)
++    db.execute(
++        "UPDATE workspaces SET root_ref='synthetic-workspace-v2',generation=2,version=version+1,"
++        "updated_at=3000 WHERE workspace_id='wsp_test1'"
++    )
++    db.execute(
++        "UPDATE tasks SET state='QUEUED',version=version+1,updated_at=3000 WHERE task_id=?", (t1,)
++    )
++    db.close()
++
++    writer.submit(
++        coord.claim_next_task(context, "ep_active1", "claim-v1-again", _deadline())
++    ).result(5)
++    _seed_op_and_attempt(path, t1, "op_v2", "att_v2", ordinal=2)
++    with pytest.raises(ResourcePreconditionError):
++        writer.submit(
++            coord.acquire_leases(
++                context, t1, "att_v2", "ep_active1", ws_req, 30_000, "acq-v2-stale", _deadline()
++            )
++        ).result(5)
++
++    # UNKNOWN operation on external_account:feishu_main quarantines resource across operations
++    _seed_op_and_attempt(
++        path,
++        t1,
++        "op_unk_ext",
++        "att_unk_ext",
++        ordinal=3,
++        op_state="UNKNOWN",
++        attempt_status="UNKNOWN",
++        lease_keys=["external_account:feishu_main"],
++        unknown_reason="network_drop",
++    )
++    _seed_op_and_attempt(path, t1, "op_v4", "att_v4", ordinal=4)
++    with pytest.raises(ResourceQuarantinedError):
++        writer.submit(
++            coord.acquire_leases(
++                context,
++                t1,
++                "att_v4",
++                "ep_active1",
++                [ResourceRequest("EXTERNAL_ACCOUNT", "feishu_main")],
++                30_000,
++                "acq-quarantined",
++                _deadline(),
++            )
++        ).result(5)
++
++
++def test_lease_set_mismatch_and_in_flight_park_are_rejected(env):
++    path, context, writer, inbox = env
++    coord = ResourceCoordinator(writer)
++
++    t1 = json.loads(inbox.submit(context, "evt-m1", _task_payload("m1"), _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(coord.claim_next_task(context, "ep_active1", "claim-m1", _deadline())).result(5)
++
++    # Attempt declares a different lease_set_json than requested -> rejected
++    _seed_op_and_attempt(
++        path,
++        t1,
++        "op_mismatch",
++        "att_mismatch",
++        ordinal=1,
++        lease_keys=["browser_profile:other"],
++    )
++    with pytest.raises(PermissionError):
++        writer.submit(
++            coord.acquire_leases(
++                context,
++                t1,
++                "att_mismatch",
++                "ep_active1",
++                [ResourceRequest("BROWSER_PROFILE", "expected")],
++                30_000,
++                "acq-mismatch",
++                _deadline(),
++            )
++        ).result(5)
++
++    # Acquire valid lease, then transition attempt to DISPATCHING -> park_for_wait must be rejected
++    _seed_op_and_attempt(
++        path,
++        t1,
++        "op_disp",
++        "att_disp",
++        ordinal=2,
++        lease_keys=["browser_profile:expected"],
++    )
++    writer.submit(
++        coord.acquire_leases(
++            context,
++            t1,
++            "att_disp",
++            "ep_active1",
++            [ResourceRequest("BROWSER_PROFILE", "expected")],
++            30_000,
++            "acq-disp",
++            _deadline(),
++        )
++    ).result(5)
++    db = connect(path)
++    db.execute(
++        "UPDATE operation_attempts SET status='DISPATCHING',dispatch_started_at=1500,"
++        "version=version+1 WHERE attempt_id='att_disp'"
++    )
++    db.execute(
++        "UPDATE operations SET state='DISPATCHING',version=version+1,updated_at=1500 "
++        "WHERE operation_id='op_disp'"
++    )
++    db.close()
++
++    with pytest.raises(PermissionError):
++        writer.submit(
++            coord.park_for_wait(
++                context, t1, 1, "WAITING_APPROVAL", "park-while-dispatching", _deadline()
++            )
++        ).result(5)
 --- /dev/null
 +++ b/tests/integration/storage/test_writer.py
 @@ -0,0 +1,203 @@
