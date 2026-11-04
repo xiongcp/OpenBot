@@ -1,0 +1,12 @@
+name: nightly-soak
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+jobs:
+  chaos-and-soak:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run chaos soak and full MVP capability regression
+        run: python3 -m pytest tests/chaos tests/integration/scenarios/mvp -q

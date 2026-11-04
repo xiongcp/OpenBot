@@ -5073,7 +5073,7 @@ U3《OpenBot 开源组件复用评估》PDF物理第15–19、25–26页提出�
 
 **建立分层CI门禁**
 
-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 QA · 规模 M
+阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
 
 **需求** [RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
 

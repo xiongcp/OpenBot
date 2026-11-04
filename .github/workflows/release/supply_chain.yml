@@ -1,0 +1,10 @@
+name: release-gate
+on:
+  workflow_dispatch:
+jobs:
+  supply-chain-and-bundle-audit:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify SPDX SBOM, notices, and checksums
+        run: python3 scripts/check_release_components.py
