@@ -32,7 +32,7 @@ class InboundEventOutcome:
 
 
 class FeishuInboundAdapter:
-    """Normalize Feishu WS events, enforce group/tenant/attachment guards, ACK after Inbox commit."""
+    """Normalize Feishu WS events, enforce guards, and ACK only after Inbox commit."""
 
     def __init__(
         self,

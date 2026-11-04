@@ -16,7 +16,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/m1-unit-contract-protocol.log",
-      "log_sha256": "ed31ab7af1c6f693bf8709b7437dfb1e06604095d7fb2e84bfb0920662523f2c"
+      "log_sha256": "57d2df2a15ca60ba6369b95f15dd5a5da791fd2809d21c8cd690572a4f6f34f4"
     },
     {
       "name": "lint",
@@ -26,9 +26,9 @@
         "ruff",
         "check"
       ],
-      "exit_code": 1,
+      "exit_code": 0,
       "log": "evidence/implementation/m1-lint.log",
-      "log_sha256": "b3f6ac29ee31aeb8c229ed12639040327041630c44199829b24788d29310e497"
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
     },
     {
       "name": "format",
@@ -41,7 +41,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/m1-format.log",
-      "log_sha256": "184b6bfbf75ff0afb5735687ad68f56f0140c93fd26fa8c144e3386b4e6c6ab1"
+      "log_sha256": "1797ba33db9c9ef754817e0f9ed6324336a2128b9e103101798411f3ccf41704"
     },
     {
       "name": "types",
@@ -52,7 +52,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/m1-types.log",
-      "log_sha256": "e01191578d3a3bac202cef72aec747f3048def999e4a0906368a5b91b8849682"
+      "log_sha256": "137f07fcffd02ed2b36632763e65a15f1caab256c73938b35fb4bd4eb992544a"
     },
     {
       "name": "components",
@@ -73,7 +73,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/m1-design.log",
-      "log_sha256": "7c4f363d9c0e881ef05a4841568b73b7d2c86b5894e45d90e48b13df777fdc9f"
+      "log_sha256": "63c7fdc6a63b0dc37a3a057fc93124e6f6ac7351a051c52c1efa0a855da94867"
     },
     {
       "name": "design-components",
@@ -96,5 +96,5 @@
       "log_sha256": "2e0c4b3578d061d566a00c3f1c56ff2900f05747108ce140db0dbbed5e7d46c2"
     }
   ],
-  "passed": false
+  "passed": true
 }

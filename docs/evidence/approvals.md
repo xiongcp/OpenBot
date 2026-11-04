@@ -93,6 +93,10 @@
 1. 持久化提交后才 ACK：通过内部受限 API 提交 `/v1/tasks`，仅当 daemon `Inbox` 返回 200/201 时 `ws_ack=True`；持久化失败时 `ws_ack=False`（`INBOX_PERSIST_FAILED`），且回调线程从不阻塞等待 LLM（`llm_waited_in_callback=False`）。
 2. 群聊、陌生发信人、跨租户与超限附件拦截：默认禁用群聊（`GROUP_CHAT_DISABLED`），拒绝未配对/已撤销发信人（`UNPAIRED_SENDER`）与超限附件（`ATTACHMENT_TOO_LARGE`），重复事件幂等返回相同 `task_id`。
 
+实现（OB-050）：新增 `services/core/src/openbot/application/approval_use_case.py`（`RemoteApprovalUseCase`、`RemoteApprovalResult`）、`services/feishu_gateway/src/openbot_feishu/approval_callback.py`（`FeishuApprovalCallbackHandler`）与 `tests/integration/feishu/test_approval_callback.py`：
+1. 真实 operator 校验与拒绝伪造载荷：从飞书卡片回调顶层 `event.operator.open_id` 提取操作人并经 `PairingService.is_active_owner` 校验，完全忽略 `action.value` 中伪造的 `is_owner` 或 `principal_id`。
+2. 旧卡拦截与未确认提交诚实响应：已取消/已终结 Task 的旧审批卡直接返回 `APPROVAL_REJECTED_OR_STALE`；数据库超时或提交未确认时返回 `COMMIT_UNCONFIRMED`（`approved=False`），绝不谎称已批准或阻塞等待模型/worker。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -107,6 +111,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_pairing.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_inbound.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_approval_callback.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -170,3 +175,5 @@
   1. Local short-TTL limited-attempt challenge bound to `profile_id`/`tenant_key`/`app_id`; remote claim only produces `PENDING_LOCAL_CONFIRMATION`; first sender never auto-pairs; `revoke_owner` increments `profile_config.identity_epoch` to invalidate stale contexts.
 - **OB-049 (`IN_PROGRESS`)**: Feishu WebSocket inbound adapter (`services/feishu_gateway/src/openbot_feishu/inbound.py` and `tests/integration/feishu/test_inbound.py`, 1 passed):
   1. Enforces persist-before-ACK via the daemon's `/v1/tasks` endpoint (`ws_ack=False` on persistence failure), rejects group chats (`GROUP_CHAT_DISABLED`), unpaired senders (`UNPAIRED_SENDER`), cross-tenant events, and oversized attachments (`ATTACHMENT_TOO_LARGE`), and never waits on LLMs inside callbacks.
+- **OB-050 (`IN_PROGRESS`)**: Feishu approval callback handler and daemon use case (`services/feishu_gateway/src/openbot_feishu/approval_callback.py`, `services/core/src/openbot/application/approval_use_case.py`, and `tests/integration/feishu/test_approval_callback.py`, 1 passed):
+  1. Extracts the real `event.operator.open_id` and verifies active owner pairing while ignoring forged `action.value.is_owner` fields; rejects stale cards on cancelled tasks (`APPROVAL_REJECTED_OR_STALE`) and never claims approval on unconfirmed database commits (`COMMIT_UNCONFIRMED`).

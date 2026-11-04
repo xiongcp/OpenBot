@@ -16,7 +16,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/unit-contract-protocol.log",
-      "log_sha256": "9a366523f712dd76e9d8a622a01c91f59e0e144f04f2bd2224fddf402d35940e"
+      "log_sha256": "abe14db6dd34912342fcffefde260094477b0363347012b860b4fb18a951ba6c"
     },
     {
       "name": "lint",
@@ -26,9 +26,9 @@
         "ruff",
         "check"
       ],
-      "exit_code": 1,
+      "exit_code": 0,
       "log": "evidence/implementation/lint.log",
-      "log_sha256": "b3f6ac29ee31aeb8c229ed12639040327041630c44199829b24788d29310e497"
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
     },
     {
       "name": "format",
@@ -41,7 +41,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/format.log",
-      "log_sha256": "184b6bfbf75ff0afb5735687ad68f56f0140c93fd26fa8c144e3386b4e6c6ab1"
+      "log_sha256": "1797ba33db9c9ef754817e0f9ed6324336a2128b9e103101798411f3ccf41704"
     },
     {
       "name": "types",
@@ -52,7 +52,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/types.log",
-      "log_sha256": "e01191578d3a3bac202cef72aec747f3048def999e4a0906368a5b91b8849682"
+      "log_sha256": "137f07fcffd02ed2b36632763e65a15f1caab256c73938b35fb4bd4eb992544a"
     },
     {
       "name": "components",
@@ -73,7 +73,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/design.log",
-      "log_sha256": "7c4f363d9c0e881ef05a4841568b73b7d2c86b5894e45d90e48b13df777fdc9f"
+      "log_sha256": "63c7fdc6a63b0dc37a3a057fc93124e6f6ac7351a051c52c1efa0a855da94867"
     },
     {
       "name": "design-components",
@@ -93,8 +93,8 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/database-design.log",
-      "log_sha256": "3954596760408006d7a9c90f96d06f2c986d440ad6ed27e84da7aa10579c1f78"
+      "log_sha256": "424ba2a34ccd0c12d1b7e4607944be12d026f04c02ae9eb12dcae68732f4f2e4"
     }
   ],
-  "passed": false
+  "passed": true
 }

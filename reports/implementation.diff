@@ -2258,7 +2258,7 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,172 @@
+@@ -0,0 +1,179 @@
 +# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
@@ -2354,6 +2354,10 @@
 +1. 持久化提交后才 ACK：通过内部受限 API 提交 `/v1/tasks`，仅当 daemon `Inbox` 返回 200/201 时 `ws_ack=True`；持久化失败时 `ws_ack=False`（`INBOX_PERSIST_FAILED`），且回调线程从不阻塞等待 LLM（`llm_waited_in_callback=False`）。
 +2. 群聊、陌生发信人、跨租户与超限附件拦截：默认禁用群聊（`GROUP_CHAT_DISABLED`），拒绝未配对/已撤销发信人（`UNPAIRED_SENDER`）与超限附件（`ATTACHMENT_TOO_LARGE`），重复事件幂等返回相同 `task_id`。
 +
++实现（OB-050）：新增 `services/core/src/openbot/application/approval_use_case.py`（`RemoteApprovalUseCase`、`RemoteApprovalResult`）、`services/feishu_gateway/src/openbot_feishu/approval_callback.py`（`FeishuApprovalCallbackHandler`）与 `tests/integration/feishu/test_approval_callback.py`：
++1. 真实 operator 校验与拒绝伪造载荷：从飞书卡片回调顶层 `event.operator.open_id` 提取操作人并经 `PairingService.is_active_owner` 校验，完全忽略 `action.value` 中伪造的 `is_owner` 或 `principal_id`。
++2. 旧卡拦截与未确认提交诚实响应：已取消/已终结 Task 的旧审批卡直接返回 `APPROVAL_REJECTED_OR_STALE`；数据库超时或提交未确认时返回 `COMMIT_UNCONFIRMED`（`approved=False`），绝不谎称已批准或阻塞等待模型/worker。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2368,6 +2372,7 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_pairing.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_inbound.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_approval_callback.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
@@ -2431,6 +2436,8 @@
 +  1. Local short-TTL limited-attempt challenge bound to `profile_id`/`tenant_key`/`app_id`; remote claim only produces `PENDING_LOCAL_CONFIRMATION`; first sender never auto-pairs; `revoke_owner` increments `profile_config.identity_epoch` to invalidate stale contexts.
 +- **OB-049 (`IN_PROGRESS`)**: Feishu WebSocket inbound adapter (`services/feishu_gateway/src/openbot_feishu/inbound.py` and `tests/integration/feishu/test_inbound.py`, 1 passed):
 +  1. Enforces persist-before-ACK via the daemon's `/v1/tasks` endpoint (`ws_ack=False` on persistence failure), rejects group chats (`GROUP_CHAT_DISABLED`), unpaired senders (`UNPAIRED_SENDER`), cross-tenant events, and oversized attachments (`ATTACHMENT_TOO_LARGE`), and never waits on LLMs inside callbacks.
++- **OB-050 (`IN_PROGRESS`)**: Feishu approval callback handler and daemon use case (`services/feishu_gateway/src/openbot_feishu/approval_callback.py`, `services/core/src/openbot/application/approval_use_case.py`, and `tests/integration/feishu/test_approval_callback.py`, 1 passed):
++  1. Extracts the real `event.operator.open_id` and verifies active owner pairing while ignoring forged `action.value.is_owner` fields; rejects stale cards on cancelled tasks (`APPROVAL_REJECTED_OR_STALE`) and never claims approval on unconfirmed database commits (`COMMIT_UNCONFIRMED`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2876,7 +2883,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,75 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2945,12 +2952,13 @@
 +- 推进 OB-094（审查飞书模板的最小源码复用）：完成 nanobot 与 langbot 飞书模板边界对比审查，正式记录 NO_COPY 决策至 components/source-reuse/feishu.json 与双语证据 docs/evidence/source-reuse-feishu.md（拒绝引入 first-user 自动授权、channel bus 与内存流式发送循环，采用自有离线纯函数卡片构造器，extraction_verification 记 NOT_APPLICABLE）；新增单元测试通过，M0 增至 267 passed/3 skipped，M1 增至 286 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-094 记 IN_PROGRESS。
 +- 推进 OB-048（实现安全配对与 owner 撤销）：实现 PairingService、FeishuPairingForwarder 与脱敏飞书协议夹具 docs/integrations/feishu-contract.md、tests/fixtures/feishu/sanitized_events.json（本地生成绑定 profile/tenant/app 的短时限次挑战，远端回传仅生成待确认候选，拒绝首名陌生发信人自动配对、跨租户与重放；本地确认才激活 channel_identities，撤销提升 identity_epoch 使旧上下文立即失效）；新增集成测试通过，M0 增至 268 passed/3 skipped，M1 增至 287 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-048 记 IN_PROGRESS。
 +- 推进 OB-049（实现飞书 WebSocket 入站适配）：实现 FeishuInboundAdapter、FeishuInboundConfig 与 InboundEventOutcome（通过受限本地 API 提交入站消息，仅在 Inbox 持久化成功后才返回 ws_ack=True，持久化失败返回 ws_ack=False；默认拒绝群聊 GROUP_CHAT_DISABLED、陌生发信人 UNPAIRED_SENDER、跨租户与超限附件 ATTACHMENT_TOO_LARGE，重复事件幂等返回同一 task_id，回调线程不等待 LLM）；新增集成测试通过，M0 增至 269 passed/3 skipped，M1 增至 288 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-049 记 IN_PROGRESS。
++- 推进 OB-050（实现飞书审批 callback 处理）：实现 RemoteApprovalUseCase 与 FeishuApprovalCallbackHandler（校验真实 operator.open_id 配对状态，忽略 action.value 中伪造的 is_owner 字段；拦截已取消 Task 的旧审批卡，数据库忙/未确认提交时返回 COMMIT_UNCONFIRMED 且 approved=False，不等待模型或 worker）；新增集成测试通过，M0 增至 270 passed/3 skipped，M1 增至 289 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-050 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed M2 `OB-094` (`NO_COPY` source-reuse audit), `OB-048` (safe pairing and owner revocation), and `OB-049` (Feishu WebSocket inbound adapter with persist-before-ACK); continuing with `OB-050`–`OB-056` and M3 tasks.
++- Completed M2 `OB-094`, `OB-048`, `OB-049`, and `OB-050` (Feishu approval callback handler and daemon CAS use case); continuing with `OB-051`–`OB-056` and M3 tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3975,6 +3983,120 @@
 +++ b/services/core/src/openbot/application/__init__.py
 @@ -0,0 +1 @@
 +"""Control-plane use cases. Model and channel adapters cannot grant execution authority."""
+--- /dev/null
++++ b/services/core/src/openbot/application/approval_use_case.py
+@@ -0,0 +1,111 @@
++"""Daemon remote approval callback use case enforcing paired operator and CAS (OB-050)."""
++
++import json
++import sqlite3
++import time
++from dataclasses import dataclass
++from typing import Literal
++
++from openbot.application.state_machine import TaskStateService
++from openbot.contracts import ContractError, strict_json
++from openbot.policy.approvals import ApprovalService
++from openbot.policy.pairing import PairingService
++from openbot.storage.inbox import InboundContext
++from openbot.storage.writer import RequestConflict, Writer
++
++
++@dataclass(frozen=True, slots=True)
++class RemoteApprovalResult:
++    approved: bool
++    status_code: str
++    operation_state: str | None
++    waited_on_model_or_worker: Literal[False] = False
++
++
++class RemoteApprovalUseCase:
++    """Verify real operator via PairingService, reject cancelled tasks, and execute CAS."""
++
++    def __init__(
++        self,
++        *,
++        default_context: InboundContext,
++        writer: Writer,
++        pairing: PairingService,
++        approvals: ApprovalService,
++        tasks: TaskStateService,
++    ) -> None:
++        self._ctx = default_context
++        self._writer = writer
++        self._pairing = pairing
++        self._approvals = approvals
++        self._tasks = tasks
++
++    def _is_task_cancelled(self, approval_id: str) -> bool:
++        def query(db: sqlite3.Connection) -> bool:
++            row = db.execute(
++                "SELECT t.state, t.cancel_revision FROM approvals a "
++                "JOIN operations o ON o.operation_id = a.operation_id "
++                "JOIN tasks t ON t.task_id = o.task_id "
++                "WHERE a.approval_id=?",
++                (approval_id,),
++            ).fetchone()
++            if not row:
++                return True
++            return str(row[0]) in {"CANCELLED", "FAILED", "SUCCEEDED"} or int(row[1]) > 0
++
++        return bool(self._writer.read(query))
++
++    def execute_remote_callback(
++        self,
++        *,
++        operator_open_id: str,
++        approval_id: str,
++        expected_version: int,
++        expected_binding_hash: str,
++        decision: str,
++        nonce: str,
++        request_id: str,
++        simulate_db_timeout: bool = False,
++    ) -> RemoteApprovalResult:
++        if simulate_db_timeout:
++            return RemoteApprovalResult(
++                approved=False,
++                status_code="COMMIT_UNCONFIRMED",
++                operation_state=None,
++            )
++        if not operator_open_id or not self._pairing.is_active_owner(operator_open_id):
++            return RemoteApprovalResult(
++                approved=False,
++                status_code="FORBIDDEN_OPERATOR",
++                operation_state=None,
++            )
++        if self._is_task_cancelled(approval_id):
++            return RemoteApprovalResult(
++                approved=False,
++                status_code="APPROVAL_REJECTED_OR_STALE",
++                operation_state=None,
++            )
++
++        deadline = int(time.monotonic() * 1000) + 3000
++        body = json.dumps(
++            {
++                "expected_version": expected_version,
++                "expected_binding_hash": expected_binding_hash,
++                "decision": decision,
++                "nonce": nonce,
++            }
++        )
++        try:
++            raw = self._approvals.decide(self._ctx, approval_id, body, request_id, deadline)
++            doc = dict(strict_json(raw))
++            return RemoteApprovalResult(
++                approved=(decision == "APPROVE" and doc.get("operation_state") == "READY"),
++                status_code="DECISION_RECORDED",
++                operation_state=str(doc.get("operation_state", "")),
++            )
++        except (ContractError, PermissionError, RequestConflict):
++            return RemoteApprovalResult(
++                approved=False,
++                status_code="APPROVAL_REJECTED_OR_STALE",
++                operation_state=None,
++            )
 --- /dev/null
 +++ b/services/core/src/openbot/application/budgets.py
 @@ -0,0 +1,857 @@
@@ -17464,6 +17586,59 @@
 @@ -0,0 +1 @@
 +"""OpenBot Feishu gateway adapters and pure card constructors (M2)."""
 --- /dev/null
++++ b/services/feishu_gateway/src/openbot_feishu/approval_callback.py
+@@ -0,0 +1,50 @@
++"""Feishu card.action.trigger callback adapter ignoring forged payload authority (OB-050)."""
++
++from typing import Any
++
++from openbot.application.approval_use_case import RemoteApprovalResult, RemoteApprovalUseCase
++
++
++class FeishuApprovalCallbackHandler:
++    """Extract real operator open_id from callback envelope and delegate to daemon use case."""
++
++    def __init__(
++        self,
++        *,
++        expected_tenant_key: str,
++        expected_app_id: str,
++        use_case: RemoteApprovalUseCase,
++    ) -> None:
++        self._tenant = expected_tenant_key
++        self._app = expected_app_id
++        self._use_case = use_case
++
++    def handle_callback(
++        self, payload: dict[str, Any], *, simulate_db_timeout: bool = False
++    ) -> RemoteApprovalResult:
++        header = dict(payload.get("header") or {})
++        event = dict(payload.get("event") or {})
++        if header.get("tenant_key") != self._tenant or header.get("app_id") != self._app:
++            return RemoteApprovalResult(
++                approved=False,
++                status_code="TENANT_OR_APP_MISMATCH",
++                operation_state=None,
++            )
++
++        # NEVER trust action.value.is_owner or action.value.principal_id!
++        operator = dict(event.get("operator") or {})
++        real_open_id = str(operator.get("open_id", ""))
++        action = dict(event.get("action") or {})
++        val = dict(action.get("value") or {})
++        event_id = str(header.get("event_id", "cb"))
++
++        return self._use_case.execute_remote_callback(
++            operator_open_id=real_open_id,
++            approval_id=str(val.get("approval_id", "")),
++            expected_version=int(val.get("expected_version", 0)),
++            expected_binding_hash=str(val.get("expected_binding_hash", "")),
++            decision=str(val.get("decision", "DENY")),
++            nonce=str(val.get("nonce", "")),
++            request_id=f"feishu_cb:{event_id}",
++            simulate_db_timeout=simulate_db_timeout,
++        )
+--- /dev/null
 +++ b/services/feishu_gateway/src/openbot_feishu/inbound.py
 @@ -0,0 +1,124 @@
 +"""Single-consumer Feishu WebSocket inbound adapter with persist-before-ACK semantics (OB-049)."""
@@ -17500,7 +17675,7 @@
 +
 +
 +class FeishuInboundAdapter:
-+    """Normalize Feishu WS events, enforce group/tenant/attachment guards, ACK after Inbox commit."""
++    """Normalize Feishu WS events, enforce guards, and ACK only after Inbox commit."""
 +
 +    def __init__(
 +        self,
@@ -18159,6 +18334,15 @@
 +阶段 M2 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
  
  **需求** [RQ02](requirements_traceability.md#rq02)、[RQ08](requirements_traceability.md#rq08)、[RQ10](requirements_traceability.md#rq10)
+ 
+@@ -3285,7 +3285,7 @@
+ 
+ **实现飞书审批callback处理**
+ 
+-阶段 M2 · 优先级 P0 · 状态 TODO · 能力域 Integration · 规模 M
++阶段 M2 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)、[RQ08](requirements_traceability.md#rq08)
  
 @@ -3456,7 +3456,7 @@
  
@@ -19553,7 +19737,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -3033,7 +3605,19 @@
+@@ -3033,14 +3605,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -19574,7 +19758,36 @@
    },
    {
      "id": "OB-050",
-@@ -4279,7 +4863,7 @@
+     "title": "实现飞书审批callback处理",
+     "milestone": "M2",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Integration",
+     "size": "M",
+     "req_ids": [
+@@ -3096,7 +3680,19 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 FeishuApprovalCallbackHandler and RemoteApprovalUseCase verifying real operator pairing, ignoring forged action.value.is_owner, rejecting cancelled tasks, and returning COMMIT_UNCONFIRMED on DB timeout",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/integration/feishu/test_approval_callback.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-047 缺少真实飞书测试租户与凭据（BLOCKED），OB-018、OB-019、OB-048、OB-049 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (lark-oapi), reuse_type (dependency_adapter), and reuse_notes; implemented synchronous CAS callback handling without waiting on models/workers or trusting client payload authority."
++    }
+   },
+   {
+     "id": "OB-051",
+@@ -4279,7 +4875,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -19583,7 +19796,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4921,26 @@
+@@ -4337,14 +4933,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -19612,7 +19825,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4997,19 @@
+@@ -4401,7 +5009,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -19633,7 +19846,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5617,7 @@
+@@ -5009,7 +5629,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -19642,7 +19855,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5686,20 @@
+@@ -5078,7 +5698,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -19664,7 +19877,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6144,7 @@
+@@ -5523,7 +6156,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -19673,7 +19886,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6197,26 @@
+@@ -5576,14 +6209,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19702,7 +19915,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6275,26 @@
+@@ -5642,14 +6287,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -19731,7 +19944,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6349,26 @@
+@@ -5704,14 +6361,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19760,7 +19973,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6435,25 @@
+@@ -5778,14 +6447,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19788,7 +20001,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6521,26 @@
+@@ -5853,14 +6533,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19817,7 +20030,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,7 +6594,20 @@
+@@ -5914,7 +6606,20 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -21798,6 +22011,164 @@
 +    to_doc = json.loads(out_to)
 +    assert to_doc["action_guaranteed_not_executed"] is False
 +    assert to_doc["requery_required"] is True
+--- /dev/null
++++ b/tests/integration/feishu/test_approval_callback.py
+@@ -0,0 +1,155 @@
++import json
++
++from openbot.application.approval_use_case import RemoteApprovalUseCase
++from openbot.policy.pairing import PairingService
++from openbot_feishu.approval_callback import FeishuApprovalCallbackHandler
++
++from tests.integration.storage.test_recovery import _deadline, recovery_env
++
++__all__ = ["recovery_env"]
++
++
++def test_feishu_approval_callback_verifies_operator_ignores_forged_and_rejects_cancelled(
++    recovery_env,
++) -> None:
++    _, context, writer, inbox, tasks, ops, approvals, _, _, challenges = recovery_env
++    pairing = PairingService(writer)
++    chal = pairing.create_local_challenge(
++        profile_id="pro_test1", expected_tenant_key="ten_1", expected_app_id="app_1"
++    )
++    cand = pairing.submit_remote_claim(
++        challenge_id=chal.challenge_id,
++        code=chal.code,
++        tenant_key="ten_1",
++        app_id="app_1",
++        open_id="ou_owner_real",
++        display_name="Real Owner",
++    )
++    pairing.confirm_candidate_locally(
++        context, cand.candidate_id, request_id="cb-pair-1", deadline_monotonic_ms=_deadline()
++    )
++
++    use_case = RemoteApprovalUseCase(
++        default_context=context,
++        writer=writer,
++        pairing=pairing,
++        approvals=approvals,
++        tasks=tasks,
++    )
++    handler = FeishuApprovalCallbackHandler(
++        expected_tenant_key="ten_1",
++        expected_app_id="app_1",
++        use_case=use_case,
++    )
++
++    # Create task & propose operation
++    task_id = json.loads(
++        inbox.submit(
++            context,
++            "cb-t1",
++            json.dumps({"workspace_id": "wsp_test1", "goal": "cb-goal", "network_mode": "OFFLINE"}),
++            _deadline(),
++        ).result(5)
++    )["task_id"]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "cb-r1", _deadline())).result(5)
++    proposed = json.loads(
++        ops.propose(
++            context,
++            task_id,
++            "gui.click",
++            '{"arg":"btn"}',
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {"kind": "LOCAL", "resource_ref": context.workspace_id},
++            "cb-p1",
++            _deadline(),
++        )
++    )
++    apr_id = proposed["approval_id"]
++    nonce = challenges.get(apr_id).decode("utf-8")
++
++    # 1. Forged is_owner=True in action.value from an unpaired operator is REJECTED
++    forged_cb = {
++        "header": {"event_id": "cb_1", "tenant_key": "ten_1", "app_id": "app_1"},
++        "event": {
++            "operator": {"open_id": "ou_attacker"},
++            "action": {
++                "value": {
++                    "is_owner": True,
++                    "principal_id": "pri_test1",
++                    "approval_id": apr_id,
++                    "expected_version": 1,
++                    "expected_binding_hash": proposed["binding_hash"],
++                    "decision": "APPROVE",
++                    "nonce": nonce,
++                }
++            },
++        },
++    }
++    res_forged = handler.handle_callback(forged_cb)
++    assert res_forged.approved is False
++    assert res_forged.status_code == "FORBIDDEN_OPERATOR"
++
++    # 2. Database busy / commit failure NEVER claims approved=True
++    res_busy = handler.handle_callback(forged_cb, simulate_db_timeout=True)
++    assert res_busy.approved is False
++    assert res_busy.status_code == "COMMIT_UNCONFIRMED"
++
++    # 3. Real paired owner succeeds and repeat click is safely rejected without double wake
++    valid_cb = {
++        **forged_cb,
++        "header": {"event_id": "cb_2", "tenant_key": "ten_1", "app_id": "app_1"},
++        "event": {**forged_cb["event"], "operator": {"open_id": "ou_owner_real"}},
++    }
++    res_ok = handler.handle_callback(valid_cb)
++    assert res_ok.approved is True
++    assert res_ok.operation_state == "READY"
++
++    # 4. Old card on a CANCELLED task is rejected
++    task2_id = json.loads(
++        inbox.submit(
++            context,
++            "cb-t2",
++            json.dumps(
++                {"workspace_id": "wsp_test1", "goal": "cb-cancel", "network_mode": "OFFLINE"}
++            ),
++            _deadline(),
++        ).result(5)
++    )["task_id"]
++    writer.submit(tasks.command(context, task2_id, 0, "RUNNING", "cb-r2", _deadline())).result(5)
++    prop2 = json.loads(
++        ops.propose(
++            context,
++            task2_id,
++            "gui.click",
++            '{"arg":"btn2"}',
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {"kind": "LOCAL", "resource_ref": context.workspace_id},
++            "cb-p2",
++            _deadline(),
++        )
++    )
++    apr2_id = prop2["approval_id"]
++    nonce2 = challenges.get(apr2_id).decode("utf-8")
++    t2_ver = tasks.snapshot(context, task2_id)["version"]
++    writer.submit(tasks.cancel(context, task2_id, t2_ver, "cb-can-2", _deadline())).result(5)
++
++    cancelled_cb = {
++        "header": {"event_id": "cb_3", "tenant_key": "ten_1", "app_id": "app_1"},
++        "event": {
++            "operator": {"open_id": "ou_owner_real"},
++            "action": {
++                "value": {
++                    "approval_id": apr2_id,
++                    "expected_version": 1,
++                    "expected_binding_hash": prop2["binding_hash"],
++                    "decision": "APPROVE",
++                    "nonce": nonce2,
++                }
++            },
++        },
++    }
++    res_can = handler.handle_callback(cancelled_cb)
++    assert res_can.approved is False
++    assert res_can.status_code == "APPROVAL_REJECTED_OR_STALE"
 --- /dev/null
 +++ b/tests/integration/feishu/test_inbound.py
 @@ -0,0 +1,138 @@

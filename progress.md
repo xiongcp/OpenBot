@@ -66,9 +66,10 @@
 - 推进 OB-094（审查飞书模板的最小源码复用）：完成 nanobot 与 langbot 飞书模板边界对比审查，正式记录 NO_COPY 决策至 components/source-reuse/feishu.json 与双语证据 docs/evidence/source-reuse-feishu.md（拒绝引入 first-user 自动授权、channel bus 与内存流式发送循环，采用自有离线纯函数卡片构造器，extraction_verification 记 NOT_APPLICABLE）；新增单元测试通过，M0 增至 267 passed/3 skipped，M1 增至 286 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-094 记 IN_PROGRESS。
 - 推进 OB-048（实现安全配对与 owner 撤销）：实现 PairingService、FeishuPairingForwarder 与脱敏飞书协议夹具 docs/integrations/feishu-contract.md、tests/fixtures/feishu/sanitized_events.json（本地生成绑定 profile/tenant/app 的短时限次挑战，远端回传仅生成待确认候选，拒绝首名陌生发信人自动配对、跨租户与重放；本地确认才激活 channel_identities，撤销提升 identity_epoch 使旧上下文立即失效）；新增集成测试通过，M0 增至 268 passed/3 skipped，M1 增至 287 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-048 记 IN_PROGRESS。
 - 推进 OB-049（实现飞书 WebSocket 入站适配）：实现 FeishuInboundAdapter、FeishuInboundConfig 与 InboundEventOutcome（通过受限本地 API 提交入站消息，仅在 Inbox 持久化成功后才返回 ws_ack=True，持久化失败返回 ws_ack=False；默认拒绝群聊 GROUP_CHAT_DISABLED、陌生发信人 UNPAIRED_SENDER、跨租户与超限附件 ATTACHMENT_TOO_LARGE，重复事件幂等返回同一 task_id，回调线程不等待 LLM）；新增集成测试通过，M0 增至 269 passed/3 skipped，M1 增至 288 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-049 记 IN_PROGRESS。
+- 推进 OB-050（实现飞书审批 callback 处理）：实现 RemoteApprovalUseCase 与 FeishuApprovalCallbackHandler（校验真实 operator.open_id 配对状态，忽略 action.value 中伪造的 is_owner 字段；拦截已取消 Task 的旧审批卡，数据库忙/未确认提交时返回 COMMIT_UNCONFIRMED 且 approved=False，不等待模型或 worker）；新增集成测试通过，M0 增至 270 passed/3 skipped，M1 增至 289 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-050 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed M2 `OB-094` (`NO_COPY` source-reuse audit), `OB-048` (safe pairing and owner revocation), and `OB-049` (Feishu WebSocket inbound adapter with persist-before-ACK); continuing with `OB-050`–`OB-056` and M3 tasks.
+- Completed M2 `OB-094`, `OB-048`, `OB-049`, and `OB-050` (Feishu approval callback handler and daemon CAS use case); continuing with `OB-051`–`OB-056` and M3 tasks.
