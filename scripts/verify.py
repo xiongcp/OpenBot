@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def run(phase="M0"):
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "services/core/src")
+    env["PYTHONPATH"] = f"{ROOT / 'services/core/src'}:{ROOT / 'services/feishu_gateway/src'}"
     env["PYTHONNOUSERSITE"] = "1"
     env.pop("OPENBOT_NATIVE_TESTS", None)
     commands = [

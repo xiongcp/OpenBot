@@ -31,7 +31,7 @@ where = ["services/core/src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-pythonpath = ["services/core/src"]
+pythonpath = ["services/core/src", "services/feishu_gateway/src"]
 markers = [
   "sdk: actual optional SDK against synthetic loopback HTTP",
   "native_container: explicitly enabled Docker Desktop synthetic isolation PoC",
@@ -47,5 +47,5 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["services/core/src/openbot"]
+files = ["services/core/src/openbot", "services/feishu_gateway/src/openbot_feishu"]
 strict = true

@@ -64,9 +64,10 @@
 - 推进 OB-045（交付安全工具威胁回归）：实现 M1ThreatRegressionSuite、双语说明 docs/demos/m2.md 与安全回归测试 tests/security/test_m1_threat_regression.py（覆盖 JCS 深层变异与重复键、路径穿越与符号链接逃逸、ripgrep/Git 危险配置剥离、parser 离线二进制校验、跨分域密钥与命令行参数泄露阻断、宿主 shell 拒绝与输出洪泛截断、残留子进程 PID 强制隔离检疫 7 类攻击与故障语料，断言 total_unauthorized_side_effects == 0）；M0 增至 265 passed/3 skipped，M1 增至 284 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-045 记 IN_PROGRESS。
 - 推进 OB-046（发布最小本地 Alpha 边界说明）：实现 LocalAlphaPrototypeRunner、双语验收说明 docs/releases/local-prototype-acceptance.md 与集成测试 tests/integration/scenarios/local_prototype/test_local_prototype.py（从空配置目录跑通读文件、补丁提议、CLI 批准应用、隔离进程回收与重启重查，诚实列出 Darwin-arm64 试点环境及 Windows/Linux/真实飞书等未支持项，claims_full_mvp_complete=False）；M0 增至 266 passed/3 skipped，M1 增至 285 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-046 记 IN_PROGRESS。至此 M1 阶段全部任务均已在本机落地并验证。
 - 推进 OB-094（审查飞书模板的最小源码复用）：完成 nanobot 与 langbot 飞书模板边界对比审查，正式记录 NO_COPY 决策至 components/source-reuse/feishu.json 与双语证据 docs/evidence/source-reuse-feishu.md（拒绝引入 first-user 自动授权、channel bus 与内存流式发送循环，采用自有离线纯函数卡片构造器，extraction_verification 记 NOT_APPLICABLE）；新增单元测试通过，M0 增至 267 passed/3 skipped，M1 增至 286 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-094 记 IN_PROGRESS。
+- 推进 OB-048（实现安全配对与 owner 撤销）：实现 PairingService、FeishuPairingForwarder 与脱敏飞书协议夹具 docs/integrations/feishu-contract.md、tests/fixtures/feishu/sanitized_events.json（本地生成绑定 profile/tenant/app 的短时限次挑战，远端回传仅生成待确认候选，拒绝首名陌生发信人自动配对、跨租户与重放；本地确认才激活 channel_identities，撤销提升 identity_epoch 使旧上下文立即失效）；新增集成测试通过，M0 增至 268 passed/3 skipped，M1 增至 287 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-048 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed M2 source-reuse audit `OB-094` (`NO_COPY` for `nanobot`/`langbot`); continuing with M2 Feishu gateway/pairing/cards/recovery tasks (`OB-048`–`OB-056`) and M3 tasks.
+- Completed M2 `OB-094` (`NO_COPY` source-reuse audit) and `OB-048` (safe pairing and owner revocation with `identity_epoch` bump); continuing with `OB-049`–`OB-056` and M3 tasks.

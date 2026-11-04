@@ -85,6 +85,10 @@
 实现（OB-046）：新增 `services/core/src/openbot/application/local_prototype.py`（`LocalAlphaPrototypeRunner`、`LocalAlphaCapabilityReport`）、`tests/integration/scenarios/local_prototype/test_local_prototype.py` 与中英双语 `docs/releases/local-prototype-acceptance.md`：
 1. 从空白配置目录一键跑通 `workspace.read` → `workspace.propose_patch` → CLI 审批 → `workspace.apply_patch` 与隔离进程回收 → 崩溃重启核对恢复，生成结构化能力报告并诚实声明试点 OS（`Darwin-arm64`）、未实测平台（`Windows-native`、`Linux-native`）及未接入外部能力（`real_feishu_tenant`、`claims_full_mvp_complete=False`）。
 
+实现（OB-048）：新增 `services/core/src/openbot/policy/pairing.py`（`PairingService`、`PairingChallenge`、`PendingPairingCandidate`）、`services/feishu_gateway/src/openbot_feishu/pairing.py`（`FeishuPairingForwarder`）与 `tests/integration/feishu/test_pairing.py`：
+1. 本地挑战与待确认候选分离：由本地生成绑定 `profile_id`、`expected_tenant_key`、`expected_app_id` 的短 TTL 限次挑战，远端飞书回传仅生成 `PENDING_LOCAL_CONFIRMATION` 候选；首个陌生远端发信人绝不自动成为 owner（`auto_paired=False`）；本地确认（`confirm_candidate_locally`）才写入 `channel_accounts` 与 `channel_identities`。
+2. Owner 撤销与 `identity_epoch` 递增：`revoke_owner` 原子将 `channel_identities` 置为 `REVOKED` 并将 `profile_config.identity_epoch` 加 1，使旧 `InboundContext` 立即被 `authorize()` 拒绝。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -97,6 +101,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q --tb=short`（6 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/security/test_m1_threat_regression.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_pairing.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -156,3 +161,5 @@
   1. Verifies 7 threat families (JCS deep mutation/duplicate keys, path traversal/symlink escape, ripgrep/Git config injection, parser workspace binary/runtime download rejection, secret compartment/argv leak blocking and offline redaction, shell wrapper rejection and output flood truncation, and residual worker PID quarantine) with `total_unauthorized_side_effects == 0`.
 - **OB-046 (`IN_PROGRESS`)**: Minimal local Alpha prototype runner and capability boundary report (`services/core/src/openbot/application/local_prototype.py`, `tests/integration/scenarios/local_prototype/test_local_prototype.py`, and `docs/releases/local-prototype-acceptance.md`, 1 passed):
   1. Runs the M1 local Alpha workflow from an empty directory (`workspace.read`, `workspace.propose_patch`, CLI approval, `workspace.apply_patch`, supervised worker reclaim, and crash recovery) and emits an honest capability report (`pilot_os='Darwin-arm64'`, `claims_full_mvp_complete=False`).
+- **OB-048 (`IN_PROGRESS`)**: Control-owned pairing and owner revocation (`services/core/src/openbot/policy/pairing.py`, `services/feishu_gateway/src/openbot_feishu/pairing.py`, and `tests/integration/feishu/test_pairing.py`, 1 passed):
+  1. Local short-TTL limited-attempt challenge bound to `profile_id`/`tenant_key`/`app_id`; remote claim only produces `PENDING_LOCAL_CONFIRMATION`; first sender never auto-pairs; `revoke_owner` increments `profile_config.identity_epoch` to invalidate stale contexts.

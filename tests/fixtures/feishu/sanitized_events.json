@@ -1,0 +1,45 @@
+{
+  "schema_version": "2.0",
+  "im_message_receive_v1": {
+    "header": {
+      "event_id": "evt_feishu_msg_001",
+      "event_type": "im.message.receive_v1",
+      "tenant_key": "ten_1",
+      "app_id": "app_1"
+    },
+    "event": {
+      "sender": {
+        "sender_id": {
+          "open_id": "ou_owner_new"
+        }
+      },
+      "message": {
+        "message_id": "om_msg_001",
+        "chat_type": "p2p",
+        "message_type": "text",
+        "content": "{\"text\":\"run task\"}"
+      }
+    }
+  },
+  "card_action_trigger": {
+    "header": {
+      "event_id": "evt_feishu_cb_001",
+      "event_type": "card.action.trigger",
+      "tenant_key": "ten_1",
+      "app_id": "app_1"
+    },
+    "event": {
+      "operator": {
+        "open_id": "ou_owner_new"
+      },
+      "action": {
+        "value": {
+          "approval_id": "apr_test_001",
+          "expected_version": 1,
+          "expected_binding_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "decision": "APPROVE"
+        }
+      }
+    }
+  }
+}
