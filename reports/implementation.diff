@@ -2261,8 +2261,10 @@
 +  3. `RedactionPipeline`: Filters `stdout`, `stderr`, `sdk_debug`, `exception`, `http_header`, `ui_event`, `artifact`, `diagnostic`, and `model_input` without downgrading `SECRET`/`SENSITIVE` classifications on negative scans (`guarantees_100_percent_detection=False`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
-@@ -0,0 +1,21 @@
-+# OB-093：首发平台隔离能力
+@@ -0,0 +1,34 @@
++# OB-093 / OB-040：首发平台隔离能力与结构化进程执行协议 / First-Platform Isolation Capabilities and Structured Process Execution Protocol
++
++## 中文说明
 +
 +状态：IN_PROGRESS。首测 Darwin arm64；Docker Desktop client/server 29.1.3、引擎 linux arm64。初测 socket 缺失是历史观察，后续后端已可连接；未由本轮启动用户服务或切换默认 context。
 +
@@ -2282,7 +2284,18 @@
 +
 +仍需实现并验证：唯一 supervisor 的父子锁协议、daemon 独立启动拒绝、多代子孙/逃逸/父进程强杀与旧 epoch 接管、登记域无法核对时阻止 dispatch。正式 native/supervisor 与 python-on-whales 尚未实现/安装，不是“缺 Docker 环境”；这些是 OB-093/015/040—042 的工程待办。镜像仅为本地测试资产，完整镜像许可与发行供应链资格仍 NOT_RUN。任何失败都不得降级宿主执行。
 +
++实现（OB-040）：新增 `contracts/schemas/dispatch.schema.json` 与 `services/core/src/openbot/tools/executors/process.py`（`ControlledProcessExecutor`、`ProcessExecutionPlan`、`ProcessResourceLimits`、`ProcessExecutionResult`、`classify_command_security`）：
++1. 锁定不可变执行计划与禁止裸 Shell：锁定 `executable`、`argv`、`workspace_snapshot_digest`、`execution_backend`（仅允许 `ISOLATED_CONTAINER`/`ISOLATED_WORKER`，拒绝宿主后端）、固定 `sha256:...` `image_digest`、`network_mode`、干净 `isolated_home`/`isolated_tmpdir`、最小 `env` 与资源限制；硬拒绝 `sh -c`/`bash -c`/`cmd /c` 等 Shell 包装与 `--pre` 隐藏预处理器；`pytest`、`python`、`npm`、`git` 等一律归类为 `CODE_EXECUTION`，绝不因动作名叫 `search`、`snapshot` 或 `lint` 而放行未隔离执行。
++2. 无隔离后端拒绝降级宿主与双受管标识映射：当 `isolation_backend_qualified=False` 时立即抛出 `PermissionError`（绝不自动回退宿主 Shell）；结果同时记录 `client_pid` 与 `container_id`，若客户端退出或超时但 `container_confirmed_stopped=False`，严格映射为 `UNKNOWN`（停止客户端不自动认定容器已停止）；输出经 `RedactionPipeline` 流式脱敏并受 `max_output_bytes` 截断保护。
++
 +影响：OB-029 正式隔离执行门禁尚未通过；原生进程/后端组合需完成上述缺口。存储、合同与 SDK 故障验证可继续，不以该门禁代替全部 M1 工作。
++
++## English Summary
++
++- **OB-093 (`IN_PROGRESS`)**: Darwin arm64 `flock` single-instance probe (`tests/components/native_poc/test_profile_lock.py`) and native Docker Desktop 29.1.3 isolation PoC (`tests/components/native_poc/test_docker.py`, 8 passed in `evidence/implementation/native-container-tests.log`: non-root, read-only rootfs/input, cap-drop, `--network=none`, OOM exit 137 at 64 MiB limit, PID limit enforcement, independent container lifecycle after client kill, and bounded tar export).
++- **OB-040 (`IN_PROGRESS`)**: Structured process execution protocol (`contracts/schemas/dispatch.schema.json`, `services/core/src/openbot/tools/executors/process.py`, and `tests/unit/test_process_executor.py`, 2 passed):
++  1. `ProcessExecutionPlan` & `classify_command_security`: Locks `executable`, `argv`, `workspace_snapshot_digest`, `execution_backend`, pinned `image_digest`, `isolated_home`/`isolated_tmpdir`, `env`, and `ProcessResourceLimits`; rejects raw shell wrappers (`sh -c`, `bash -c`, `cmd /c`) and `--pre` flags; classifies `pytest`, `python`, `npm`, and `git` as `CODE_EXECUTION` regardless of action label (`search`/`snapshot`/`lint`).
++  2. `ControlledProcessExecutor`: Refuses execution when `isolation_backend_qualified=False` (zero host fallback); tracks `client_pid` and `container_id` separately so `container_confirmed_stopped=False` maps to `UNKNOWN`; enforces `max_output_bytes` and `RedactionPipeline` on `stdout`/`stderr`.
 --- /dev/null
 +++ b/docs/evidence/code-review.md
 @@ -0,0 +1,14 @@
@@ -2549,7 +2562,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,54 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2603,6 +2616,7 @@
 +- 推进 OB-025（实现首个云模型适配器）：实现 OpenAICompatibleAdapter、PROVIDER_CAPABILITY_MATRIX 与 validate_outbound_sdk_payload（锁定允许 SDK 字段白名单，禁用 run_tools/extra_body/extra_headers/web_search/remote_mcp；每次请求先经 EgressGuard 与按尝试预留预算，唯一有界重试计数与服务器请求及预算记录三者一致；跨分片重组完整 JSON 与 ToolManifest Schema 后仅返回 ToolCall 提案，批准前 canary 调用为 0；半包/断流/取消丢弃输出并保留 UNKNOWN 费用）；新增 3 项测试通过，M0 增至 237 passed/3 skipped，M1 增至 256 passed/1 skipped。因缺少真实云凭据 smoke 且上游依赖仍为 IN_PROGRESS，OB-025 记 IN_PROGRESS。
 +- 推进 OB-033（实现 list read search 文件工具）：实现 WorkspaceReadTools、WorkspaceReadLimits 与 build_pinned_ripgrep_command（核验固定 rg 二进制 SHA-256，用 -e 绑定 pattern、-- 分隔路径并强制 --json --no-config --no-pre --no-follow；严格保持 UTF-8 文本边界并拒绝二进制/非 UTF-8/超大文件；施加目录深度、扫描文件数、单文件字节、全局命中数、全局输出字节、单行长度与超时上限，输出带 sha256 与 UNTRUSTED_WORKSPACE_FILE 来源标签）；新增 2 项测试通过，M0 增至 239 passed/3 skipped，M1 增至 258 passed/1 skipped。因上游 OB-019/032/092 仍为 IN_PROGRESS，OB-033 记 IN_PROGRESS。
 +- 推进 OB-034（实现补丁提议与受授权应用）：实现 WorkspacePatchTool 与 PatchCommitJournal（审批前冻结 old_sha256、确切新字节 Artifact 与 new_sha256，拒绝多处匹配且不改原目录；apply_patch 复验旧哈希、父目录 inode 与新字节 Artifact 摘要，禁止批准后 fuzz 或 CRLF 改写；通过 PatchCommitJournal 记录逐文件提交日志并支持多文件部分失败回滚，显式声明 claims_cross_file_atomicity=False，绝不执行 git reset --hard 或自动 commit/push）；新增 2 项集成测试通过，存储套件增至 85 passed，M0 增至 241 passed/3 skipped，M1 增至 260 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-034 记 IN_PROGRESS。
++- 推进 OB-040（实现结构化进程执行协议）：新增 contracts/schemas/dispatch.schema.json 与 ControlledProcessExecutor（锁定 executable/argv/workspace_snapshot_digest/image_digest/isolated_home/env/资源限制，拒绝 sh -c 等裸 shell 与 --pre；pytest/python/npm/git 一律按 CODE_EXECUTION 处理，不因只读标签绕过隔离；隔离后端未就绪时拒绝降级宿主；分离 client_pid 与 container_id，容器未确认停止时映射为 UNKNOWN；输出流经 RedactionPipeline 过滤并限制字节上限）；新增 2 项测试通过，M0 增至 243 passed/3 skipped，M1 增至 262 passed/1 skipped。因上游依赖与 OB-041 正式隔离后端待闭合，OB-040 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -12522,6 +12536,268 @@
 @@ -0,0 +1 @@
 +"""Controlled workspace and execution tool primitives."""
 --- /dev/null
++++ b/services/core/src/openbot/tools/executors/__init__.py
+@@ -0,0 +1 @@
++"""Structured isolated process execution protocols and worker adapters."""
+--- /dev/null
++++ b/services/core/src/openbot/tools/executors/process.py
+@@ -0,0 +1,255 @@
++"""Structured process.run execution contract, shell rejection, and isolated worker mapping."""
++
++import re
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Literal, Protocol
++
++from openbot.observability.redaction import RedactionPipeline, StreamingSecretRedactor
++
++type ProcessOutcomeStatus = Literal["SUCCEEDED", "FAILED", "UNKNOWN"]
++
++_SHELL_BINARIES = frozenset(
++    {
++        "sh",
++        "bash",
++        "zsh",
++        "dash",
++        "ksh",
++        "csh",
++        "tcsh",
++        "fish",
++        "cmd",
++        "cmd.exe",
++        "powershell",
++        "pwsh",
++    }
++)
++_SHELL_EXEC_FLAGS = frozenset({"-c", "/c", "/k", "-command", "-encodedcommand"})
++_CODE_EXEC_BINARIES = frozenset(
++    {
++        "python",
++        "python3",
++        "pytest",
++        "pip",
++        "uv",
++        "node",
++        "npm",
++        "npx",
++        "pnpm",
++        "yarn",
++        "cargo",
++        "rustc",
++        "go",
++        "make",
++        "cmake",
++        "git",
++        "docker",
++    }
++)
++
++
++def classify_command_security(
++    action_label: str, argv: tuple[str, ...]
++) -> Literal["CODE_EXECUTION"]:
++    """Every interpreter, test runner, build tool, Git command, or rg --pre is CODE_EXECUTION.
++
++    Action names like 'search', 'snapshot', or 'lint' never downgrade process execution
++    into an unisolated read-only host call.
++    """
++    del action_label
++    if not argv:
++        raise ValueError("argv must be non-empty")
++    return "CODE_EXECUTION"
++
++
++@dataclass(frozen=True, slots=True)
++class ProcessResourceLimits:
++    memory_bytes: int = 134_217_728
++    cpu_millis: int = 1000
++    pids_limit: int = 64
++    timeout_ms: int = 30_000
++    max_output_bytes: int = 65_536
++
++
++@dataclass(frozen=True, slots=True)
++class ProcessExecutionPlan:
++    operation_id: str
++    attempt_id: str
++    dispatch_id: str
++    action_label: str
++    executable: str
++    argv: tuple[str, ...]
++    workspace_snapshot_digest: str
++    execution_backend: Literal["ISOLATED_CONTAINER", "ISOLATED_WORKER"]
++    image_digest: str
++    network_mode: Literal["NONE", "LOOPBACK_ONLY", "RESTRICTED_EGRESS"]
++    isolated_home: str
++    isolated_tmpdir: str
++    env: dict[str, str]
++    limits: ProcessResourceLimits
++
++    def validate(self) -> None:
++        if not self.executable.strip() or not self.argv:
++            raise PermissionError("Executable and argv must be non-empty")
++        if self.argv[0] != self.executable:
++            raise PermissionError("argv[0] must match the locked executable")
++        exe_name = Path(self.executable).name.lower()
++        if exe_name in _SHELL_BINARIES or any(
++            arg.lower() in _SHELL_EXEC_FLAGS for arg in self.argv[1:]
++        ):
++            raise PermissionError("Raw shell strings and shell -c wrappers are forbidden")
++        if any(arg.startswith("--pre") for arg in self.argv):
++            raise PermissionError("Hidden preprocessor execution (--pre) is forbidden")
++        if self.execution_backend not in {"ISOLATED_CONTAINER", "ISOLATED_WORKER"}:
++            raise PermissionError("Host execution backend is forbidden")
++        if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.image_digest):
++            raise PermissionError("Pinned sha256 image_digest is required")
++        if not re.fullmatch(r"[0-9a-f]{64}", self.workspace_snapshot_digest):
++            raise PermissionError("Valid workspace_snapshot_digest is required")
++        classify_command_security(self.action_label, self.argv)
++
++
++@dataclass(frozen=True, slots=True)
++class RawWorkerOutcome:
++    client_pid: int | None
++    container_id: str | None
++    exit_code: int | None
++    signal: str | None
++    timed_out: bool
++    cancelled: bool
++    container_confirmed_stopped: bool
++    stdout_chunks: tuple[bytes, ...]
++    stderr_chunks: tuple[bytes, ...]
++
++
++class IsolatedWorkerPort(Protocol):
++    def run_isolated(self, plan: ProcessExecutionPlan) -> RawWorkerOutcome: ...
++
++
++@dataclass(frozen=True, slots=True)
++class ProcessExecutionResult:
++    operation_id: str
++    attempt_id: str
++    dispatch_id: str
++    status: ProcessOutcomeStatus
++    exit_code: int | None
++    signal: str | None
++    timed_out: bool
++    cancelled: bool
++    client_pid: int | None
++    container_id: str | None
++    container_confirmed_stopped: bool
++    image_digest: str
++    network_mode: str
++    stdout: str
++    stderr: str
++    output_truncated: bool
++    error_code: str | None
++
++    def to_receipt(self) -> dict[str, Any]:
++        return {
++            "operation_id": self.operation_id,
++            "attempt_id": self.attempt_id,
++            "dispatch_id": self.dispatch_id,
++            "status": self.status,
++            "exit_code": self.exit_code,
++            "signal": self.signal,
++            "timed_out": self.timed_out,
++            "cancelled": self.cancelled,
++            "client_pid": self.client_pid,
++            "container_id": self.container_id,
++            "container_confirmed_stopped": self.container_confirmed_stopped,
++            "image_digest": self.image_digest,
++            "network_mode": self.network_mode,
++            "output_truncated": self.output_truncated,
++            "error_code": self.error_code,
++        }
++
++
++class ControlledProcessExecutor:
++    """Execute locked ProcessExecutionPlan only when isolated backend is qualified."""
++
++    def __init__(
++        self,
++        *,
++        worker: IsolatedWorkerPort,
++        isolation_backend_qualified: bool,
++        redactor: RedactionPipeline,
++        registered_secrets: tuple[str, ...] = (),
++    ) -> None:
++        self._worker = worker
++        self._qualified = isolation_backend_qualified
++        self._redactor = redactor
++        self._secrets = registered_secrets
++
++    def _collect_and_redact(self, chunks: tuple[bytes, ...], max_bytes: int) -> tuple[str, bool]:
++        stream = StreamingSecretRedactor(registered_secrets=self._secrets)
++        parts: list[str] = []
++        for ch in chunks:
++            parts.append(stream.feed(ch))
++        parts.append(stream.flush())
++        sanitized = self._redactor.sanitize_sink(
++            sink="stdout", text="".join(parts), data_class="WORKSPACE"
++        ).sanitized_text
++        encoded = sanitized.encode("utf-8")
++        if len(encoded) > max_bytes:
++            clipped = encoded[:max_bytes].decode("utf-8", errors="ignore")
++            return clipped, True
++        return sanitized, False
++
++    def execute(self, plan: ProcessExecutionPlan) -> ProcessExecutionResult:
++        plan.validate()
++        if not self._qualified:
++            raise PermissionError(
++                "CAPABILITY_UNAVAILABLE: isolated execution backend is not qualified; "
++                "refusing host execution fallback"
++            )
++
++        raw = self._worker.run_isolated(plan)
++        stdout_str, out_trunc = self._collect_and_redact(
++            raw.stdout_chunks, plan.limits.max_output_bytes
++        )
++        stderr_str, err_trunc = self._collect_and_redact(
++            raw.stderr_chunks, plan.limits.max_output_bytes
++        )
++
++        # Client exit never proves container stopped; unconfirmed container stop is UNKNOWN!
++        if not raw.container_confirmed_stopped:
++            status: ProcessOutcomeStatus = "UNKNOWN"
++            err_code: str | None = "CONTAINER_STOP_UNCONFIRMED"
++        elif raw.timed_out:
++            status = "FAILED"
++            err_code = "PROCESS_TIMEOUT"
++        elif raw.cancelled:
++            status = "FAILED"
++            err_code = "PROCESS_CANCELLED"
++        elif raw.signal is not None:
++            status = "FAILED"
++            err_code = f"SIGNAL_{raw.signal}"
++        elif raw.exit_code == 0:
++            status = "SUCCEEDED"
++            err_code = None
++        else:
++            status = "FAILED"
++            err_code = f"EXIT_{raw.exit_code}"
++
++        return ProcessExecutionResult(
++            operation_id=plan.operation_id,
++            attempt_id=plan.attempt_id,
++            dispatch_id=plan.dispatch_id,
++            status=status,
++            exit_code=raw.exit_code,
++            signal=raw.signal,
++            timed_out=raw.timed_out,
++            cancelled=raw.cancelled,
++            client_pid=raw.client_pid,
++            container_id=raw.container_id,
++            container_confirmed_stopped=raw.container_confirmed_stopped,
++            image_digest=plan.image_digest,
++            network_mode=plan.network_mode,
++            stdout=stdout_str,
++            stderr=stderr_str,
++            output_truncated=out_trunc or err_trunc,
++            error_code=err_code,
++        )
+--- /dev/null
 +++ b/services/core/src/openbot/tools/filesystem_guard.py
 @@ -0,0 +1,359 @@
 +"""OS handle-backed workspace path guard, atomic file verification, and Git/rg isolation."""
@@ -13536,7 +13812,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/036/037/038/039 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 与补丁工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入与敏感输出过滤；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/036/037/038/039/040 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 与补丁工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤与结构化进程执行协议；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -13897,6 +14173,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
  
  **需求** [RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)
+ 
+@@ -2525,7 +2525,7 @@
+ 
+ **实现结构化进程执行协议**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Platform · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
+ 
+ **需求** [RQ03](requirements_traceability.md#rq03)、[RQ05](requirements_traceability.md#rq05)
  
 @@ -3112,7 +3112,7 @@
  
@@ -14875,7 +15160,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2392,7 +2784,20 @@
+@@ -2392,14 +2784,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "redactor规则/长度/flush合同、网络验证禁用配置、canary矩阵及明确未覆盖风险。"
      ],
@@ -14897,7 +15182,37 @@
    },
    {
      "id": "OB-040",
-@@ -2851,7 +3256,7 @@
+     "title": "实现结构化进程执行协议",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Platform",
+     "size": "M",
+     "req_ids": [
+@@ -2457,7 +2862,20 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12–13、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第12–13、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 ProcessExecutionPlan, ControlledProcessExecutor, and contracts/schemas/dispatch.schema.json (shell wrapper and --pre rejection, CODE_EXECUTION classification for interpreters/git/pytest, fail-closed isolation check, separate client_pid/container_id UNKNOWN mapping, and output flood redaction)",
++      "evidence": [
++        "docs/evidence/backend-capabilities.md",
++        "contracts/schemas/dispatch.schema.json",
++        "tests/unit/test_process_executor.py",
++        "evidence/implementation/unit-contract-protocol.log"
++      ],
++      "blockers": [
++        "上游 OB-019、OB-031、OB-038、OB-039 仍为 IN_PROGRESS，且正式隔离执行后端需与 OB-041/042/093 联动闭合；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (ripgrep, git-worktree), reuse_type (control_owned), and reuse_notes; locked executable/argv/snapshot/image_digest/env/limits in ProcessExecutionPlan without shell strings; verified CODE_EXECUTION classification regardless of action label, zero host fallback when unqualified, and UNKNOWN mapping when container stop is unconfirmed."
++    }
+   },
+   {
+     "id": "OB-041",
+@@ -2851,7 +3269,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -14906,7 +15221,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3313,19 @@
+@@ -2908,7 +3326,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -14927,7 +15242,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4696,7 @@
+@@ -4279,7 +4709,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -14936,7 +15251,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4754,26 @@
+@@ -4337,14 +4767,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -14965,7 +15280,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4830,19 @@
+@@ -4401,7 +4843,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -14986,7 +15301,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5964,7 @@
+@@ -5523,7 +5977,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -14995,7 +15310,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6017,26 @@
+@@ -5576,14 +6030,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15024,7 +15339,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6095,26 @@
+@@ -5642,14 +6108,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -15053,7 +15368,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6169,26 @@
+@@ -5704,14 +6182,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15082,7 +15397,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6255,25 @@
+@@ -5778,14 +6268,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15110,7 +15425,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6341,19 @@
+@@ -5853,7 +6354,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -23576,6 +23891,163 @@
 +            )
 +    finally:
 +        db.close()
+--- /dev/null
++++ b/tests/unit/test_process_executor.py
+@@ -0,0 +1,154 @@
++import pytest
++from openbot.observability.redaction import RedactionPipeline
++from openbot.tools.executors.process import (
++    ControlledProcessExecutor,
++    ProcessExecutionPlan,
++    ProcessResourceLimits,
++    RawWorkerOutcome,
++    classify_command_security,
++)
++
++
++class FakeIsolatedWorker:
++    def __init__(self, outcome: RawWorkerOutcome) -> None:
++        self.outcome = outcome
++        self.executed_plans: list[ProcessExecutionPlan] = []
++
++    def run_isolated(self, plan: ProcessExecutionPlan) -> RawWorkerOutcome:
++        self.executed_plans.append(plan)
++        return self.outcome
++
++
++def _valid_plan(**overrides: object) -> ProcessExecutionPlan:
++    defaults: dict[str, object] = {
++        "operation_id": "op_proc_1",
++        "attempt_id": "att_proc_1",
++        "dispatch_id": "dsp_proc_1",
++        "action_label": "test.run",
++        "executable": "/usr/bin/python3",
++        "argv": ("/usr/bin/python3", "-m", "pytest", "-q"),
++        "workspace_snapshot_digest": "a" * 64,
++        "execution_backend": "ISOLATED_CONTAINER",
++        "image_digest": "sha256:" + ("b" * 64),
++        "network_mode": "NONE",
++        "isolated_home": "/workspace/.isolated_home",
++        "isolated_tmpdir": "/workspace/.isolated_tmp",
++        "env": {"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
++        "limits": ProcessResourceLimits(max_output_bytes=64),
++    }
++    defaults.update(overrides)
++    return ProcessExecutionPlan(**defaults)  # type: ignore[arg-type]
++
++
++def test_shell_wrappers_read_only_bypass_and_unqualified_backend_are_rejected():
++    # 1. pytest, python, npm, git, rg --pre are ALWAYS classified as CODE_EXECUTION
++    # even if action_label pretends to be 'search', 'snapshot', or 'read_only_lint'
++    for label, argv in (
++        ("read_only_test", ("pytest", "-q")),
++        ("lint", ("python3", "-m", "ruff")),
++        ("snapshot", ("git", "worktree", "add")),
++        ("search", ("rg", "--pre=/bin/sh", "pattern")),
++        ("build", ("npm", "test")),
++    ):
++        assert classify_command_security(label, argv) == "CODE_EXECUTION"
++
++    # 2. Raw shell strings or sh -c / bash -c wrappers are rejected
++    for shell_argv in (
++        ("sh", "-c", "echo hi"),
++        ("/bin/bash", "-c", "ls"),
++        ("cmd.exe", "/c", "dir"),
++    ):
++        with pytest.raises(PermissionError, match="shell"):
++            _valid_plan(executable=shell_argv[0], argv=shell_argv).validate()
++
++    # 3. Host backend or unqualified isolation backend refuses execution (no host fallback!)
++    worker = FakeIsolatedWorker(
++        RawWorkerOutcome(
++            client_pid=101,
++            container_id="cnt_1",
++            exit_code=0,
++            signal=None,
++            timed_out=False,
++            cancelled=False,
++            container_confirmed_stopped=True,
++            stdout_chunks=(b"ok",),
++            stderr_chunks=(),
++        )
++    )
++    unqualified = ControlledProcessExecutor(
++        worker=worker,
++        isolation_backend_qualified=False,
++        redactor=RedactionPipeline(),
++    )
++    with pytest.raises(PermissionError, match="not qualified"):
++        unqualified.execute(_valid_plan())
++    assert worker.executed_plans == []
++
++
++def test_output_flood_redaction_and_exit_signal_timeout_cancel_unknown_mapping():
++    canary = "sk_proc_canary_998877665544"
++    redactor = RedactionPipeline(registered_secrets=(canary,))
++
++    # 1. Output flood is capped at max_output_bytes (64) and redacted before return
++    flood_worker = FakeIsolatedWorker(
++        RawWorkerOutcome(
++            client_pid=201,
++            container_id="cnt_flood",
++            exit_code=0,
++            signal=None,
++            timed_out=False,
++            cancelled=False,
++            container_confirmed_stopped=True,
++            stdout_chunks=(f"leak={canary} ".encode(), b"X" * 200),
++            stderr_chunks=(),
++        )
++    )
++    exec_ok = ControlledProcessExecutor(
++        worker=flood_worker, isolation_backend_qualified=True, redactor=redactor
++    )
++    res_ok = exec_ok.execute(_valid_plan())
++    assert res_ok.status == "SUCCEEDED"
++    assert canary not in res_ok.stdout
++    assert res_ok.output_truncated is True
++    assert len(res_ok.stdout.encode("utf-8")) <= 64
++
++    # 2. Client exited or timed out while container is NOT confirmed stopped -> UNKNOWN!
++    unconfirmed_worker = FakeIsolatedWorker(
++        RawWorkerOutcome(
++            client_pid=202,
++            container_id="cnt_still_running",
++            exit_code=None,
++            signal=None,
++            timed_out=True,
++            cancelled=False,
++            container_confirmed_stopped=False,
++            stdout_chunks=(b"partial",),
++            stderr_chunks=(),
++        )
++    )
++    res_unk = ControlledProcessExecutor(
++        worker=unconfirmed_worker, isolation_backend_qualified=True, redactor=redactor
++    ).execute(_valid_plan())
++    assert res_unk.status == "UNKNOWN"
++    assert res_unk.container_id == "cnt_still_running"
++    assert res_unk.container_confirmed_stopped is False
++
++    # 3. Signal kill (e.g. SIGKILL=9) with confirmed container stop -> FAILED with signal recorded
++    sig_worker = FakeIsolatedWorker(
++        RawWorkerOutcome(
++            client_pid=203,
++            container_id="cnt_killed",
++            exit_code=137,
++            signal="SIGKILL",
++            timed_out=False,
++            cancelled=True,
++            container_confirmed_stopped=True,
++            stdout_chunks=(),
++            stderr_chunks=(b"OOMKilled",),
++        )
++    )
++    res_sig = ControlledProcessExecutor(
++        worker=sig_worker, isolation_backend_qualified=True, redactor=redactor
++    ).execute(_valid_plan())
++    assert res_sig.status == "FAILED"
++    assert res_sig.signal == "SIGKILL"
 --- /dev/null
 +++ b/tests/unit/test_redaction.py
 @@ -0,0 +1,89 @@

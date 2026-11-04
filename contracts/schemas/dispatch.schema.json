@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dispatch.schema.json",
+  "title": "dispatch.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.1"
+    },
+    "operation_id": {
+      "$ref": "../common.schema.json#/$defs/Id"
+    },
+    "attempt_id": {
+      "$ref": "../common.schema.json#/$defs/Id"
+    },
+    "dispatch_id": {
+      "$ref": "../common.schema.json#/$defs/Id"
+    },
+    "executable": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "workspace_snapshot_digest": {
+      "$ref": "../common.schema.json#/$defs/Sha256"
+    },
+    "execution_backend": {
+      "enum": [
+        "ISOLATED_CONTAINER",
+        "ISOLATED_WORKER"
+      ]
+    },
+    "image_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "network_mode": {
+      "enum": [
+        "NONE",
+        "LOOPBACK_ONLY",
+        "RESTRICTED_EGRESS"
+      ]
+    },
+    "isolated_home": {
+      "type": "string",
+      "minLength": 1
+    },
+    "isolated_tmpdir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "env": {
+      "type": "object",
+      "maxProperties": 32
+    },
+    "resource_limits": {
+      "type": "object",
+      "properties": {
+        "memory_bytes": {
+          "type": "integer",
+          "minimum": 1048576
+        },
+        "cpu_millis": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "pids_limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "max_output_bytes": {
+          "type": "integer",
+          "minimum": 64
+        }
+      },
+      "required": [
+        "memory_bytes",
+        "cpu_millis",
+        "pids_limit",
+        "timeout_ms",
+        "max_output_bytes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "operation_id",
+    "attempt_id",
+    "dispatch_id",
+    "executable",
+    "argv",
+    "workspace_snapshot_digest",
+    "execution_backend",
+    "image_digest",
+    "network_mode",
+    "isolated_home",
+    "isolated_tmpdir",
+    "env",
+    "resource_limits"
+  ],
+  "additionalProperties": false
+}
