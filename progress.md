@@ -89,9 +89,10 @@
 - 推进 OB-068（实现用户级 daemon 安装与卸载）：实现 UserDaemonInstaller、双语安装说明 docs/install/user-daemon.md 与 native/supervisor/packaging/README.md（仅允许 user_session 级服务，拦截 system/root/LocalSystem 高权限服务与 Tauri 直接启动第二 daemon，卸载时完整保留用户工作区）；新增单元测试通过，M0 增至 290 passed/3 skipped，M1 增至 309 passed/1 skipped。因上游 OB-005/093 三平台实测未闭合，OB-068 记 IN_PROGRESS。
 - 推进 OB-069（建立 macOS 原生运行门禁）：实现 MacOSNativePlatformGate、.github/workflows/platform-macos.yml 与集成测试 tests/integration/platform/macos/test_macos_native_gate.py（在 Darwin arm64 上实测文件/符号链接守卫、Keychain 分域、用户级 daemon 描述文件、专用浏览器 profile 锁与进程组回收；诚实标记 intel_x86_64_verified=False、screen_recording_permission_requested=False）；M0 增至 291 passed/3 skipped，M1 增至 310 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-069 记 IN_PROGRESS。
 - 推进 OB-072（建立可复现打包与运行资源清单）：实现 PackagingBundleAuditor、scripts/build/build_pilot_bundle.py、packaging/runtime-assets.json 与双语说明 docs/runtime-dependencies.md（明确标记 M3_UNSIGNED_PILOT 且 signed_m4_release_claimed=False；禁止首次使用时静默下载浏览器/grammar/词表；拦截 .env/sqlite/key/cache 混入产物）；新增单元测试通过，M0 增至 292 passed/3 skipped，M1 增至 311 passed/1 skipped。因上游 OB-005/070/071 缺少 Windows/Linux 原生实机，OB-072 记 IN_PROGRESS。
+- 推进 OB-075（实现统一可观测性与诊断）：实现 ObservabilityHub、TraceCorrelationContext 与双语运维说明 docs/operations/observability.md（结构化关联 task/operation/attempt，从 metrics 标签剥离高基数 ID，丢弃模型隐藏思维链，默认禁用远程上报，显式导出的诊断包统一经 RedactionPipeline 脱敏）；新增单元测试通过，M0 增至 293 passed/3 skipped，M1 增至 312 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-075 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, and `OB-095`, reaching 292 passed M0 checks and 311 passed M1 checks.
+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`, and `OB-095`, reaching 293 passed M0 checks and 312 passed M1 checks.
