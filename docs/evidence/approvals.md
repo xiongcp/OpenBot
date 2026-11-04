@@ -1,4 +1,4 @@
-# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031 / OB-032：提案、审批、六维策略、两次短事务派发、恢复、取消与文件句柄守卫 / Proposals, Approvals, 6D Policy, Two-Phase Dispatch, Recovery, Cancellation, and Workspace File Guard
+# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031 / OB-032 / OB-037：提案、审批、六维策略、两次短事务派发、恢复、取消、文件句柄守卫与统一外发策略 / Proposals, Approvals, 6D Policy, Two-Phase Dispatch, Recovery, Cancellation, File Guard, and Unified Egress Policy
 
 ## 中文说明
 
@@ -28,13 +28,19 @@
 2. OS 目录句柄与 `O_NOFOLLOW` 逐步核验（`WorkspaceFileGuard`）：从工作区根 `dir_fd` 逐段执行 `os.lstat(..., dir_fd=cur_fd)` 与 `os.open(..., O_DIRECTORY | O_NOFOLLOW, dir_fd=cur_fd)` 校验 `st_dev` 与 `st_ino`，任何中间或末端 symlink、跨设备挂载、非普通文件或多硬链接写覆盖均立即拒绝；`observe` 记录父目录 inode、文件 inode 与 SHA-256，`write_atomic` 在同父目录句柄内复验父目录 inode 与旧文件 SHA-256 后经同目录临时文件 `fsync` + `os.replace(..., src_dir_fd=parent_fd, dst_dir_fd=parent_fd)` 原子替换，阻断观测后父目录被替换为外部符号链接的竞态。
 3. Git worktree 与 ripgrep 安全隔离（`build_safe_git_worktree_env_and_argv`、`build_safe_ripgrep_argv`）：在调用 Git 前审计 `.git/config` 与 `.gitattributes`，拒绝 `fsmonitor`、`hooksPath`、`sshCommand`、`filter.*` 等可执行指令，并强制 `-c core.hooksPath=/dev/null -c core.fsmonitor=false -c protocol.allow=never` 与 `GIT_CONFIG_NOSYSTEM=1`；ripgrep 构建器剥离 `RIPGREP_CONFIG_PATH` 并强制 `--no-config --no-pre --no-follow --`，确保模式串不注入 `--pre` 预处理器。
 
+实现（OB-037）：新增 `services/core/src/openbot/policy/egress.py`（`EgressGuard`、`EgressRequest`、`EgressDecision`、`LocalModelRunnerAttestation`、`ControlledHttpConfig`、`build_controlled_http_config`）：
+1. 全出口统一评估：共享覆盖 `MODEL_GATEWAY`、`LOCAL_MODEL_RUNNER`、`FEISHU_NOTIFICATION`、`BROWSER`、`MCP`、`FILE_UPLOAD` 与 `MESSAGE_TOOL`；`OFFLINE` 模式阻断所有出口的全部远端连接（不只限制 LLM）；`SECRET` 数据在任何出口（含 `redacted=True`）均硬拒绝（`SECRET_EGRESS_FORBIDDEN`）。
+2. 敏感预览/摘要保护与隐式出口阻断：`SENSITIVE` 数据不会因放进通知卡片（返回 `REQUIRE_LOCAL`）、上下文摘要（`from_summary=True`）或 Artifact（`from_artifact=True`）而自动放行，发送到允许域名的模型也必须经过显式一次一审 `ASK`；任何 Provider 托管 `web_search`/`remote_mcp`、价格表/词表/语法包运行期下载或扫描器在线验证均直接 `DENY`。
+3. 本地模型 Runner 核验与受控 HTTP 代理配置：允许 loopback 地址不等于允许云转发，必须通过 `LocalModelRunnerAttestation` 证明本地模型来源、禁用 `:cloud` 路由、禁用 web search 且出口隔离已验证；`build_controlled_http_config` 强制 `trust_env=False`、`follow_redirects=False`、`max_retries=0`，清理环境 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` 并仅允许白名单内代理，同时显式声明 Python 审计探针覆盖范围与需要 OS/容器隔离证明的边界。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及 Windows/Linux 原生句柄测试尚未闭合。因此 OB-017/018/019/020/022/031/032 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及 Windows/Linux 原生句柄测试尚未闭合。因此 OB-017/018/019/020/022/031/032/037 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 
 ## English Summary
 
@@ -50,3 +56,7 @@
   1. `validate_relative_workspace_path`: Rejects traversal, absolute paths, UNC/Win32 device prefixes (`\\?\`, `\\.\`), ADS (`:`), reserved Windows device names (`CON`, `NUL`, `COM1`, etc.), trailing dots/spaces, and `.git`/`.env`/private key paths.
   2. `WorkspaceFileGuard`: Walks directory descriptors step-by-step with `O_NOFOLLOW` and `dir_fd`, verifying `st_dev` and `st_ino` at every hop; `observe` and `write_atomic` re-verify parent directory inode and old SHA-256 before writing via `fsync` + `os.replace(..., src_dir_fd=parent_fd, dst_dir_fd=parent_fd)` to defeat symlink swap races.
   3. `build_safe_git_worktree_env_and_argv` & `build_safe_ripgrep_argv`: Rejects `.git/config` hooks/filters/fsmonitor and enforces `-c core.hooksPath=/dev/null`; strips `RIPGREP_CONFIG_PATH` and forces `--no-config --no-pre --no-follow --`.
+- **OB-037 (`IN_PROGRESS`)**: Unified data egress policy (`services/core/src/openbot/policy/egress.py`):
+  1. `EgressGuard`: Evaluates `PUBLIC`/`WORKSPACE`/`SENSITIVE`/`SECRET` across `MODEL_GATEWAY`, `LOCAL_MODEL_RUNNER`, `FEISHU_NOTIFICATION`, `BROWSER`, `MCP`, `FILE_UPLOAD`, and `MESSAGE_TOOL`; `OFFLINE` blocks remote egress across all surfaces; `SECRET` is always denied.
+  2. Taint & implicit-feature protection: `SENSITIVE` data in notification cards returns `REQUIRE_LOCAL` and in summaries/artifacts to allowed model domains requires `ASK`; provider-hosted `web_search`/`remote_mcp`, asset downloads, and online secret verification are denied.
+  3. `LocalModelRunnerAttestation` & `build_controlled_http_config`: Requires verified local model source, disabled cloud routing, and isolated egress rather than trusting `localhost`; strips ambient proxy variables and enforces `trust_env=False`, `follow_redirects=False`, `max_retries=0` while documenting Python probe boundaries.
