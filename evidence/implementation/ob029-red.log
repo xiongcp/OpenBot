@@ -1,0 +1,16 @@
+
+==================================== ERRORS ====================================
+_ ERROR collecting tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py _
+ImportError while importing test module '/Users/admin-1234/work/OpenBot/tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py:4: in <module>
+    from openbot.application.vertical_slice import M1VerticalSliceHarness
+E   ModuleNotFoundError: No module named 'openbot.application.vertical_slice'
+=========================== short test summary info ============================
+ERROR tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.06s

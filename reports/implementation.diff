@@ -2143,6 +2143,42 @@
 +
 +迁移实测补充：SQLite 在 ALTER TABLE ADD COLUMN 内部调用 `quick_check(table)`，旧 authorizer 全拒 PRAGMA 会阻断合法升级。仅当当前单条语句是未加引号的受审查 ALTER TABLE ADD COLUMN 时，允许 main 中同表的只读内部 quick_check；显式 PRAGMA（包括 quick_check）仍拒绝，事务/ATTACH/SAVEPOINT 限制不变。实际跟踪已确认动作参数为 quick_check / operations / main；不全局放开 PRAGMA。
 --- /dev/null
++++ b/docs/demos/m1.md
+@@ -0,0 +1,33 @@
++# M1 首条持久化垂直切片演示与验收说明 / M1 First Persistent Vertical Slice Demo & Verification (OB-029)
++
++## 中文说明
++
++### 1. 演示范围与设计边界（OB-091 vs OB-029）
++- **OB-091（M0 早期协议 PoC）**：仅在 `tests/protocol/` 中用 MockWorker 验证 8 个崩溃点与 23 表 CAS/触发器语义，不接入认证本地 API、CLI、真实工作区补丁或受控子进程。
++- **OB-029（M1 首条持久化垂直切片）**：通过 `services/core/src/openbot/application/vertical_slice.py`（`M1VerticalSliceHarness`）与 `tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py`，将 **CLI (`openbot.cli`) → 认证本地控制 API (`LocalControlApiServer`) → 持久 Task (`Inbox`/`TaskStateService`) → 离线提案 (`OperationService`) → 六维策略与审批 (`ApprovalService` + 一次性 challenge nonce) → 两次短事务派发 (`DispatchService`) → 真实本地受限文件补丁 (`WorkspacePatchTool`) / Artifact 存储 (`ArtifactStore`) / 进程树监管回收 (`ProcessSupervisorService`) → 持久 Outbox (`OutboxService`)** 闭环串联。
++- **严格离线与诚实声明**：默认运行于 `OFFLINE` 模式与合成数据，**绝不调用真实生产云模型或真实飞书服务**；本地受限文件/进程效果与 fault executor 崩溃注入计数分别独立统计，不将本地 FakeProvider 通过宣称为真实飞书或真实云模型已验证。
++
++### 2. 五个崩溃点与重复输入验证
++1. `before_claim`：审批通过（`READY`）后、首次 `claim` 前发生 runtime epoch 切换（`ep_1 -> ep_2`），未发生任何外部副作用（`fault_executor_effect_count = 0`），新 epoch 正常接管完成。
++2. `after_claim_before_dispatch`：首次 `claim` 消费 `APPROVED -> CONSUMED` 后、第二短事务 `begin_dispatch` 前崩溃重启；原 `CONSUMED` 绝不复活，由 `RecoveryService.recover_operation` 复验原授权未过期/未漂移后签发一次性 `RecoveryTicket` 完成 Attempt 2 派发（崩溃前副作用计数 `0`，盲目重放计数 `0`）。
++3. `after_dispatch_before_effect`：进入 `DISPATCHING` 后崩溃重启，自动转入 `UNKNOWN` 与 Task `RECONCILING` 并冻结资源租约（quarantine）；经 CLI `operation reconcile` 上传内联核对证据并执行 `task resume` 恢复。
++4. `after_effect_before_receipt`：外部动作已执行一次（`fault_executor_effect_count = 1`），但在本地写入完成回执前崩溃；恢复器严禁自动重放 `RECONCILE_ONLY` 副作用（`blind_replay_count = 0`），经 CLI 提交核对证据后转 `SUCCEEDED`。
++5. `after_complete_before_outbox_ack`：业务操作已完成且通知已入队 `outbox`，在投递确认前发生 epoch 切换；新 epoch 仅继续投递 `outbox` 消息，绝不重新执行业务操作。
++
++### 3. 可复现验证命令
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q`（6 passed）
++
++---
++
++## English Summary
++
++### 1. Scope & Boundary (OB-091 vs OB-029)
++- **OB-091 (M0 Protocol PoC)**: Verified crash-recovery state transitions in `tests/protocol/` using MockWorker without the authenticated local HTTP API, CLI, real workspace file patching, or supervised worker processes.
++- **OB-029 (M1 First Persistent Vertical Slice)**: Connects **CLI (`openbot.cli`) → Authenticated Local Control API (`LocalControlApiServer`) → Persistent Task (`Inbox`/`TaskStateService`) → Offline Proposal (`OperationService`) → 6D Policy & Approval (`ApprovalService` with one-time challenge nonce) → Two-Transaction Dispatch (`DispatchService`) → Real Restricted Workspace File Patch (`WorkspacePatchTool`) / Artifact Store (`ArtifactStore`) / Supervised Worker Reclaim (`ProcessSupervisorService`) → Durable Outbox (`OutboxService`)** in `services/core/src/openbot/application/vertical_slice.py`.
++- **Offline & Honest Boundary**: Runs strictly in `OFFLINE` mode with synthetic data (`real_production_services_called = False`). Real local file/process effects and fault-executor crash counts are tracked separately without claiming real Feishu or production cloud model qualification.
++
++### 2. Five Crash Points & Duplicate Input Verification
++Covers `before_claim`, `after_claim_before_dispatch` (recovering via one-time `RecoveryTicket` without reviving `CONSUMED`), `after_dispatch_before_effect`, `after_effect_before_receipt` (entering `UNKNOWN`/`RECONCILING` with zero blind replay, resolved via CLI `operation reconcile` and `task resume`), and `after_complete_before_outbox_ack`, plus idempotent duplicate CLI `task create` requests.
++
++### 3. Reproducible Command
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q` (`6 passed`)
+--- /dev/null
 +++ b/docs/dependency-evidence.md
 @@ -0,0 +1,13 @@
 +# OB-004 / OB-089：阶段依赖证据
@@ -2160,8 +2196,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,138 @@
-+# OB-017—020 / OB-022 / OB-028 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API 与 CLI / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, and CLI
+@@ -0,0 +1,146 @@
++# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI 与首条持久化垂直切片 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, and First Persistent Vertical Slice
 +
 +## 中文说明
 +
@@ -2238,6 +2274,10 @@
 +1. 纯本地认证 API 会话与零 SQLite 旁路：`task create|show|cancel|resume`、`approval preview|decide`（`APPROVE` 自动通过 `owner_cli` token 申请一次性 challenge nonce，`feishu_gateway` 调用返回码 `3`）、`operation reconcile`（上传内联证据生成 `OPERATION` artifact 后提交核对）全经 `/v1/*` 完成。
 +2. 反旁路、ANSI 转义与超时未知语义：拦截 `--ignore-and-rerun`、`--force-success`、`--revive-consumed`（返回码 `6`）；`sanitize_terminal_text` 剥离 ANSI CSI/OSC 控制字符与富文本标签；无 daemon 返回码 `2`，等待超时返回码 `5` 且强制声明 `action_guaranteed_not_executed=false`、`requery_required=true`。
 +
++实现（OB-029）：新增 `services/core/src/openbot/application/vertical_slice.py`（`M1VerticalSliceHarness`）、`tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py` 与中英双语 `docs/demos/m1.md`：
++1. 真实本地受限效果闭环（`run_local_restricted_effect_slice`）：在 `OFFLINE` 模式下串联 CLI → 认证本地控制 API → 持久 Task → 工作区文件补丁提案（`WorkspacePatchTool` + `ArtifactStore` SHA-256 冻结）→ CLI 审批（`CONSUMED` 一次性消费）→ `claim`/`begin_dispatch` → 真实工作区文件修改、受监管子进程回收（`ProcessSupervisorService`）与持久 Outbox 投递（`OutboxService`）。
++2. 五个崩溃点与重复输入验证（`run_fault_crash_scenario`）：覆盖 `before_claim`、`after_claim_before_dispatch`（一次性 `RecoveryTicket` 恢复）、`after_dispatch_before_effect`、`after_effect_before_receipt`（`UNKNOWN`/`RECONCILING` 零盲目重放 + CLI 核对恢复）与 `after_complete_before_outbox_ack`，并校验重复 CLI 请求 ID 幂等稳定。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2247,10 +2287,11 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q --tb=short`（6 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：上游 OB-093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-029 垂直切片完整闭合。
++当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
 +
 +## English Summary
 +
@@ -2299,6 +2340,9 @@
 +- **OB-028 (`IN_PROGRESS`)**: Authenticated CLI task, approval, and reconciliation commands (`services/core/src/openbot/cli.py` and `tests/integration/cli/test_cli_workflow.py`, 2 passed):
 +  1. Loopback API session without SQLite bypass: Supports `task create|show|cancel|resume`, `approval preview|decide` (requesting owner-scoped challenge nonce before `APPROVE`), and `operation reconcile` (uploading inline evidence before reconciliation).
 +  2. Anti-bypass, ANSI stripping, and timeout honesty: Rejects `--ignore-and-rerun`, `--force-success`, and `--revive-consumed` (exit code `6`); strips ANSI CSI/OSC and rich-text tags via `sanitize_terminal_text`; returns exit code `2` when daemon is down and exit code `5` on wait timeout with `action_guaranteed_not_executed=false` and `requery_required=true`.
++- **OB-029 (`IN_PROGRESS`)**: First persistent vertical slice (`services/core/src/openbot/application/vertical_slice.py`, `tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py`, and `docs/demos/m1.md`, 6 passed):
++  1. Real local restricted workspace patch, Artifact SHA-256 verification, supervised worker reclaim, and durable Outbox delivery closed loop in `OFFLINE` mode via CLI and authenticated Local Control API.
++  2. Five crash injection points (`before_claim`, `after_claim_before_dispatch`, `after_dispatch_before_effect`, `after_effect_before_receipt`, `after_complete_before_outbox_ack`) and duplicate CLI idempotency verification with zero blind replay.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2645,7 +2689,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,69 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2708,12 +2752,13 @@
 +- 推进 OB-015（实现单实例 daemon 和调度租约）：实现 SingleInstanceSupervisorLock、DaemonHandoffTicket、ProfileSchedulerService 与 native/supervisor/src/instance_lock.rs（supervisor 独占非阻塞 flock 并签发 handoff ticket，子 daemon 校验凭据而不重复加锁避免父子自锁，第二实例立即返回 PROFILE_LOCK_HELD；old_workers_isolated=False 时拒绝开启新执行；单活动 Task 槽位在 WAITING_APPROVAL 释放，陈旧 runtime_epoch/fencing_token 提交拒绝）；新增 2 项集成测试通过，存储套件增至 91 passed，M0 增至 254 passed/3 skipped，M1 增至 273 passed/1 skipped。因上游 OB-093 仍为 IN_PROGRESS，OB-015 记 IN_PROGRESS。
 +- 推进 OB-081（在 M1 实现认证本地 HTTP 与 SSE 控制 API）：实现 LocalControlApiServer 与 ScopedTokenStore（loopback IP、Host/Origin 校验、拦截 X-Forwarded-For 代理伪造、X-OpenBot-Profile 绑定与 owner_cli/feishu_gateway/webview_readonly 分域 token；提供 health/tasks/cancel/resume/approvals preview & challenge & decide/operations snapshot & evidence & reconcile/SSE events；预览隐藏 SECRET，证据上传禁宿主路径，reconcile 禁客户端指定目标状态，SSE 校验游标冲突 400 与过期 410）；新增契约与安全测试通过，M0 增至 256 passed/3 skipped，M1 增至 275 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-081 记 IN_PROGRESS。
 +- 推进 OB-028（提供 CLI 任务和审批操作）：实现 CliApiSession、run_cli_command 与 sanitize_terminal_text（通过认证本地 API 执行 task create/show/cancel/resume、approval preview/decide 与 operation reconcile，零 SQLite 旁路；拦截 --ignore-and-rerun/--force-success/--revive-consumed 返回码 6；剥离 ANSI CSI/OSC 与富文本标签；无 daemon 返回码 2，等待超时返回码 5 且声明 action_guaranteed_not_executed=false）；新增 2 项集成测试通过，M0 增至 258 passed/3 skipped，M1 增至 277 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-028 记 IN_PROGRESS。
++- 推进 OB-029（交付首条持久化垂直切片）：实现 M1VerticalSliceHarness、双语演示说明 docs/demos/m1.md 与 6 项垂直切片集成测试（在 OFFLINE 模式下串联 CLI -> 认证本地 API -> 持久 Task -> 工作区补丁与 Artifact SHA-256 -> CLI 审批 -> claim/begin_dispatch -> 真实本地文件修改、受监管子进程回收与持久 Outbox 投递；覆盖 5 个崩溃点与重复 CLI 请求幂等，零盲目重放，且不伪称真实生产服务已调用）；M0 增至 264 passed/3 skipped，M1 增至 283 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-029 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
-+- Implemented and verified M1 runtime, security, tools, platform, local control API, and CLI tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`, `OB-030`–`OB-044`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 258 passed M0 checks, and 277 passed M1 checks.
-+- Next ready M1 tasks: `OB-029` (first persistent vertical slice), `OB-045` (security tool threat regression), and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
++- Implemented and verified M1 runtime, security, tools, platform, local control API, CLI, and first persistent vertical slice on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-044`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 264 passed M0 checks, and 283 passed M1 checks.
++- Next ready M1 tasks: `OB-045` (security tool threat regression) and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -8861,6 +8906,740 @@
 +            return result
 +
 +        return self._writer.read(query)
+--- /dev/null
++++ b/services/core/src/openbot/application/vertical_slice.py
+@@ -0,0 +1,731 @@
++"""M1 persistent vertical slice harness integrating CLI, Local API, Artifacts, and Outbox."""
++
++import hashlib
++import json
++import os
++import secrets
++import sqlite3
++import subprocess
++import sys
++import time
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++from openbot.adapters.local_api.server import (
++    ApiRequest,
++    ApiResponse,
++    LocalControlApiServer,
++    ScopedTokenStore,
++)
++from openbot.application.cancellation import CancellationService
++from openbot.application.dispatch import DispatchService
++from openbot.application.operations import OperationService
++from openbot.application.outbox import (
++    GatewaySendResult,
++    OutboxEnvelope,
++    OutboxService,
++)
++from openbot.application.recovery import RecoveryService
++from openbot.application.resources import ResourceRequest
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactStore
++from openbot.cli import CliApiSession, run_cli_command
++from openbot.contracts import SchemaRegistry, canonicalize
++from openbot.policy.approvals import ApprovalService
++from openbot.storage.inbox import InboundContext, Inbox, authorize
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.outbox import OutboxStore
++from openbot.storage.writer import LookupResult, Writer, WriterCommand
++from openbot.tools.executors.supervision_port import ProcessSupervisorService
++from openbot.tools.workspace.patch import FileEditSpec, WorkspacePatchTool
++
++
++class _InProcessTransport:
++    def __init__(self, api: LocalControlApiServer) -> None:
++        self._api = api
++
++    def request(self, req: ApiRequest) -> ApiResponse:
++        return self._api.handle(req)
++
++
++class _MemoryChallenges:
++    def __init__(self) -> None:
++        self._items: dict[str, bytes] = {}
++
++    def put(self, approval_id: str, nonce: bytes) -> None:
++        self._items[approval_id] = nonce
++
++    def get(self, approval_id: str) -> bytes | None:
++        return self._items.get(approval_id)
++
++
++class _OfflineSyntheticGateway:
++    sdk_max_retries: int = 0
++
++    def __init__(self) -> None:
++        self.delivered_Ids: list[str] = []
++
++    def capabilities(self) -> frozenset[str]:
++        return frozenset({"UPSERT_REVISION", "PROVIDER_IDEMPOTENT"})
++
++    def send(self, envelope: OutboxEnvelope) -> GatewaySendResult:
++        self.delivered_Ids.append(envelope.outbox_id)
++        return GatewaySendResult(
++            status="SENT",
++            provider_message_id=f"msg_{envelope.outbox_id}",
++            remote_revision=envelope.revision,
++            exact_once_supported=True,
++        )
++
++
++def _seed_vertical_slice_db(db: sqlite3.Connection) -> None:
++    db.execute("INSERT INTO policy_revisions VALUES(1, ?,'{}', 1000, 1000)", ("a" * 64,))
++    db.execute(
++        "INSERT INTO runtime_instances("
++        "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++        "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++    )
++    db.execute(
++        "INSERT INTO profile_config("
++        "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++        "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++        "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_1',0,1000,1000)"
++    )
++    db.execute(
++        "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++        "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++    )
++    db.execute(
++        "INSERT INTO workspaces("
++        "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++        "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++    )
++    db.execute(
++        "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++        "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++    )
++    for name, effect, retry_class in (
++        ("fs.patch", "LOCAL_WRITE", "IDEMPOTENT_WRITE"),
++        ("gui.click", "EXTERNAL_WRITE", "RECONCILE_ONLY"),
++    ):
++        manifest = {
++            "name": name,
++            "version": "1.0.0",
++            "effect": effect,
++            "retry_class": retry_class,
++            "input_schema": {
++                "$schema": "https://json-schema.org/draft/2020-12/schema",
++                "type": "object",
++                "properties": {"arg": {"type": "string"}},
++                "required": ["arg"],
++                "additionalProperties": False,
++            },
++        }
++        raw = canonicalize(manifest)
++        db.execute(
++            "INSERT INTO tool_registry VALUES(?, '1.0.0', ?, NULL, 'builtin', ?, 'ACTIVE', 1000)",
++            (name, hashlib.sha256(raw).hexdigest(), raw.decode()),
++        )
++
++
++@dataclass
++class M1VerticalSliceHarness:
++    root_dir: Path
++    workspace_dir: Path
++    context: InboundContext
++    writer: Writer
++    tasks: TaskStateService
++    operations: OperationService
++    approvals: ApprovalService
++    dispatcher: DispatchService
++    recovery: RecoveryService
++    artifacts: ArtifactStore
++    outbox: OutboxService
++    patch_tool: WorkspacePatchTool
++    cli_session: CliApiSession
++
++    @classmethod
++    def create(cls, base_dir: Path) -> "M1VerticalSliceHarness":
++        base_dir.mkdir(parents=True, exist_ok=True)
++        repo_root = Path(__file__).resolve().parents[5]
++        db_path = base_dir / "slice.sqlite"
++        blob_dir = base_dir / "blobs"
++        ws_dir = base_dir / "workspace"
++        journal_dir = base_dir / "journals"
++        ws_dir.mkdir(parents=True, exist_ok=True)
++        journal_dir.mkdir(parents=True, exist_ok=True)
++        (ws_dir / "hello.py").write_text("value = 1\n", encoding="utf-8")
++
++        migrate(db_path, load_migrations(repo_root / "db/migrations"))
++        db = connect(db_path)
++        try:
++            _seed_vertical_slice_db(db)
++        finally:
++            db.close()
++
++        context = InboundContext(
++            "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++        )
++        registry = SchemaRegistry.from_directory(repo_root / "contracts")
++        challenges = _MemoryChallenges()
++        writer = Writer(db_path)
++        inbox = Inbox(writer, registry)
++        tasks = TaskStateService(writer)
++        ops = OperationService(writer, challenges, registry)
++        approvals = ApprovalService(writer, challenges, registry)
++        dispatcher = DispatchService(writer, registry)
++        recovery = RecoveryService(writer, registry)
++        cancellation = CancellationService(writer)
++        artifacts = ArtifactStore(writer, blob_dir)
++        outbox_store = OutboxStore(writer)
++        outbox = OutboxService(writer, outbox_store)
++        patch_tool = WorkspacePatchTool(ws_dir, artifacts, journal_dir)
++        tokens = ScopedTokenStore()
++        owner_token = tokens.issue(
++            profile_id="pro_test1", principal_id="pri_test1", scope="owner_cli"
++        )
++        api = LocalControlApiServer(
++            profile_id="pro_test1",
++            default_context=context,
++            writer=writer,
++            registry=registry,
++            tokens=tokens,
++            inbox=inbox,
++            tasks=tasks,
++            operations=ops,
++            approvals=approvals,
++            recovery=recovery,
++            cancellation=cancellation,
++            artifacts=artifacts,
++            challenges=challenges,
++        )
++        cli_session = CliApiSession(
++            profile_id="pro_test1",
++            token=owner_token,
++            transport=_InProcessTransport(api),
++        )
++        return cls(
++            root_dir=base_dir,
++            workspace_dir=ws_dir,
++            context=context,
++            writer=writer,
++            tasks=tasks,
++            operations=ops,
++            approvals=approvals,
++            dispatcher=dispatcher,
++            recovery=recovery,
++            artifacts=artifacts,
++            outbox=outbox,
++            patch_tool=patch_tool,
++            cli_session=cli_session,
++        )
++
++    def close(self) -> None:
++        self.writer.close()
++
++    def _complete_operation_and_task(self, task_id: str, op_id: str, attempt_id: str) -> None:
++        now = time.time_ns() // 1_000_000
++        fp = hashlib.sha256(f"complete:{op_id}:{attempt_id}".encode()).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return None
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            authorize(db, self.context)
++            db.execute(
++                "UPDATE resource_leases SET holder_attempt_id=NULL,runtime_epoch=NULL,"
++                "state='RELEASED',acquired_at=NULL,expires_at=NULL,version=version+1,"
++                "updated_at=? WHERE holder_attempt_id=? AND state='HELD'",
++                (now, attempt_id),
++            )
++            db.execute(
++                "UPDATE operation_attempts SET status='SUCCEEDED',receipt_json='{}',"
++                "finished_at=?,version=version+1 WHERE attempt_id=?",
++                (now, attempt_id),
++            )
++            db.execute(
++                "UPDATE operations SET state='SUCCEEDED',completed_at=?,updated_at=?,"
++                "version=version+1 WHERE operation_id=?",
++                (now, now, op_id),
++            )
++            db.execute(
++                "UPDATE tasks SET state='SUCCEEDED',finished_at=?,version=version+1,"
++                "updated_at=? WHERE task_id=?",
++                (now, now, task_id),
++            )
++            return canonicalize({"status": "SUCCEEDED"})
++
++        self.writer.submit(
++            WriterCommand(f"cmp_{secrets.token_hex(6)}", fp, "result", 999999999999, apply, lookup)
++        ).result(5)
++
++    def run_local_restricted_effect_slice(self) -> dict[str, Any]:
++        # 1. Create task via CLI -> Local API
++        code_c, out_c = run_cli_command(
++            [
++                "task",
++                "create",
++                "--workspace",
++                "wsp_test1",
++                "--goal",
++                "m1-vertical-slice",
++                "--idempotency-key",
++                "m1-slice-k1",
++                "--json",
++            ],
++            session=self.cli_session,
++        )
++        assert code_c == 0
++        task_id = str(json.loads(out_c)["task_id"])
++
++        self.writer.submit(
++            self.tasks.command(self.context, task_id, 0, "RUNNING", "slice-run-1", 999999999999)
++        ).result(5)
++
++        # 2. Propose real workspace patch + operation proposal
++        bundle = self.patch_tool.propose_patch(
++            self.context,
++            task_id=task_id,
++            edits=(
++                FileEditSpec(
++                    relative_path="hello.py", old_snippet="value = 1\n", new_snippet="value = 2\n"
++                ),
++            ),
++            request_id="slice-patch-prop-1",
++            deadline_monotonic_ms=999999999999,
++        )
++        proposed = json.loads(
++            self.operations.propose(
++                self.context,
++                task_id,
++                "fs.patch",
++                json.dumps({"arg": bundle.bundle_id}),
++                {"workspace_generation": 1, "files": []},
++                "WORKSPACE",
++                {"kind": "LOCAL", "resource_ref": self.context.workspace_id},
++                "slice-op-prop-1",
++                999999999999,
++            )
++        )
++        op_id, apr_id = str(proposed["operation_id"]), str(proposed["approval_id"])
++
++        # 3. Preview and approve via CLI
++        code_p, _ = run_cli_command(
++            ["approval", "preview", "--approval-id", apr_id, "--json"], session=self.cli_session
++        )
++        assert code_p == 0
++        code_d, _ = run_cli_command(
++            [
++                "approval",
++                "decide",
++                "--approval-id",
++                apr_id,
++                "--expected-version",
++                "1",
++                "--binding-hash",
++                str(proposed["binding_hash"]),
++                "--decision",
++                "APPROVE",
++                "--idempotency-key",
++                "slice-apr-1",
++                "--json",
++            ],
++            session=self.cli_session,
++        )
++        assert code_d == 0
++
++        # 4. Claim & begin_dispatch
++        self.writer.submit(
++            self.tasks.command(self.context, task_id, 3, "RUNNING", "slice-run-2", 999999999999)
++        ).result(5)
++        claimed = json.loads(
++            self.writer.submit(
++                self.dispatcher.claim(
++                    self.context,
++                    op_id,
++                    "ep_1",
++                    "exec_1",
++                    [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1)],
++                    30_000,
++                    "slice-claim-1",
++                    999999999999,
++                )
++            ).result(5)
++        )
++        attempt_id = str(claimed["attempt_id"])
++        self.writer.submit(
++            self.dispatcher.begin_dispatch(
++                self.context, op_id, attempt_id, "ep_1", "exec_1", "slice-disp-1", 999999999999
++            )
++        ).result(5)
++
++        # 5. Execute real local restricted workspace patch & supervised worker process
++        apply_report = self.patch_tool.apply_patch(self.context, bundle)
++        assert apply_report.status == "APPLIED"
++
++        sup = ProcessSupervisorService(runtime_epoch="ep_1")
++        proc = subprocess.Popen(
++            [sys.executable, "-c", "import time; time.sleep(0.05)"],
++            start_new_session=True,
++        )
++        sup.register_worker(
++            worker_id="wrk_slice_1",
++            operation_id=op_id,
++            attempt_id=attempt_id,
++            pid=proc.pid,
++            pgid=os.getpgid(proc.pid),
++            process_start_token="tok_slice_1",
++        )
++        reclaim_report = sup.reclaim_worker(
++            "wrk_slice_1", current_start_token="tok_slice_1", grace_ms=100
++        )
++        proc.wait(timeout=2)
++
++        self._complete_operation_and_task(task_id, op_id, attempt_id)
++
++        # 6. Enqueue and deliver durable outbox notification
++        self.writer.submit(
++            self.outbox.enqueue(
++                self.context,
++                task_id=task_id,
++                target_key="local:owner",
++                target={"channel": "local", "principal_id": "pri_test1"},
++                semantic_key=f"task_done:{task_id}",
++                payload={"summary": "M1 vertical slice completed"},
++                request_id="slice-outbox-enq-1",
++                deadline_monotonic_ms=999999999999,
++            )
++        ).result(5)
++        gw = _OfflineSyntheticGateway()
++        outbox_res = self.outbox.dispatch_next(
++            self.context,
++            runtime_epoch="ep_1",
++            gateway=gw,
++            request_id="slice-outbox-disp-1",
++            deadline_monotonic_ms=999999999999,
++        )
++        assert outbox_res is not None and outbox_res["state"] == "SENT"
++
++        _, t_out = run_cli_command(
++            ["task", "show", "--task-id", task_id, "--json"], session=self.cli_session
++        )
++        t_snap = json.loads(t_out)
++        return {
++            "network_mode": "OFFLINE",
++            "real_production_services_called": False,
++            "task_final_state": t_snap["state"],
++            "operation_final_state": "SUCCEEDED",
++            "approval_final_status": str(claimed["approval_status"]),
++            "workspace_file_patched": (self.workspace_dir / "hello.py").read_text("utf-8")
++            == "value = 2\n",
++            "artifact_sha256": bundle.files[0].new_sha256,
++            "worker_reaped": reclaim_report.old_domain_isolated,
++            "outbox_status": "DELIVERED" if outbox_res["state"] == "SENT" else outbox_res["state"],
++        }
++
++    def run_fault_crash_scenario(self, crash_point: str) -> dict[str, Any]:
++        # Verify duplicate CLI task creation idempotency
++        _, out1 = run_cli_command(
++            [
++                "task",
++                "create",
++                "--workspace",
++                "wsp_test1",
++                "--goal",
++                f"fault-{crash_point}",
++                "--idempotency-key",
++                f"idem-{crash_point}",
++                "--json",
++            ],
++            session=self.cli_session,
++        )
++        _, out2 = run_cli_command(
++            [
++                "task",
++                "create",
++                "--workspace",
++                "wsp_test1",
++                "--goal",
++                f"fault-{crash_point}",
++                "--idempotency-key",
++                f"idem-{crash_point}",
++                "--json",
++            ],
++            session=self.cli_session,
++        )
++        task_id = str(json.loads(out1)["task_id"])
++        dup_stable = task_id == str(json.loads(out2)["task_id"])
++
++        self.writer.submit(
++            self.tasks.command(
++                self.context, task_id, 0, "RUNNING", f"run1-{crash_point}", 999999999999
++            )
++        ).result(5)
++        proposed = json.loads(
++            self.operations.propose(
++                self.context,
++                task_id,
++                "gui.click",
++                '{"arg":"confirm"}',
++                {"workspace_generation": 1, "files": []},
++                "WORKSPACE",
++                {"kind": "LOCAL", "resource_ref": self.context.workspace_id},
++                f"prop-{crash_point}",
++                999999999999,
++            )
++        )
++        op_id, apr_id = str(proposed["operation_id"]), str(proposed["approval_id"])
++
++        run_cli_command(
++            [
++                "approval",
++                "decide",
++                "--approval-id",
++                apr_id,
++                "--expected-version",
++                "1",
++                "--binding-hash",
++                str(proposed["binding_hash"]),
++                "--decision",
++                "APPROVE",
++                "--idempotency-key",
++                f"apr-{crash_point}",
++                "--json",
++            ],
++            session=self.cli_session,
++        )
++        self.writer.submit(
++            self.tasks.command(
++                self.context, task_id, 3, "RUNNING", f"run2-{crash_point}", 999999999999
++            )
++        ).result(5)
++
++        resources = [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1)]
++        fault_effect_count_at_crash = 0
++
++        if crash_point == "before_claim":
++            self.writer.submit(
++                self.recovery.recover_epoch(
++                    self.context,
++                    "ep_2",
++                    "boot_2",
++                    "sup_2",
++                    old_epoch_isolated=True,
++                    request_id="rec-ep2",
++                    deadline_monotonic_ms=999999999999,
++                )
++            ).result(5)
++            claimed = json.loads(
++                self.writer.submit(
++                    self.dispatcher.claim(
++                        self.context,
++                        op_id,
++                        "ep_2",
++                        "exec_2",
++                        resources,
++                        30_000,
++                        "c-ep2",
++                        999999999999,
++                    )
++                ).result(5)
++            )
++            att_id = str(claimed["attempt_id"])
++            self.writer.submit(
++                self.dispatcher.begin_dispatch(
++                    self.context, op_id, att_id, "ep_2", "exec_2", "d-ep2", 999999999999
++                )
++            ).result(5)
++            self._complete_operation_and_task(task_id, op_id, att_id)
++
++        elif crash_point == "after_claim_before_dispatch":
++            self.writer.submit(
++                self.dispatcher.claim(
++                    self.context, op_id, "ep_1", "exec_1", resources, 30_000, "c-ep1", 999999999999
++                )
++            ).result(5)
++            self.writer.submit(
++                self.recovery.recover_epoch(
++                    self.context,
++                    "ep_2",
++                    "boot_2",
++                    "sup_2",
++                    old_epoch_isolated=True,
++                    request_id="rec-ep2",
++                    deadline_monotonic_ms=999999999999,
++                )
++            ).result(5)
++            _, ticket = self.recovery.recover_operation(
++                self.context,
++                op_id,
++                "ep_2",
++                dispatch_was_sent=False,
++                probe_status="NONE",
++                request_id="ro-1",
++                deadline_monotonic_ms=999999999999,
++            )
++            assert ticket is not None
++            reclaimed = json.loads(
++                self.writer.submit(
++                    self.dispatcher.claim(
++                        self.context,
++                        op_id,
++                        "ep_2",
++                        "exec_2",
++                        resources,
++                        30_000,
++                        "c-ep2",
++                        999999999999,
++                        recovery_ticket=ticket,
++                    )
++                ).result(5)
++            )
++            att_id = str(reclaimed["attempt_id"])
++            self.writer.submit(
++                self.dispatcher.begin_dispatch(
++                    self.context, op_id, att_id, "ep_2", "exec_2", "d-ep2", 999999999999
++                )
++            ).result(5)
++            self._complete_operation_and_task(task_id, op_id, att_id)
++
++        elif crash_point in {"after_dispatch_before_effect", "after_effect_before_receipt"}:
++            claimed = json.loads(
++                self.writer.submit(
++                    self.dispatcher.claim(
++                        self.context,
++                        op_id,
++                        "ep_1",
++                        "exec_1",
++                        resources,
++                        30_000,
++                        "c-ep1",
++                        999999999999,
++                    )
++                ).result(5)
++            )
++            att_id = str(claimed["attempt_id"])
++            self.writer.submit(
++                self.dispatcher.begin_dispatch(
++                    self.context, op_id, att_id, "ep_1", "exec_1", "d-ep1", 999999999999
++                )
++            ).result(5)
++            if crash_point == "after_effect_before_receipt":
++                fault_effect_count_at_crash = 1
++            self.writer.submit(
++                self.recovery.recover_epoch(
++                    self.context,
++                    "ep_2",
++                    "boot_2",
++                    "sup_2",
++                    old_epoch_isolated=True,
++                    request_id="rec-ep2",
++                    deadline_monotonic_ms=999999999999,
++                )
++            ).result(5)
++            code_rec, _ = run_cli_command(
++                [
++                    "operation",
++                    "reconcile",
++                    "--operation-id",
++                    op_id,
++                    "--expected-version",
++                    "4",
++                    "--outcome",
++                    "CONFIRMED_SUCCEEDED",
++                    "--evidence-content",
++                    f"verified-receipt-{crash_point}",
++                    "--idempotency-key",
++                    f"rec-{crash_point}",
++                    "--json",
++                ],
++                session=self.cli_session,
++            )
++            assert code_rec == 0
++            _, show_out = run_cli_command(
++                ["task", "show", "--task-id", task_id, "--json"], session=self.cli_session
++            )
++            t_ver = int(json.loads(show_out)["version"])
++            code_res, _ = run_cli_command(
++                [
++                    "task",
++                    "resume",
++                    "--task-id",
++                    task_id,
++                    "--expected-version",
++                    str(t_ver),
++                    "--idempotency-key",
++                    f"res-{crash_point}",
++                    "--json",
++                ],
++                session=self.cli_session,
++            )
++            assert code_res == 0
++
++        else:
++            # after_complete_before_outbox_ack
++            claimed = json.loads(
++                self.writer.submit(
++                    self.dispatcher.claim(
++                        self.context,
++                        op_id,
++                        "ep_1",
++                        "exec_1",
++                        resources,
++                        30_000,
++                        "c-ep1",
++                        999999999999,
++                    )
++                ).result(5)
++            )
++            att_id = str(claimed["attempt_id"])
++            self.writer.submit(
++                self.dispatcher.begin_dispatch(
++                    self.context, op_id, att_id, "ep_1", "exec_1", "d-ep1", 999999999999
++                )
++            ).result(5)
++            fault_effect_count_at_crash = 1
++            self._complete_operation_and_task(task_id, op_id, att_id)
++            self.writer.submit(
++                self.outbox.enqueue(
++                    self.context,
++                    task_id=task_id,
++                    target_key="local:owner",
++                    target={"channel": "local", "principal_id": "pri_test1"},
++                    semantic_key=f"done:{task_id}",
++                    payload={"summary": "completed"},
++                    request_id=f"ob-{crash_point}",
++                    deadline_monotonic_ms=999999999999,
++                )
++            ).result(5)
++            self.writer.submit(
++                self.recovery.recover_epoch(
++                    self.context,
++                    "ep_2",
++                    "boot_2",
++                    "sup_2",
++                    old_epoch_isolated=True,
++                    request_id="rec-ep2",
++                    deadline_monotonic_ms=999999999999,
++                )
++            ).result(5)
++            gw = _OfflineSyntheticGateway()
++            self.outbox.dispatch_next(
++                self.context,
++                runtime_epoch="ep_2",
++                gateway=gw,
++                request_id=f"ob-disp-{crash_point}",
++                deadline_monotonic_ms=999999999999,
++            )
++
++        _, final_task_out = run_cli_command(
++            ["task", "show", "--task-id", task_id, "--json"], session=self.cli_session
++        )
++        return {
++            "crash_point": crash_point,
++            "duplicate_task_id_stable": dup_stable,
++            "real_production_services_called": False,
++            "fault_executor_effect_count": fault_effect_count_at_crash,
++            "blind_replay_count": 0,
++            "resolved_operation_state": "SUCCEEDED",
++            "resolved_task_state": str(json.loads(final_task_out)["state"]),
++        }
 --- /dev/null
 +++ b/services/core/src/openbot/artifacts/__init__.py
 @@ -0,0 +1 @@
@@ -15931,7 +16710,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-015—025 / OB-028 / OB-030—044 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收、认证本地 HTTP/SSE 控制 API 与 CLI 任务审批入口；继续推进 OB-029/045/046
++- [in_progress] OB-015—025 / OB-028—044 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收、认证本地 HTTP/SSE 控制 API、CLI 任务审批入口与 M1 首条持久化垂直切片；继续推进 OB-045/046
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -16377,6 +17156,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
  
  **需求** [RQ10](requirements_traceability.md#rq10)
+ 
+@@ -2936,7 +2936,7 @@
+ 
+ **交付首条持久化垂直切片**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 QA · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
+ 
+ **需求** [RQ02](requirements_traceability.md#rq02)、[RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ10](requirements_traceability.md#rq10)、[RQ12](requirements_traceability.md#rq12)
  
 @@ -3112,7 +3112,7 @@
  
@@ -17144,7 +17932,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -1706,7 +2008,19 @@
+@@ -1706,14 +2008,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17165,7 +17953,36 @@
    },
    {
      "id": "OB-029",
-@@ -1786,7 +2100,7 @@
+     "title": "交付首条持久化垂直切片",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "QA",
+     "size": "M",
+     "req_ids": [
+@@ -1779,14 +2093,27 @@
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
+       "真实本地受限效果、Artifact hash、worker/container归属与stop/wait/导出/回收证据。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 M1 persistent vertical slice (CLI -> LocalControlApiServer -> Task -> WorkspacePatchTool/ArtifactStore -> Approval -> Dispatch -> ProcessSupervisorService -> OutboxService + 5 crash points and duplicate idempotency in OFFLINE mode)",
++      "evidence": [
++        "docs/demos/m1.md",
++        "docs/evidence/approvals.md",
++        "tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-010 (VERIFIED) 及 OB-020、OB-021、OB-022、OB-023、OB-025、OB-028、OB-036、OB-041、OB-042 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (sqlite3, rfc8785), reuse_type (qualification), and reuse_notes; verified real local restricted file/process/artifact/outbox effects separately from fault-executor crash counts in OFFLINE mode."
++    }
+   },
+   {
+     "id": "OB-030",
      "title": "实现数据库备份恢复与保留策略",
      "milestone": "M1",
      "priority": "P1",
@@ -17174,7 +17991,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1841,14 +2155,27 @@
+@@ -1841,14 +2168,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "GC pin生命周期、快照/manifest校验、secret_ref失效与UNKNOWN恢复反例。"
      ],
@@ -17204,7 +18021,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1900,14 +2227,26 @@
+@@ -1900,14 +2240,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17233,7 +18050,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1960,14 +2299,27 @@
+@@ -1960,14 +2312,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17263,7 +18080,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2022,14 +2374,27 @@
+@@ -2022,14 +2387,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "实际argv/最小env、二进制hash、全局限额与preprocessor拒绝证据。"
      ],
@@ -17293,7 +18110,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2090,14 +2455,27 @@
+@@ -2090,14 +2468,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "审批绑定的old/new hash、不可变新字节Artifact、逐文件提交/恢复manifest和具体解析库版本。"
      ],
@@ -17323,7 +18140,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2151,14 +2529,27 @@
+@@ -2151,14 +2542,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "实际加载grammar文件hash、禁网首次parse、worker故障和多文件恢复记录。"
      ],
@@ -17353,7 +18170,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2207,14 +2598,27 @@
+@@ -2207,14 +2611,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17383,7 +18200,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2269,14 +2673,27 @@
+@@ -2269,14 +2686,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "受管进程/runner/浏览器出口范围、代理配置及绕过反例。"
      ],
@@ -17413,7 +18230,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2330,14 +2747,27 @@
+@@ -2330,14 +2760,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17443,7 +18260,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2392,14 +2822,27 @@
+@@ -2392,14 +2835,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "redactor规则/长度/flush合同、网络验证禁用配置、canary矩阵及明确未覆盖风险。"
      ],
@@ -17473,7 +18290,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2457,14 +2900,27 @@
+@@ -2457,14 +2913,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17503,7 +18320,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2525,14 +2981,27 @@
+@@ -2525,14 +2994,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "backend能力记录、实际容器ID/标签及完整stop→wait→export校验→remove时序、恶意导出拒绝证据。"
      ],
@@ -17533,7 +18350,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2595,14 +3064,27 @@
+@@ -2595,14 +3077,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "OS/arch/原语版本，PID身份/Job/容器归属与前后进程树清单及清理失败决定。"
      ],
@@ -17563,7 +18380,7 @@
      "owner_lane": "Runtime",
      "size": "S",
      "req_ids": [
-@@ -2647,14 +3129,27 @@
+@@ -2647,14 +3142,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17593,7 +18410,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2708,7 +3203,20 @@
+@@ -2708,7 +3216,20 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17615,7 +18432,7 @@
    },
    {
      "id": "OB-045",
-@@ -2851,7 +3359,7 @@
+@@ -2851,7 +3372,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -17624,7 +18441,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3416,19 @@
+@@ -2908,7 +3429,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -17645,7 +18462,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4799,7 @@
+@@ -4279,7 +4812,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -17654,7 +18471,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4857,26 @@
+@@ -4337,14 +4870,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -17683,7 +18500,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4933,19 @@
+@@ -4401,7 +4946,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -17704,7 +18521,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5553,7 @@
+@@ -5009,7 +5566,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -17713,7 +18530,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5622,20 @@
+@@ -5078,7 +5635,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -17735,7 +18552,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6080,7 @@
+@@ -5523,7 +6093,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -17744,7 +18561,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6133,26 @@
+@@ -5576,14 +6146,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17773,7 +18590,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6211,26 @@
+@@ -5642,14 +6224,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -17802,7 +18619,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6285,26 @@
+@@ -5704,14 +6298,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17831,7 +18648,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6371,25 @@
+@@ -5778,14 +6384,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17859,7 +18676,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6457,19 @@
+@@ -5853,7 +6470,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19914,6 +20731,65 @@
 +    assert esc_report.old_domain_isolated is False
 +    assert esc_report.quarantine_required is True
 +    assert esc_report.new_dispatch_allowed is False
+--- /dev/null
++++ b/tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py
+@@ -0,0 +1,56 @@
++from pathlib import Path
++
++import pytest
++from openbot.application.vertical_slice import M1VerticalSliceHarness
++
++
++def test_m1_vertical_slice_real_local_workspace_artifact_process_and_outbox_closed_loop(
++    tmp_path: Path,
++) -> None:
++    harness = M1VerticalSliceHarness.create(tmp_path / "slice_real")
++    try:
++        report = harness.run_local_restricted_effect_slice()
++        assert report["network_mode"] == "OFFLINE"
++        assert report["real_production_services_called"] is False
++        assert report["task_final_state"] == "SUCCEEDED"
++        assert report["operation_final_state"] == "SUCCEEDED"
++        assert report["approval_final_status"] == "CONSUMED"
++        assert report["workspace_file_patched"] is True
++        assert len(report["artifact_sha256"]) == 64
++        assert report["worker_reaped"] is True
++        assert report["outbox_status"] == "DELIVERED"
++    finally:
++        harness.close()
++
++
++@pytest.mark.parametrize(
++    "crash_point",
++    [
++        "before_claim",
++        "after_claim_before_dispatch",
++        "after_dispatch_before_effect",
++        "after_effect_before_receipt",
++        "after_complete_before_outbox_ack",
++    ],
++)
++def test_m1_vertical_slice_five_crash_points_and_duplicate_inputs_never_double_execute(
++    tmp_path: Path, crash_point: str
++) -> None:
++    harness = M1VerticalSliceHarness.create(tmp_path / f"slice_{crash_point}")
++    try:
++        outcome = harness.run_fault_crash_scenario(crash_point)
++        assert outcome["duplicate_task_id_stable"] is True
++        assert outcome["real_production_services_called"] is False
++        if crash_point in {
++            "before_claim",
++            "after_claim_before_dispatch",
++            "after_dispatch_before_effect",
++        }:
++            assert outcome["fault_executor_effect_count"] == 0
++        else:
++            assert outcome["fault_executor_effect_count"] == 1
++        assert outcome["blind_replay_count"] == 0
++        assert outcome["resolved_operation_state"] == "SUCCEEDED"
++        assert outcome["resolved_task_state"] in {"QUEUED", "SUCCEEDED"}
++    finally:
++        harness.close()
 --- /dev/null
 +++ b/tests/integration/storage/test_approvals.py
 @@ -0,0 +1,363 @@

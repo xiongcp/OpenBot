@@ -1,9 +1,9 @@
 .......s................................................................ [ 27%]
-........................................................................ [ 55%]
-........................................................................ [ 83%]
-...........................................                              [100%]
+........................................................................ [ 54%]
+........................................................................ [ 81%]
+.................................................                        [100%]
 =========================== short test summary info ============================
 SKIPPED [1] tests/components/contracts/test_openai_faults.py:9: M1 SDK group absent from the M0 environment
 SKIPPED [1] tests/components/contracts/test_probe.py:10: M1 SDK group absent from M0
 SKIPPED [1] tests/components/native_poc/test_docker.py:45: Requires explicit native Docker qualification command
-258 passed, 3 skipped in 6.39s
+264 passed, 3 skipped in 6.28s

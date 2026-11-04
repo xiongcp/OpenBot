@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-028 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API 与 CLI / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, and CLI
+# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI 与首条持久化垂直切片 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, and First Persistent Vertical Slice
 
 ## 中文说明
 
@@ -75,6 +75,10 @@
 1. 纯本地认证 API 会话与零 SQLite 旁路：`task create|show|cancel|resume`、`approval preview|decide`（`APPROVE` 自动通过 `owner_cli` token 申请一次性 challenge nonce，`feishu_gateway` 调用返回码 `3`）、`operation reconcile`（上传内联证据生成 `OPERATION` artifact 后提交核对）全经 `/v1/*` 完成。
 2. 反旁路、ANSI 转义与超时未知语义：拦截 `--ignore-and-rerun`、`--force-success`、`--revive-consumed`（返回码 `6`）；`sanitize_terminal_text` 剥离 ANSI CSI/OSC 控制字符与富文本标签；无 daemon 返回码 `2`，等待超时返回码 `5` 且强制声明 `action_guaranteed_not_executed=false`、`requery_required=true`。
 
+实现（OB-029）：新增 `services/core/src/openbot/application/vertical_slice.py`（`M1VerticalSliceHarness`）、`tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py` 与中英双语 `docs/demos/m1.md`：
+1. 真实本地受限效果闭环（`run_local_restricted_effect_slice`）：在 `OFFLINE` 模式下串联 CLI → 认证本地控制 API → 持久 Task → 工作区文件补丁提案（`WorkspacePatchTool` + `ArtifactStore` SHA-256 冻结）→ CLI 审批（`CONSUMED` 一次性消费）→ `claim`/`begin_dispatch` → 真实工作区文件修改、受监管子进程回收（`ProcessSupervisorService`）与持久 Outbox 投递（`OutboxService`）。
+2. 五个崩溃点与重复输入验证（`run_fault_crash_scenario`）：覆盖 `before_claim`、`after_claim_before_dispatch`（一次性 `RecoveryTicket` 恢复）、`after_dispatch_before_effect`、`after_effect_before_receipt`（`UNKNOWN`/`RECONCILING` 零盲目重放 + CLI 核对恢复）与 `after_complete_before_outbox_ack`，并校验重复 CLI 请求 ID 幂等稳定。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -84,10 +88,11 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q --tb=short`（6 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：上游 OB-093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-029 垂直切片完整闭合。
+当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
 
 ## English Summary
 
@@ -136,3 +141,6 @@
 - **OB-028 (`IN_PROGRESS`)**: Authenticated CLI task, approval, and reconciliation commands (`services/core/src/openbot/cli.py` and `tests/integration/cli/test_cli_workflow.py`, 2 passed):
   1. Loopback API session without SQLite bypass: Supports `task create|show|cancel|resume`, `approval preview|decide` (requesting owner-scoped challenge nonce before `APPROVE`), and `operation reconcile` (uploading inline evidence before reconciliation).
   2. Anti-bypass, ANSI stripping, and timeout honesty: Rejects `--ignore-and-rerun`, `--force-success`, and `--revive-consumed` (exit code `6`); strips ANSI CSI/OSC and rich-text tags via `sanitize_terminal_text`; returns exit code `2` when daemon is down and exit code `5` on wait timeout with `action_guaranteed_not_executed=false` and `requery_required=true`.
+- **OB-029 (`IN_PROGRESS`)**: First persistent vertical slice (`services/core/src/openbot/application/vertical_slice.py`, `tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py`, and `docs/demos/m1.md`, 6 passed):
+  1. Real local restricted workspace patch, Artifact SHA-256 verification, supervised worker reclaim, and durable Outbox delivery closed loop in `OFFLINE` mode via CLI and authenticated Local Control API.
+  2. Five crash injection points (`before_claim`, `after_claim_before_dispatch`, `after_dispatch_before_effect`, `after_effect_before_receipt`, `after_complete_before_outbox_ack`) and duplicate CLI idempotency verification with zero blind replay.
