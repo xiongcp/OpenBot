@@ -2319,12 +2319,12 @@
 +CONNECTED / LOCAL_MODEL / OFFLINE 为独立版本配置；不允许 cloud fallback、SDK 重试叠加、宿主执行、运行期下载。没有真实本地推理 / runner / 出口证据时连接工厂返回 CAPABILITY_UNAVAILABLE；loopback 地址不作证明。UTC/monotonic/boot 变化测试使旧敏感 TTL 失效；派发后 timeout/cancel 映射 UNKNOWN，未把所有异常设为 retryable。
 --- /dev/null
 +++ b/docs/evidence/storage.md
-@@ -0,0 +1,67 @@
-+# OB-011—014、OB-016、OB-021、OB-023、OB-024、OB-036：持久化、资源锁、Durable Outbox、预算熔断、上下文摘要与 Artifact 存储验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, Context Summary, and Artifact Store Verification Scope
+@@ -0,0 +1,74 @@
++# OB-011—014、OB-016、OB-021、OB-023、OB-024、OB-030、OB-036：持久化、资源锁、Durable Outbox、预算熔断、上下文摘要、Artifact 存储与备份恢复验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, Context Summary, Artifact Store, and Backup/Restore Verification Scope
 +
 +## 中文说明
 +
-+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断、上下文摘要与 Artifact 存储共 82 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
++实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断、上下文摘要、Artifact 存储与数据库备份恢复共 83 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 +
 +OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 +
@@ -2358,11 +2358,15 @@
 +2. 受控下载与预览守卫（`download`、`preview`、`verify_approved_digest`）：不接收或暴露任何宿主文件路径；强制返回 `Content-Disposition: attachment`、`Content-Security-Policy: default-src 'none'; sandbox` 与 `X-Content-Type-Options: nosniff`（防止 HTML/脚本内联执行）；拒绝通过 `preview` 访问 `SECRET` 产物；登记后若底层文件缺失或哈希不符，自动将数据库状态标为 `QUARANTINED`；审批绑定内容摘要变化（`verify_approved_digest`）立即拒绝。
 +3. 孤立文件回收与待审批/备份 GC 保护（`collect_garbage`、`pin_for_backup`、`unpin_backup`）：清理注册前崩溃遗留的 `staging/` 与未登记 `objects/` 孤立文件；即使 TTL 到期，仍拒绝回收任何被非终态 Task、待审批/在途/UNKNOWN Operation 或活跃备份 pin（`pin_for_backup`）引用的对象。因上游 `OB-017`/`OB-032` 仍为 `IN_PROGRESS`，`OB-036` 记为 `IN_PROGRESS`。
 +
++OB-030（实现数据库备份恢复与保留策略，保持 IN_PROGRESS）：先读取 `component_refs`（`sqlite3`）、`reuse_type`（`dependency_adapter`）与 `reuse_notes`。新增 `services/core/src/openbot/storage/maintenance.py`（`DatabaseMaintenanceService`、`BackupManifest`、`RestoreVerificationReport`）：
++1. 在线一致备份与 GC Pin 联动（`create_backup`）：先获取全部 `AVAILABLE` 产物的 `pin_for_backup` 保护，防止备份期间并发 GC 删除快照引用；调用 SQLite `backup()` 接口生成一致快照（含 WAL 已提交状态，非裸文件拷贝）并校验 `PRAGMA integrity_check` 与 `foreign_key_check`；逐个核对磁盘上 Artifact 文件的实际字节数与 SHA-256；manifest 仅记录不透明 `secret_ref` 且排除 `SECRET` 产物与任何真实密钥（`contains_secret_values=False`）；完成后在 `finally` 释放 GC pin，失败备份写入 `status='FAILED'`。
++2. 安全恢复与防复活/防重放守卫（`restore_backup`）：先核验 `manifest.json`（`status=='VERIFIED'`）、数据库 SHA-256 与全部引用 Artifact 文件哈希后再启用恢复库；恢复后在同一事务内将旧 `runtime_instances` 置为 `STOPPED`，将未消费的 `PENDING`/`APPROVED` 授权撤销为 `REVOKED`（`CONSUMED` 绝不回退或复活），将在途 `DISPATCHING` 操作转为 `UNKNOWN`（关联 Task 转 `RECONCILING`），杜绝恢复旧备份导致复活旧批准或盲目重放未知副作用；逐项核对 `secret_ref` 可解析性，缺失钥匙串引用时将对应 `channel_accounts` 置为 `DISABLED` 并标记 `reconfiguration_required=True`。因上游 `OB-020` 仍为 `IN_PROGRESS` 且 M3 跨平台恢复实测待对应环境执行，`OB-030` 记为 `IN_PROGRESS`。
++
 +OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
 +
 +## English Summary
 +
-+Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (82 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
++Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (83 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
 +
 +- **OB-011**: Checksum-locked ordered SQLite migrator creating all 23 baseline tables, pre-upgrade backup, foreign-key and integrity checks, and WAL/FULL/FK/recursive_triggers verification using stdlib `sqlite3`.
 +- **OB-012**: Single writer thread owning short transactions with bounded per-lane queues, round-robin fairness, total deadline enforcement, and fail-closed fatal writer state on commit/rollback I/O errors.
@@ -2387,6 +2391,9 @@
 +  1. `put`: Writes to `staging/`, `fsync`s, atomically `os.replace`s into `objects/`, and registers immutable `artifacts` and `artifact_refs` while enforcing single-artifact and per-task byte quotas.
 +  2. `download`, `preview` & `verify_approved_digest`: Never exposes host paths; enforces `attachment`, sandbox CSP, and `nosniff` headers so HTML/scripts never execute inline; blocks `SECRET` preview; marks missing/corrupted blobs `QUARANTINED`; invalidates tampered approval digests.
 +  3. `collect_garbage` & `pin_for_backup`: Cleans up pre-registration orphan files while protecting artifacts referenced by active tasks, pending/approved/in-flight/unknown operations, or active backup pins.
++- **OB-030 (`IN_PROGRESS`)**: Online SQLite backup, artifact manifest verification, and safe restore (`services/core/src/openbot/storage/maintenance.py`):
++  1. `create_backup`: Pins referenced `AVAILABLE` artifacts against concurrent GC via `pin_for_backup`, runs SQLite `backup()` with `integrity_check` and `foreign_key_check`, verifies on-disk artifact sizes and SHA-256 digests, and records only opaque `secret_ref` identifiers (`contains_secret_values=False`).
++  2. `restore_backup`: Verifies `manifest.json` and all artifact digests before restoring; stops old `runtime_instances`, revokes unconsumed `PENDING`/`APPROVED` grants (`CONSUMED` untouched), transitions `DISPATCHING` operations to `UNKNOWN` (`RECONCILING` task state) to prevent replaying ambiguous side effects, and disables `channel_accounts` with missing `secret_ref` (`reconfiguration_required=True`).
 --- /dev/null
 +++ b/docs/handoff/2026-11-04-checkpoint.md
 @@ -0,0 +1,66 @@
@@ -2481,7 +2488,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,47 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2528,6 +2535,7 @@
 +- 推进 OB-024（实现上下文快照与摘要）：实现 ContextService（拒绝 SECRET 与 hidden_reasoning 持久化，强制 ASSISTANT+TOOL tool_call_id 配对；summarize_window 继承最高敏感分类与最不可信 provenance 污点、保留 source_refs 与未决动作且禁止将外部文本升级为授权；build_model_context 跨重启恢复、成对截断旧消息并计入包装/tool schema/多模态预算开销）；新增 2 项集成测试通过，存储套件增至 80 passed，M0 增至 201 passed/3 skipped，M1 增至 220 passed/1 skipped。因上游 OB-017/023 仍为 IN_PROGRESS，OB-024 记 IN_PROGRESS。
 +- 推进 OB-032（实现工作区路径与文件访问守卫）：实现 WorkspaceFileGuard、validate_relative_workspace_path、build_safe_git_worktree_env_and_argv 与 build_safe_ripgrep_argv（拒绝绝对/越界/UNC/Win32 设备前缀/ADS/保留名与 .git/.env/私钥路径；使用 dir_fd + O_NOFOLLOW 逐段校验 inode/dev 并通过 write_atomic 复验父目录 inode 与旧文件 SHA-256 阻断父目录符号链接替换竞态；审计 .git/config 禁用 hooks/filter/fsmonitor，剥离 RIPGREP_CONFIG_PATH 并强制 --no-config --no-pre）；新增 22 项测试通过，M0 增至 223 passed/3 skipped，M1 增至 242 passed/1 skipped。因上游 OB-031 及 Windows/Linux 原生句柄验证待完成，OB-032 记 IN_PROGRESS。
 +- 推进 OB-036（实现 Artifact 存储与可信元数据）：实现 ArtifactStore、ArtifactLimits、ArtifactRecord 与 ArtifactDownload（staging 临时文件 fsync -> 原子 rename -> 注册 artifacts 与 artifact_refs；单产物/单任务字节限额；受控下载强制 attachment + sandbox CSP 且不暴露宿主路径，拒绝 SECRET 预览；缺失或损坏底层文件自动标 QUARANTINED；collect_garbage 回收孤立文件并保护待审批 Operation 与备份 pin 引用）；新增 2 项集成测试通过，存储套件增至 82 passed，M0 增至 225 passed/3 skipped，M1 增至 244 passed/1 skipped。因上游 OB-017/032 仍为 IN_PROGRESS，OB-036 记 IN_PROGRESS。
++- 推进 OB-030（实现数据库备份恢复与保留策略）：实现 DatabaseMaintenanceService、BackupManifest 与 RestoreVerificationReport（备份前 pin_for_backup 阻止并发 GC 删引用，使用 SQLite backup 接口含 WAL 状态并核验 integrity/FK 与全部产物磁盘哈希，仅保留 secret_ref 排除真实秘密；恢复时核验 manifest 与产物哈希，停止旧 epoch、撤销未消费批准防旧授权复活、将在途 DISPATCHING 转 UNKNOWN/RECONCILING 防盲重放、缺失 secret_ref 自动禁用对应账户并标记需重配置）；新增集成测试通过，存储套件增至 83 passed，M0 增至 226 passed/3 skipped，M1 增至 245 passed/1 skipped。因上游 OB-020 及跨平台恢复待闭合，OB-030 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -10273,6 +10281,327 @@
 +            WriterCommand(request_id, fingerprint, "inbound", deadline_monotonic_ms, apply, lookup)
 +        )
 --- /dev/null
++++ b/services/core/src/openbot/storage/maintenance.py
+@@ -0,0 +1,318 @@
++"""Online SQLite backup, artifact GC-pinned manifest verification, and safe restore."""
++
++import hashlib
++import os
++import shutil
++import sqlite3
++import time
++from collections.abc import Callable
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Literal
++
++from openbot.artifacts.store import ArtifactStore
++from openbot.contracts import canonicalize, strict_json
++from openbot.storage.inbox import InboundContext, authorize
++from openbot.storage.migrate import connect
++from openbot.storage.writer import Writer
++
++
++@dataclass(frozen=True, slots=True)
++class BackupManifest:
++    schema_version: int
++    db_sha256: str
++    artifacts: tuple[dict[str, Any], ...]
++    secret_refs: tuple[str, ...]
++    status: str
++    created_at_ms: int
++    contains_secret_values: Literal[False] = False
++
++    def to_payload(self) -> dict[str, Any]:
++        return {
++            "schema_version": self.schema_version,
++            "db_sha256": self.db_sha256,
++            "artifacts": list(self.artifacts),
++            "secret_refs": list(self.secret_refs),
++            "status": self.status,
++            "created_at_ms": self.created_at_ms,
++            "contains_secret_values": False,
++        }
++
++
++@dataclass(frozen=True, slots=True)
++class RestoreVerificationReport:
++    restored_db_path: Path
++    restored_artifacts_count: int
++    unknown_operations: tuple[str, ...]
++    revoked_approvals: tuple[str, ...]
++    missing_secret_refs: tuple[str, ...]
++    reconfiguration_required: bool
++
++
++class DatabaseMaintenanceService:
++    """Coordinate SQLite online backup with Artifact GC pins and safe post-restore state."""
++
++    def __init__(
++        self,
++        db_path: Path,
++        writer: Writer,
++        artifact_store: ArtifactStore,
++        blob_root: Path,
++    ) -> None:
++        self._db_path = db_path
++        self._writer = writer
++        self._artifact_store = artifact_store
++        self._blob_root = blob_root.resolve()
++
++    def create_backup(
++        self,
++        context: InboundContext,
++        backup_dir: Path,
++        *,
++        on_pinned_hook: Callable[[], None] | None = None,
++    ) -> BackupManifest:
++        if backup_dir.exists():
++            raise ValueError("backup_dir must not already exist")
++        backup_dir.mkdir(parents=True, exist_ok=False, mode=0o700)
++
++        # 1. Read active artifact IDs and secret_refs, and pin artifacts against concurrent GC
++        def inspect_live(db: sqlite3.Connection) -> tuple[int, list[dict[str, Any]], list[str]]:
++            authorize(db, context)
++            ver_row = db.execute(
++                "SELECT coalesce(max(version),0) FROM schema_migrations"
++            ).fetchone()
++            schema_ver = int(ver_row[0]) if ver_row else 0
++            art_rows = db.execute(
++                "SELECT object_id,object_key,sha256,mime,bytes,classification "
++                "FROM artifacts WHERE state='AVAILABLE' AND classification<>'SECRET' "
++                "ORDER BY created_at,object_id"
++            ).fetchall()
++            arts = [
++                {
++                    "object_id": str(r[0]),
++                    "object_key": str(r[1]),
++                    "sha256": str(r[2]),
++                    "mime": str(r[3]),
++                    "bytes": int(r[4]),
++                    "classification": str(r[5]),
++                }
++                for r in art_rows
++            ]
++            sec_rows = db.execute(
++                "SELECT DISTINCT secret_ref FROM channel_accounts ORDER BY secret_ref"
++            ).fetchall()
++            s_refs = [str(r[0]) for r in sec_rows if r[0]]
++            return schema_ver, arts, s_refs
++
++        schema_ver, arts, s_refs = self._writer.read(inspect_live)
++        pin_id = self._artifact_store.pin_for_backup([str(a["object_id"]) for a in arts])
++        now = time.time_ns() // 1_000_000
++        try:
++            if on_pinned_hook is not None:
++                on_pinned_hook()
++
++            # 2. Consistent SQLite online backup (includes WAL state) + integrity/FK verification
++            dst_db_path = backup_dir / "control.sqlite"
++            fd = os.open(dst_db_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
++            os.close(fd)
++            src_conn = connect(self._db_path, readonly=True)
++            dst_conn = sqlite3.connect(dst_db_path)
++            try:
++                src_conn.backup(dst_conn)
++                if dst_conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
++                    raise RuntimeError("Backup database failed integrity_check")
++                if dst_conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
++                    raise RuntimeError("Backup database failed foreign_key_check")
++            finally:
++                dst_conn.close()
++                src_conn.close()
++
++            # 3. Copy and verify every referenced artifact blob on disk
++            for art in arts:
++                rel_key = str(art["object_key"])
++                src_blob = (self._blob_root / rel_key).resolve()
++                if not src_blob.is_file() or src_blob.is_symlink():
++                    raise RuntimeError(f"Referenced artifact blob missing: {art['object_id']}")
++                raw = src_blob.read_bytes()
++                if len(raw) != int(art["bytes"]) or hashlib.sha256(raw).hexdigest() != str(
++                    art["sha256"]
++                ):
++                    raise RuntimeError(
++                        f"Referenced artifact blob hash/size mismatch: {art['object_id']}"
++                    )
++                dst_blob = backup_dir / rel_key
++                dst_blob.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
++                shutil.copyfile(src_blob, dst_blob)
++                os.chmod(dst_blob, 0o600)
++
++            db_sha = hashlib.sha256(dst_db_path.read_bytes()).hexdigest()
++            manifest = BackupManifest(
++                schema_version=schema_ver,
++                db_sha256=db_sha,
++                artifacts=tuple(arts),
++                secret_refs=tuple(s_refs),
++                status="VERIFIED",
++                created_at_ms=now,
++                contains_secret_values=False,
++            )
++            (backup_dir / "manifest.json").write_bytes(canonicalize(manifest.to_payload()))
++            return manifest
++        except BaseException:
++            failed_doc = {"status": "FAILED", "created_at_ms": now}
++            (backup_dir / "manifest.json").write_bytes(canonicalize(failed_doc))
++            raise
++        finally:
++            self._artifact_store.unpin_backup(pin_id)
++
++    def restore_backup(
++        self,
++        backup_dir: Path,
++        target_db_path: Path,
++        target_blob_root: Path,
++        *,
++        available_secret_refs: frozenset[str] = frozenset(),
++    ) -> RestoreVerificationReport:
++        manifest_path = backup_dir / "manifest.json"
++        src_db_path = backup_dir / "control.sqlite"
++        if not manifest_path.is_file() or not src_db_path.is_file():
++            raise ValueError("Backup bundle is incomplete")
++        manifest = dict(strict_json(manifest_path.read_bytes()))
++        if manifest.get("status") != "VERIFIED":
++            raise ValueError("Cannot restore an unverified or failed backup bundle")
++        if hashlib.sha256(src_db_path.read_bytes()).hexdigest() != manifest.get("db_sha256"):
++            raise ValueError("Backup database sha256 mismatch against manifest")
++
++        # 1. Verify and restore artifact blobs before enabling the restored database
++        target_blob_root.mkdir(parents=True, exist_ok=True, mode=0o700)
++        (target_blob_root / "staging").mkdir(parents=True, exist_ok=True, mode=0o700)
++        (target_blob_root / "objects").mkdir(parents=True, exist_ok=True, mode=0o700)
++        arts = list(manifest.get("artifacts", []))
++        for art in arts:
++            rel_key = str(art["object_key"])
++            src_blob = backup_dir / rel_key
++            if not src_blob.is_file() or src_blob.is_symlink():
++                raise ValueError(f"Backup artifact blob missing: {art['object_id']}")
++            raw = src_blob.read_bytes()
++            if len(raw) != int(art["bytes"]) or hashlib.sha256(raw).hexdigest() != str(
++                art["sha256"]
++            ):
++                raise ValueError(f"Backup artifact blob corrupted: {art['object_id']}")
++            dst_blob = target_blob_root / rel_key
++            dst_blob.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
++            shutil.copyfile(src_blob, dst_blob)
++            os.chmod(dst_blob, 0o600)
++
++        # 2. Restore SQLite database via SQLite backup API and apply post-restore safety guards
++        if target_db_path.exists():
++            raise ValueError("target_db_path must not already exist")
++        fd = os.open(target_db_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
++        os.close(fd)
++        b_conn = sqlite3.connect(src_db_path)
++        t_conn = sqlite3.connect(target_db_path)
++        try:
++            b_conn.backup(t_conn)
++        finally:
++            t_conn.close()
++            b_conn.close()
++
++        db = connect(target_db_path)
++        now = time.time_ns() // 1_000_000
++        try:
++            if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
++                raise RuntimeError("Restored database failed integrity_check")
++            if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
++                raise RuntimeError("Restored database failed foreign_key_check")
++
++            db.execute("BEGIN IMMEDIATE")
++            # Stop old runtime epochs so no stale epoch can dispatch
++            db.execute(
++                "UPDATE runtime_instances SET state='STOPPED',ended_at=? "
++                "WHERE state IN ('STARTING','ACTIVE','DRAINING')",
++                (now,),
++            )
++            # Revoke unconsumed approvals (PENDING/APPROVED -> REVOKED; CONSUMED never changes)
++            revoked_aprs = [
++                str(r[0])
++                for r in db.execute(
++                    "SELECT approval_id FROM approvals WHERE status IN ('PENDING','APPROVED')"
++                ).fetchall()
++            ]
++            db.execute(
++                "UPDATE approvals SET status='REVOKED',version=version+1 "
++                "WHERE status IN ('PENDING','APPROVED')"
++            )
++            db.execute(
++                "UPDATE operation_attempts SET status='ABANDONED',"
++                "recovery_evidence_ref='ev_restored_backup_undispatched',finished_at=?,"
++                "version=version+1 WHERE status='CLAIMED'",
++                (now,),
++            )
++            db.execute(
++                "UPDATE operations SET state='REVOKED',version=version+1,updated_at=?,"
++                "completed_at=? WHERE state IN ('PROPOSED','AWAITING_APPROVAL','READY','CLAIMED')",
++                (now, now),
++            )
++
++            # Convert any in-flight DISPATCHING operation to UNKNOWN and its Task to RECONCILING
++            unknown_ops: list[str] = []
++            for op_id, op_ver, task_id, att_id in db.execute(
++                "SELECT operation_id,version,task_id,current_attempt_id FROM operations "
++                "WHERE state='DISPATCHING'"
++            ).fetchall():
++                if att_id is not None:
++                    db.execute(
++                        "UPDATE operation_attempts SET status='UNKNOWN',version=version+1 "
++                        "WHERE attempt_id=? AND status='DISPATCHING'",
++                        (att_id,),
++                    )
++                db.execute(
++                    "UPDATE operations SET state='UNKNOWN',unknown_reason='restored_from_backup',"
++                    "version=version+1,updated_at=? WHERE operation_id=? AND version=?",
++                    (now, op_id, int(op_ver)),
++                )
++                unknown_ops.append(str(op_id))
++                t_row = db.execute(
++                    "SELECT state,version FROM tasks WHERE task_id=?", (task_id,)
++                ).fetchone()
++                if t_row and t_row[0] in {"QUEUED", "RUNNING", "WAITING_APPROVAL", "PAUSED"}:
++                    db.execute(
++                        "UPDATE tasks SET state='RECONCILING',version=version+1,updated_at=? "
++                        "WHERE task_id=? AND version=?",
++                        (now, task_id, int(t_row[1])),
++                    )
++
++            for op_id_row in db.execute(
++                "SELECT operation_id FROM operations WHERE state='UNKNOWN'"
++            ).fetchall():
++                if str(op_id_row[0]) not in unknown_ops:
++                    unknown_ops.append(str(op_id_row[0]))
++
++            # Verify secret_refs and disable channel_accounts whose secret_ref is unavailable
++            missing_refs: list[str] = []
++            for acc_id, sec_ref in db.execute(
++                "SELECT account_id,secret_ref FROM channel_accounts"
++            ).fetchall():
++                s_ref = str(sec_ref)
++                if s_ref not in available_secret_refs:
++                    if s_ref not in missing_refs:
++                        missing_refs.append(s_ref)
++                    db.execute(
++                        "UPDATE channel_accounts SET status='DISABLED' WHERE account_id=?",
++                        (str(acc_id),),
++                    )
++
++            db.execute("COMMIT")
++            return RestoreVerificationReport(
++                restored_db_path=target_db_path,
++                restored_artifacts_count=len(arts),
++                unknown_operations=tuple(unknown_ops),
++                revoked_approvals=tuple(revoked_aprs),
++                missing_secret_refs=tuple(missing_refs),
++                reconfiguration_required=bool(missing_refs),
++            )
++        except BaseException:
++            if db.in_transaction:
++                db.execute("ROLLBACK")
++            raise
++        finally:
++            db.close()
+--- /dev/null
 +++ b/services/core/src/openbot/storage/migrate.py
 @@ -0,0 +1,216 @@
 +"""Checksum-locked ordered migrations, without implicit transaction commits."""
@@ -11639,7 +11968,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/031/032/036 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、工作区文件句柄守卫与 Artifact 存储；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/030/031/032/036 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、工作区文件句柄守卫、Artifact 存储与数据库备份恢复；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -11937,6 +12266,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
  
  **需求** [RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)
+ 
+@@ -2350,7 +2350,7 @@
+ 
+ **实现数据库备份恢复与保留策略**
+ 
+-阶段 M1 · 优先级 P1 · 状态 TODO · 能力域 Runtime · 规模 M
++阶段 M1 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
+ 
+ **需求** [RQ02](requirements_traceability.md#rq02)、[RQ06](requirements_traceability.md#rq06)、[RQ11](requirements_traceability.md#rq11)
  
 @@ -3112,7 +3112,7 @@
  
@@ -12636,7 +12974,37 @@
    },
    {
      "id": "OB-025",
-@@ -1848,7 +2124,7 @@
+@@ -1786,7 +2062,7 @@
+     "title": "实现数据库备份恢复与保留策略",
+     "milestone": "M1",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Runtime",
+     "size": "M",
+     "req_ids": [
+@@ -1841,14 +2117,27 @@
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
+       "GC pin生命周期、快照/manifest校验、secret_ref失效与UNKNOWN恢复反例。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第7、20–21页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第7、20–21页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 online SQLite backup with Artifact GC pinning, manifest/blob SHA-256 verification, secret exclusion, and safe restore (grant revocation, DISPATCHING->UNKNOWN quarantine, and missing secret_ref detection)",
++      "evidence": [
++        "docs/evidence/storage.md",
++        "tests/integration/storage/test_maintenance.py",
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-020 仍为 IN_PROGRESS，且 M3 跨平台恢复实测待 Windows/Linux 原生环境执行；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs (sqlite3), reuse_type (dependency_adapter), and reuse_notes; used stdlib sqlite3 backup API combined with control-owned GC pin lifecycle, artifact SHA-256 verification, secret exclusion, and post-restore grant revocation / UNKNOWN preservation."
++    }
+   },
+   {
+     "id": "OB-031",
      "title": "实现确定性策略评估器",
      "milestone": "M1",
      "priority": "P0",
@@ -12645,7 +13013,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1900,14 +2176,26 @@
+@@ -1900,14 +2189,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -12674,7 +13042,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1960,7 +2248,20 @@
+@@ -1960,7 +2261,20 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -12696,7 +13064,7 @@
    },
    {
      "id": "OB-033",
-@@ -2158,7 +2459,7 @@
+@@ -2158,7 +2472,7 @@
      "title": "实现Artifact存储与可信元数据",
      "milestone": "M1",
      "priority": "P0",
@@ -12705,7 +13073,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2207,7 +2508,20 @@
+@@ -2207,7 +2521,20 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -12727,7 +13095,7 @@
    },
    {
      "id": "OB-037",
-@@ -2851,7 +3165,7 @@
+@@ -2851,7 +3178,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -12736,7 +13104,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3222,19 @@
+@@ -2908,7 +3235,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -12757,7 +13125,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4605,7 @@
+@@ -4279,7 +4618,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -12766,7 +13134,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4663,26 @@
+@@ -4337,14 +4676,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -12795,7 +13163,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4739,19 @@
+@@ -4401,7 +4752,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -12816,7 +13184,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5873,7 @@
+@@ -5523,7 +5886,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -12825,7 +13193,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5926,26 @@
+@@ -5576,14 +5939,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -12854,7 +13222,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6004,26 @@
+@@ -5642,14 +6017,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -12883,7 +13251,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6078,26 @@
+@@ -5704,14 +6091,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -12912,7 +13280,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6164,25 @@
+@@ -5778,14 +6177,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -12940,7 +13308,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6250,19 @@
+@@ -5853,7 +6263,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17203,6 +17571,296 @@
 +            "TASK_FINISHED",
 +        ]
 +        assert [e["version"] for e in events] == [0, 1, 2]
+--- /dev/null
++++ b/tests/integration/storage/test_maintenance.py
+@@ -0,0 +1,287 @@
++import json
++import time
++
++import pytest
++from openbot.application.dispatch import DispatchService
++from openbot.application.operations import OperationService
++from openbot.application.resources import ResourceRequest
++from openbot.application.state_machine import TaskStateService
++from openbot.artifacts.store import ArtifactLimits, ArtifactStore
++from openbot.contracts import SchemaRegistry
++from openbot.policy.approvals import ApprovalService
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.maintenance import DatabaseMaintenanceService
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.writer import Writer
++
++from tests.integration.storage.test_migrations import ROOT
++from tests.integration.storage.test_recovery import MemoryChallenges, _register_tools
++
++
++def _deadline() -> int:
++    return int(time.monotonic() * 1000) + 5000
++
++
++@pytest.fixture
++def maint_env(tmp_path):
++    path = tmp_path / "maint.sqlite"
++    blob_root = tmp_path / "maint_blobs"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO channel_accounts("
++            "account_id,channel,tenant_id,app_id,secret_ref,status,created_at) "
++            "VALUES('acc_feishu_1','feishu','tenant1','app1','keychain:feishu_app_secret',"
++            "'ACTIVE',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++        _register_tools(db)
++    finally:
++        db.close()
++
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    registry = SchemaRegistry.from_directory(ROOT / "contracts")
++    challenges = MemoryChallenges()
++    writer = Writer(path)
++    inbox = Inbox(writer, registry)
++    tasks = TaskStateService(writer)
++    ops = OperationService(writer, challenges, registry)
++    approvals = ApprovalService(writer, challenges, registry)
++    dispatcher = DispatchService(writer, registry)
++    art_store = ArtifactStore(writer, blob_root, limits=ArtifactLimits(default_ttl_ms=0))
++    maint = DatabaseMaintenanceService(path, writer, art_store, blob_root)
++    try:
++        yield (
++            tmp_path,
++            path,
++            blob_root,
++            context,
++            writer,
++            inbox,
++            tasks,
++            ops,
++            approvals,
++            dispatcher,
++            art_store,
++            maint,
++            challenges,
++        )
++    finally:
++        writer.close()
++
++
++def test_online_backup_interleaved_with_gc_and_restore_quarantines_unknown_and_revokes_grants(
++    maint_env,
++):
++    (
++        tmp_path,
++        _,
++        _,
++        context,
++        writer,
++        inbox,
++        tasks,
++        ops,
++        approvals,
++        dispatcher,
++        art_store,
++        maint,
++        challenges,
++    ) = maint_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "backup-restore", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-mnt-1", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-mnt-1", _deadline())).result(5)
++
++    # Create an expired SESSION artifact (ttl_ms=0) that would be GC'd if not pinned during backup
++    art = art_store.put(
++        context,
++        data=b"critical snapshot data",
++        mime="text/plain",
++        classification="WORKSPACE",
++        scope_kind="SESSION",
++        session_id="ses_test1",
++        purpose="backup_test",
++        ttl_ms=0,
++        request_id="mnt-art-1",
++        deadline_monotonic_ms=_deadline(),
++    )
++
++    # Operation 1: DISPATCHING (in-flight when backup is taken)
++    prop1 = json.loads(
++        ops.propose(
++            context,
++            task_id,
++            "gui.click",
++            '{"arg":"click1"}',
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {"kind": "LOCAL", "resource_ref": context.workspace_id},
++            "prop-mnt-1",
++            _deadline(),
++        )
++    )
++    op1, apr1 = prop1["operation_id"], prop1["approval_id"]
++    approvals.decide(
++        context,
++        apr1,
++        json.dumps(
++            {
++                "expected_version": 1,
++                "expected_binding_hash": prop1["binding_hash"],
++                "decision": "APPROVE",
++                "nonce": challenges.get(apr1).decode(),
++            }
++        ),
++        "apr-mnt-1",
++        _deadline(),
++    )
++    writer.submit(tasks.command(context, task_id, 3, "RUNNING", "run2-mnt-1", _deadline())).result(
++        5
++    )
++    claimed1 = json.loads(
++        writer.submit(
++            dispatcher.claim(
++                context,
++                op1,
++                "ep_1",
++                "exec_1",
++                [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1)],
++                30_000,
++                "claim-mnt-1",
++                _deadline(),
++            )
++        ).result(5)
++    )
++    writer.submit(
++        dispatcher.begin_dispatch(
++            context, op1, claimed1["attempt_id"], "ep_1", "exec_1", "disp-mnt-1", _deadline()
++        )
++    ).result(5)
++
++    # Operation 2: APPROVED (READY, unconsumed when backup is taken)
++    prop2 = json.loads(
++        ops.propose(
++            context,
++            task_id,
++            "fs.read",
++            '{"arg":"read2"}',
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {"kind": "LOCAL", "resource_ref": context.workspace_id},
++            "prop-mnt-2",
++            _deadline(),
++        )
++    )
++    op2, apr2 = prop2["operation_id"], prop2["approval_id"]
++    approvals.decide(
++        context,
++        apr2,
++        json.dumps(
++            {
++                "expected_version": 1,
++                "expected_binding_hash": prop2["binding_hash"],
++                "decision": "APPROVE",
++                "nonce": challenges.get(apr2).decode(),
++            }
++        ),
++        "apr-mnt-2",
++        _deadline(),
++    )
++
++    # Run online backup with concurrent GC interleaved while backup pin is active
++    backup_dir = tmp_path / "backup_bundle"
++    gc_ran_during_backup = False
++
++    def interleaved_gc() -> None:
++        nonlocal gc_ran_during_backup
++        res = art_store.collect_garbage(
++            context, request_id="gc-during-backup", deadline_monotonic_ms=_deadline()
++        )
++        # Must NOT tombstone 'art' while backup pin is held!
++        assert art.object_id not in res["tombstoned_object_ids"]
++        gc_ran_during_backup = True
++
++    manifest = maint.create_backup(context, backup_dir, on_pinned_hook=interleaved_gc)
++    assert gc_ran_during_backup is True
++    assert manifest.status == "VERIFIED"
++    assert manifest.contains_secret_values is False
++    assert "keychain:feishu_app_secret" in manifest.secret_refs
++    assert any(a["object_id"] == art.object_id for a in manifest.artifacts)
++
++    # Restore into a fresh target directory with missing keychain secret_ref
++    restored_db = tmp_path / "restored.sqlite"
++    restored_blobs = tmp_path / "restored_blobs"
++    report = maint.restore_backup(
++        backup_dir,
++        restored_db,
++        restored_blobs,
++        available_secret_refs=frozenset(),
++    )
++    assert report.reconfiguration_required is True
++    assert "keychain:feishu_app_secret" in report.missing_secret_refs
++    assert op1 in report.unknown_operations
++    assert apr2 in report.revoked_approvals
++
++    # Verify restored DB state:CONSUMED stays CONSUMED, APPROVED is REVOKED, DISPATCHING is UNKNOWN,
++    # Task is in RECONCILING, and channel_accounts with missing secret_ref is DISABLED
++    rdb = connect(restored_db, readonly=True)
++    try:
++        assert (
++            rdb.execute("SELECT status FROM approvals WHERE approval_id=?", (apr1,)).fetchone()[0]
++            == "CONSUMED"
++        )
++        assert (
++            rdb.execute("SELECT status FROM approvals WHERE approval_id=?", (apr2,)).fetchone()[0]
++            == "REVOKED"
++        )
++        assert (
++            rdb.execute("SELECT state FROM operations WHERE operation_id=?", (op1,)).fetchone()[0]
++            == "UNKNOWN"
++        )
++        assert (
++            rdb.execute("SELECT state FROM operations WHERE operation_id=?", (op2,)).fetchone()[0]
++            == "REVOKED"
++        )
++        assert (
++            rdb.execute("SELECT state FROM tasks WHERE task_id=?", (task_id,)).fetchone()[0]
++            == "RECONCILING"
++        )
++        assert (
++            rdb.execute(
++                "SELECT status FROM channel_accounts WHERE account_id='acc_feishu_1'"
++            ).fetchone()[0]
++            == "DISABLED"
++        )
++    finally:
++        rdb.close()
 --- /dev/null
 +++ b/tests/integration/storage/test_migrations.py
 @@ -0,0 +1,172 @@

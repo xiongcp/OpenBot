@@ -1,8 +1,8 @@
-# OB-011—014、OB-016、OB-021、OB-023、OB-024、OB-036：持久化、资源锁、Durable Outbox、预算熔断、上下文摘要与 Artifact 存储验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, Context Summary, and Artifact Store Verification Scope
+# OB-011—014、OB-016、OB-021、OB-023、OB-024、OB-030、OB-036：持久化、资源锁、Durable Outbox、预算熔断、上下文摘要、Artifact 存储与备份恢复验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, Context Summary, Artifact Store, and Backup/Restore Verification Scope
 
 ## 中文说明
 
-实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断、上下文摘要与 Artifact 存储共 82 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断、上下文摘要、Artifact 存储与数据库备份恢复共 83 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 
 OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 
@@ -36,11 +36,15 @@ OB-036（实现 Artifact 存储与可信元数据，保持 IN_PROGRESS）：先�
 2. 受控下载与预览守卫（`download`、`preview`、`verify_approved_digest`）：不接收或暴露任何宿主文件路径；强制返回 `Content-Disposition: attachment`、`Content-Security-Policy: default-src 'none'; sandbox` 与 `X-Content-Type-Options: nosniff`（防止 HTML/脚本内联执行）；拒绝通过 `preview` 访问 `SECRET` 产物；登记后若底层文件缺失或哈希不符，自动将数据库状态标为 `QUARANTINED`；审批绑定内容摘要变化（`verify_approved_digest`）立即拒绝。
 3. 孤立文件回收与待审批/备份 GC 保护（`collect_garbage`、`pin_for_backup`、`unpin_backup`）：清理注册前崩溃遗留的 `staging/` 与未登记 `objects/` 孤立文件；即使 TTL 到期，仍拒绝回收任何被非终态 Task、待审批/在途/UNKNOWN Operation 或活跃备份 pin（`pin_for_backup`）引用的对象。因上游 `OB-017`/`OB-032` 仍为 `IN_PROGRESS`，`OB-036` 记为 `IN_PROGRESS`。
 
+OB-030（实现数据库备份恢复与保留策略，保持 IN_PROGRESS）：先读取 `component_refs`（`sqlite3`）、`reuse_type`（`dependency_adapter`）与 `reuse_notes`。新增 `services/core/src/openbot/storage/maintenance.py`（`DatabaseMaintenanceService`、`BackupManifest`、`RestoreVerificationReport`）：
+1. 在线一致备份与 GC Pin 联动（`create_backup`）：先获取全部 `AVAILABLE` 产物的 `pin_for_backup` 保护，防止备份期间并发 GC 删除快照引用；调用 SQLite `backup()` 接口生成一致快照（含 WAL 已提交状态，非裸文件拷贝）并校验 `PRAGMA integrity_check` 与 `foreign_key_check`；逐个核对磁盘上 Artifact 文件的实际字节数与 SHA-256；manifest 仅记录不透明 `secret_ref` 且排除 `SECRET` 产物与任何真实密钥（`contains_secret_values=False`）；完成后在 `finally` 释放 GC pin，失败备份写入 `status='FAILED'`。
+2. 安全恢复与防复活/防重放守卫（`restore_backup`）：先核验 `manifest.json`（`status=='VERIFIED'`）、数据库 SHA-256 与全部引用 Artifact 文件哈希后再启用恢复库；恢复后在同一事务内将旧 `runtime_instances` 置为 `STOPPED`，将未消费的 `PENDING`/`APPROVED` 授权撤销为 `REVOKED`（`CONSUMED` 绝不回退或复活），将在途 `DISPATCHING` 操作转为 `UNKNOWN`（关联 Task 转 `RECONCILING`），杜绝恢复旧备份导致复活旧批准或盲目重放未知副作用；逐项核对 `secret_ref` 可解析性，缺失钥匙串引用时将对应 `channel_accounts` 置为 `DISABLED` 并标记 `reconfiguration_required=True`。因上游 `OB-020` 仍为 `IN_PROGRESS` 且 M3 跨平台恢复实测待对应环境执行，`OB-030` 记为 `IN_PROGRESS`。
+
 OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
 
 ## English Summary
 
-Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (82 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
+Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (83 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
 
 - **OB-011**: Checksum-locked ordered SQLite migrator creating all 23 baseline tables, pre-upgrade backup, foreign-key and integrity checks, and WAL/FULL/FK/recursive_triggers verification using stdlib `sqlite3`.
 - **OB-012**: Single writer thread owning short transactions with bounded per-lane queues, round-robin fairness, total deadline enforcement, and fail-closed fatal writer state on commit/rollback I/O errors.
@@ -65,3 +69,6 @@ Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integrat
   1. `put`: Writes to `staging/`, `fsync`s, atomically `os.replace`s into `objects/`, and registers immutable `artifacts` and `artifact_refs` while enforcing single-artifact and per-task byte quotas.
   2. `download`, `preview` & `verify_approved_digest`: Never exposes host paths; enforces `attachment`, sandbox CSP, and `nosniff` headers so HTML/scripts never execute inline; blocks `SECRET` preview; marks missing/corrupted blobs `QUARANTINED`; invalidates tampered approval digests.
   3. `collect_garbage` & `pin_for_backup`: Cleans up pre-registration orphan files while protecting artifacts referenced by active tasks, pending/approved/in-flight/unknown operations, or active backup pins.
+- **OB-030 (`IN_PROGRESS`)**: Online SQLite backup, artifact manifest verification, and safe restore (`services/core/src/openbot/storage/maintenance.py`):
+  1. `create_backup`: Pins referenced `AVAILABLE` artifacts against concurrent GC via `pin_for_backup`, runs SQLite `backup()` with `integrity_check` and `foreign_key_check`, verifies on-disk artifact sizes and SHA-256 digests, and records only opaque `secret_ref` identifiers (`contains_secret_values=False`).
+  2. `restore_backup`: Verifies `manifest.json` and all artifact digests before restoring; stops old `runtime_instances`, revokes unconsumed `PENDING`/`APPROVED` grants (`CONSUMED` untouched), transitions `DISPATCHING` operations to `UNKNOWN` (`RECONCILING` task state) to prevent replaying ambiguous side effects, and disables `channel_accounts` with missing `secret_ref` (`reconfiguration_required=True`).
