@@ -134,6 +134,9 @@
 实现（OB-061）：新增 `services/core/src/openbot/tools/browser/verifier.py`（`BrowserOutcomeRegressionHarness`、`BrowserRegressionReport`）与 `tests/integration/browser/test_browser_outcome_regression.py`：
 1. 浏览器结果验证回归：覆盖结账金额篡改拦截、表单提交回执丢失转 `UNKNOWN`、下载路径检疫净化、重定向至云元数据拦截、以及登录会话过期跳转拒绝 5 类夹具场景，绝不凭模型自称完成或驱动无异常代替业务效果验证。
 
+实现（OB-062）：新增 `services/core/src/openbot/tools/mcp/client.py`（`McpStdioLifecycleClient`、`McpCompatibilityManifest`）与 `tests/unit/test_mcp_client.py`：
+1. 固定版本 stdio MCP 协商与禁止动态拉包：强制要求 `sha256:` 包摘要，拦截 `npx`/`uvx`/`pipx` 与 `@latest` 动态启动（`DYNAMIC_MCP_PACKAGE_RUNNER_FORBIDDEN`）；协议版本不匹配时立即拒绝（`MCP_PROTOCOL_VERSION_MISMATCH`），不静默降级 transport 且对响应字节实施有界截断。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -160,6 +163,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_read.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_actions.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/browser/test_browser_outcome_regression.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_client.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -247,3 +251,5 @@
   1. Re-verifies `BoundElementRef`, button label, and amount before execution (`BROWSER_PRECONDITION_DRIFT`), transitions post-click timeouts to `UNKNOWN`/`RECONCILING`, and forbids automatic second clicks or trusting in-page text to clear `UNKNOWN`.
 - **OB-061 (`IN_PROGRESS`)**: Browser outcome verification regression (`services/core/src/openbot/tools/browser/verifier.py` and `tests/integration/browser/test_browser_outcome_regression.py`, 1 passed):
   1. Verifies 5 fixture scenarios (checkout amount drift, form submit lost receipt -> `UNKNOWN`, download quarantine, metadata redirect blocking, and expired login session rejection) without accepting model self-claims or driver no-error returns as proof.
+- **OB-062 (`IN_PROGRESS`)**: MCP version negotiation and lifecycle client (`services/core/src/openbot/tools/mcp/client.py` and `tests/unit/test_mcp_client.py`, 1 passed):
+  1. Enforces pinned `sha256` package digests and explicit stdio protocol versions, blocks `npx`/`uvx`/`@latest` dynamic package runners (`DYNAMIC_MCP_PACKAGE_RUNNER_FORBIDDEN`), rejects protocol mismatches without silent transport downgrade, and bounds output bytes.
