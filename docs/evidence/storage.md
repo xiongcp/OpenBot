@@ -1,8 +1,8 @@
-# OB-011—014、OB-016、OB-021、OB-023：持久化、资源锁、Durable Outbox 与预算熔断验收范围 / Persistence, Resource Leases, Durable Outbox, and Budget Circuit-Breaker Verification Scope
+# OB-011—014、OB-016、OB-021、OB-023、OB-024：持久化、资源锁、Durable Outbox、预算熔断与上下文摘要验收范围 / Persistence, Resource Leases, Durable Outbox, Budget Circuit-Breaker, and Context Summary Verification Scope
 
 ## 中文说明
 
-实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播与预算熔断共 78 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播、预算熔断与上下文摘要共 80 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 
 OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 
@@ -26,11 +26,16 @@ OB-023（实现任务预算和熔断，保持 IN_PROGRESS）：先读取 `compon
 3. 离线词表校验与非通用计费声明（`OfflineVocabularyEstimator`）：对已声明模型校验本地预置词表文件存在性与 SHA-256 摘要（缺失或篡改时立即 `CAPABILITY_UNAVAILABLE` 失败，禁止运行期联网下载）；对未知模型使用保守 UTF-8 上界，从不把 OpenAI 分词器当作全 Provider 精确计费器（`exact_billing_guaranteed=False`）。
 4. 重复提案/连续错误/空转熔断（`record_turn_activity`）与恢复（`resume_paused`）：触发阈值时自动将 Task 置为 `PAUSED`，仅在显式重置熔断/补充额度且未取消时恢复为 `QUEUED`。因上游 `OB-017` 及真实模型离线词表资产打包尚待闭合，`OB-023` 记为 `IN_PROGRESS`。
 
+OB-024（实现上下文快照与摘要，保持 IN_PROGRESS）：先读取 `component_refs`（`tiktoken`）、`reuse_type`（`control_owned`）与 `reuse_notes`。新增 `services/core/src/openbot/application/context.py`（`ContextService`、`ContextMessage`、`ContextSummary`、`ModelContextSnapshot`）：
+1. 消息追加、工具关联与脱敏限制（`append_message`）：拒绝持久化 `SECRET` 数据与 `hidden_reasoning` 内部推理字段；强制 `TOOL` 消息必须携带匹配同任务既有 `ASSISTANT` 消息的 `tool_call_id` 且来源保持 `UNTRUSTED_TOOL_OUTPUT`/`UNTRUSTED_EXTERNAL`。
+2. 保留污点、来源引用与未决动作的窗口摘要（`summarize_window`）：跨被压缩消息继承最高敏感数据分类（`PUBLIC < WORKSPACE < SENSITIVE`）与最不可信来源（如 `UNTRUSTED_EXTERNAL`），合并保留全部 `source_refs` 以及来自数据库权威表的 `pending_operation_ids` / `approved_operation_ids`；显式标记 `authoritative_grants=False`，绝不因摘要洗白污点或把外部注入文字升级为系统/用户授权。
+3. 长会话成对截断与开销核算（`build_model_context`）：跨重启恢复目标、未决动作、摘要与最近消息；按完整 `ASSISTANT+TOOL` 配对单元截断旧消息（不拆散 `tool_call_id` 关联）；显式将消息包装（`framing_overhead_tokens`）、工具 Schema（`tool_schema_overhead_tokens`）与多模态（`multimodal_overhead_tokens`）计入保守 Token 总额，不以纯文本分词数冒充最终费用（`exact_billing_guaranteed=False`）。因上游 `OB-017`/`OB-023` 仍为 `IN_PROGRESS`，`OB-024` 记为 `IN_PROGRESS`。
+
 OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
 
 ## English Summary
 
-Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (78 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
+Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (80 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
 
 - **OB-011**: Checksum-locked ordered SQLite migrator creating all 23 baseline tables, pre-upgrade backup, foreign-key and integrity checks, and WAL/FULL/FK/recursive_triggers verification using stdlib `sqlite3`.
 - **OB-012**: Single writer thread owning short transactions with bounded per-lane queues, round-robin fairness, total deadline enforcement, and fail-closed fatal writer state on commit/rollback I/O errors.
@@ -47,3 +52,7 @@ Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integrat
   2. Post-call `settle` (recording `usage_delta_tokens` between estimated and actual tokens) and `mark_unknown` (retaining reserved amount/tokens on stream cuts or ambiguous failures instead of zeroing cost).
   3. `OfflineVocabularyEstimator`: verifies pinned offline vocabulary file SHA-256 without network downloads (failing closed when missing) and never claims OpenAI encodings provide exact billing for arbitrary models (`exact_billing_guaranteed=False`).
   4. Circuit breaker (`record_turn_activity`) tripping to `PAUSED` on repeated proposals, consecutive errors, or idle turns, with explicit `resume_paused` recovery.
+- **OB-024 (`IN_PROGRESS`)**: Bounded model context snapshots and taint-inheriting summarization (`services/core/src/openbot/application/context.py`):
+  1. `append_message`: Rejects `SECRET` payloads and `hidden_reasoning` fields; enforces that `TOOL` messages match a prior `ASSISTANT` `tool_call_id` in the same task and retain untrusted provenance.
+  2. `summarize_window`: Inherits the strictest `data_class` (`SENSITIVE` over `WORKSPACE`/`PUBLIC`) and least-trusted `provenance_kind` (`UNTRUSTED_EXTERNAL`), preserves all `source_refs` and authoritative `pending_operation_ids`/`approved_operation_ids`, and enforces `authoritative_grants=False` so summaries never launder taint or elevate prompt-injection text into permissions.
+  3. `build_model_context`: Reconstructs context across restarts, truncates older turns without splitting `ASSISTANT`+`TOOL` `tool_call_id` pairs, and explicitly accounts for message framing, tool schema, and multimodal token overhead (`exact_billing_guaranteed=False`).
