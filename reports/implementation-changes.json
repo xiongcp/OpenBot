@@ -178,6 +178,12 @@
       "included_in_patch": true
     },
     {
+      "path": "docs/demos/mvp.md",
+      "before_sha256": null,
+      "after_sha256": "0c3a4ce448b7316b74029ea17f694beb7fd28104396cd800464c6abe22470e5a",
+      "included_in_patch": true
+    },
+    {
       "path": "docs/dependency-evidence.md",
       "before_sha256": null,
       "after_sha256": "7b2c3de76850da3dd318483eacd5f28ab140a4d4fa5940254fe33a1c034bce40",
@@ -306,7 +312,7 @@
     {
       "path": "evidence/implementation/database-design.log",
       "before_sha256": null,
-      "after_sha256": "d41c13e071b36fbe1e7b5b9fddc8b203fa4465332bf5162118a1b072b0bd21fb",
+      "after_sha256": "94c9a79b7ce6b1a6b6f639ef3b20e0adf551c9a4a15fcced6ea9a8c5c864e036",
       "included_in_patch": false
     },
     {
@@ -318,7 +324,7 @@
     {
       "path": "evidence/implementation/design.log",
       "before_sha256": null,
-      "after_sha256": "1033e72febf6e15f8f4a2a444c7601ba78778dd3f3e1449bf93a02321a98b891",
+      "after_sha256": "87221e8b3470ac88c992b1b90c185b4788b5cf29025fce15322d730c21cd47c1",
       "included_in_patch": false
     },
     {
@@ -330,7 +336,7 @@
     {
       "path": "evidence/implementation/format.log",
       "before_sha256": null,
-      "after_sha256": "dd6674ff09df8dc39f4f1c8c77a0ca82de8a341c19024598a98438e8cba05919",
+      "after_sha256": "c3ac60a207092b7f89b7655ce3a74c2ff381e396335170c20b61328b3a33bce9",
       "included_in_patch": false
     },
     {
@@ -600,7 +606,7 @@
     {
       "path": "evidence/implementation/m1-database-design.log",
       "before_sha256": null,
-      "after_sha256": "5c5ce6b8ba296b6dfa42dba169f7336d8640697de722ccf5b43fbe4ffa4df7d8",
+      "after_sha256": "2bb3d2f02e1fa2a1697a400940607ae6576f1066f23acd194c8740ef073689ee",
       "included_in_patch": false
     },
     {
@@ -612,13 +618,13 @@
     {
       "path": "evidence/implementation/m1-design.log",
       "before_sha256": null,
-      "after_sha256": "1033e72febf6e15f8f4a2a444c7601ba78778dd3f3e1449bf93a02321a98b891",
+      "after_sha256": "87221e8b3470ac88c992b1b90c185b4788b5cf29025fce15322d730c21cd47c1",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-format.log",
       "before_sha256": null,
-      "after_sha256": "dd6674ff09df8dc39f4f1c8c77a0ca82de8a341c19024598a98438e8cba05919",
+      "after_sha256": "c3ac60a207092b7f89b7655ce3a74c2ff381e396335170c20b61328b3a33bce9",
       "included_in_patch": false
     },
     {
@@ -648,19 +654,19 @@
     {
       "path": "evidence/implementation/m1-types.log",
       "before_sha256": null,
-      "after_sha256": "7aebc3c9c840c3e075d7701a826136c2571eab60a0ce5c94514098ba0869deaa",
+      "after_sha256": "14c86ee194cc9406b4f38866ce2eb1ba7e54c55437faf1ccc89f0195c485674d",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "5d9a6718b0a49e75e36c40e9b2a6073bd64e277a5b44df61823f7ccba460e69a",
+      "after_sha256": "23c06ca63942f5261d351f6cddfdcc1d67963fe03c19a89535452076c28bd133",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-verification.json",
       "before_sha256": null,
-      "after_sha256": "321835f581b400b54177ad4737d7f4483570f23f8a3d89a93c308581d16deb02",
+      "after_sha256": "b0efe0214d3e859108cd744d21e84ff68155034181cd949640bef0c7a3b3623b",
       "included_in_patch": false
     },
     {
@@ -976,6 +982,12 @@
       "included_in_patch": false
     },
     {
+      "path": "evidence/implementation/ob067-red.log",
+      "before_sha256": null,
+      "after_sha256": "e61dbf0f4848056b1c208ea26cd826c0d27683d5e61f34ec1cc03bc19f7d92bd",
+      "included_in_patch": false
+    },
+    {
       "path": "evidence/implementation/ob081-red.log",
       "before_sha256": null,
       "after_sha256": "c23201d2bcdba609185dd7af5df6674259dff1dc014b944e2388dad7f9ba231d",
@@ -1014,19 +1026,19 @@
     {
       "path": "evidence/implementation/types.log",
       "before_sha256": null,
-      "after_sha256": "7aebc3c9c840c3e075d7701a826136c2571eab60a0ce5c94514098ba0869deaa",
+      "after_sha256": "14c86ee194cc9406b4f38866ce2eb1ba7e54c55437faf1ccc89f0195c485674d",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "2d311ce4473984feea10d1ee2a76ebbb0d8925473f0955c1cc87051caf4bf87c",
+      "after_sha256": "bfb507ac64861348f64d99b4c0426beb9c8b52f9102941e83e0e8b219fe62100",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/verification.json",
       "before_sha256": null,
-      "after_sha256": "497c1e4759950d40dffbb2fd8c1200fa86e6b4403917abf2b4e5de22a541d098",
+      "after_sha256": "8bb0c580d842622a1bca2df970e276c394781d818061e54b4829ef2d21aa0f90",
       "included_in_patch": false
     },
     {
@@ -1038,7 +1050,7 @@
     {
       "path": "progress.md",
       "before_sha256": null,
-      "after_sha256": "8cf01a36df537f89bda48ffc97c0096f4019e4050959334126f334e3a2698bcf",
+      "after_sha256": "6677afff1a8bed7b41a71166536cf75dd0e34f1187210656e1f631b057393be7",
       "included_in_patch": true
     },
     {
@@ -1153,6 +1165,12 @@
       "path": "services/core/src/openbot/application/local_prototype.py",
       "before_sha256": null,
       "after_sha256": "f491017757ec342cb7d81066eebe23a4b8739e72291eb3e09e1b4230586a23c1",
+      "included_in_patch": true
+    },
+    {
+      "path": "services/core/src/openbot/application/mvp_regression.py",
+      "before_sha256": null,
+      "after_sha256": "c14e9be9377bb54bab373d1b80799481f655140fe021572f60af0be8f9e611fb",
       "included_in_patch": true
     },
     {
@@ -1620,13 +1638,13 @@
     {
       "path": "tasks/TASKS.md",
       "before_sha256": "62011244f45e5fc158ac1528b2bf737a2bd80c937751744c1059e6899a7c43ae",
-      "after_sha256": "17fc1d5ab55ed31e8404299407b43ad1c184c8fd40c8d887233b0f9640564153",
+      "after_sha256": "9b3b21caf4abd1af2fcfbe6ea5fedf0b3dd585489812c13878a5b44dd8e577ff",
       "included_in_patch": true
     },
     {
       "path": "tasks/backlog.json",
       "before_sha256": "343bc2c906a0f19539db16609498bf63f796069c75995944833089a6ae550e20",
-      "after_sha256": "7c42657594eb1a36351ab53cdbecfe6b065bcbcc50d0da1244a07f2bf8f378f4",
+      "after_sha256": "657faa57c51eadf3290c4403f21ce0fbcf23a1717c1245721af80dab530b042a",
       "included_in_patch": true
     },
     {
@@ -1777,6 +1795,12 @@
       "path": "tests/integration/scenarios/local_prototype/test_local_prototype.py",
       "before_sha256": null,
       "after_sha256": "394b0e0dc008520b37c58f7fd74d5d5d6cde3c1c7e4effc403a03df85ade0b5d",
+      "included_in_patch": true
+    },
+    {
+      "path": "tests/integration/scenarios/mvp/test_mvp_capability_regression.py",
+      "before_sha256": null,
+      "after_sha256": "951cd64539e7b59cbbb016b294fbc848fb82213436eef1e06596b07915cfd4bf",
       "included_in_patch": true
     },
     {

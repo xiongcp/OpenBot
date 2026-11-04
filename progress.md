@@ -85,9 +85,10 @@
 - 推进 OB-064（实现 MCP 进程和网络权限）：实现 McpIsolatedExecutor、ReviewedLocalMcpManifest 与 McpDispatchPlan（要求已验证隔离后端，剥离父进程 HOME 与密钥环境，忽略第三方 readOnlyHint/idempotentHint 注释而由本地已审 manifest 决定 retry_class，并禁用 MCP sampling）；新增单元测试通过，M0 增至 286 passed/3 skipped，M1 增至 305 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-064 记 IN_PROGRESS。
 - 推进 OB-065（建立 MCP 恶意与故障服务器测试）：实现 McpFaultAndMaliciousHarness 与 McpFaultReport（验证 list_changed 漂移隔离、超长输出截断与秘密脱敏、Schema 深度洪泛阻断、重复请求 ID 拒绝、内建工具名碰撞拦截与执行后断连转 UNKNOWN 零重试）；新增集成测试通过，M0 增至 287 passed/3 skipped，M1 增至 306 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-065 记 IN_PROGRESS。
 - 推进 OB-066（实现只读技能指令加载）：新增 contracts/schemas/skill_manifest.schema.json 与 ReadOnlySkillLoader（核验来源、版本、license、SHA-256 与能力白名单，强制 can_mutate_policy=False、can_expand_workspace=False、can_promote_reference_only_components=False，生成技能仅存为 DRAFT_NOT_INSTALLED 且绝不自动安装）；新增单元测试通过，M0 增至 288 passed/3 skipped，M1 增至 307 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-066 记 IN_PROGRESS。
+- 推进 OB-067（交付全 MVP 能力集回归）：实现 MvpCapabilityRegressionSuite、双语说明 docs/demos/mvp.md 与集成测试 tests/integration/scenarios/mvp/test_mvp_capability_regression.py（联合验证云+本地 Provider、飞书受控网关、工作区 ACI 与隔离进程、结构化浏览器、MCP 与只读技能六大子系统，security_critical_failures == 0，诚实声明 claims_three_os_release_complete=False）；M0 增至 289 passed/3 skipped，M1 增至 308 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-067 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-066`, and `OB-095`, reaching 288 passed M0 checks and 307 passed M1 checks.
+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-067`, and `OB-095`, reaching 289 passed M0 checks and 308 passed M1 checks.

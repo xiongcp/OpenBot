@@ -2483,6 +2483,41 @@
 +### 3. Reproducible Command
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv-m1/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q` (`1 passed`)
 --- /dev/null
++++ b/docs/demos/mvp.md
+@@ -0,0 +1,32 @@
++# M3 全 MVP 能力集回归与边界说明 / M3 Full MVP Capability Regression & Boundary Report (OB-067)
++
++## 中文说明
++
++### 1. 六大 MVP 子系统回归（`MvpCapabilityRegressionSuite`）
++`services/core/src/openbot/application/mvp_regression.py` 与 `tests/integration/scenarios/mvp/test_mvp_capability_regression.py` 联合验证 M3 MVP 六大能力子系统（`security_critical_failures == 0`）：
++1. `cloud_and_local_providers`：OpenAI 兼容云适配器（`OB-025`）与本地 Ollama 适配器（`OB-026`，校验模型权重哈希、无外网出口证明与零云回退）。
++2. `feishu_controlled_gateway`：飞书安全配对、WebSocket 持久化后 ACK 入站、普通审批卡（`REQUIRE_LOCAL` 保护）、进度合并与 6 个故障场景（`OB-048`—`OB-056`）。
++3. `workspace_aci_and_isolated_process`：工作区文件守卫、补丁冻结与回滚、受控进程与进程树监管回收（`OB-029`、`OB-032`—`OB-042`）。
++4. `browser_structured_tools`：专用浏览器 profile 锁、网络与 Service Worker 策略、有界只读快照、写动作派发前复验与 5 类结果验证回归（`OB-057`—`OB-061`）。
++5. `mcp_stdio_and_fault_guards`：固定版本 stdio MCP 协商、全量 JCS 元数据锁定、隔离执行与 6 类恶意/故障回归（`OB-062`—`OB-065`）。
++6. `readonly_skills_loader`：只读技能指令加载与草稿隔离（`OB-066`）。
++
++### 2. 诚实边界声明
++- 未启用的 `REFERENCE_ONLY` / `DEFERRED` 组件绝不列为已启用能力（`reference_only_or_deferred_claimed_as_active = False`）。
++- 单机（`Darwin-arm64`）受控回归通过不代替 Windows/Linux 原生机器实测或真实飞书生产租户验收（`claims_three_os_release_complete = False`）。
++
++### 3. 可复现验证命令
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv-m1/bin/python -m pytest tests/integration/scenarios/mvp/test_mvp_capability_regression.py -q`（1 passed）
++
++---
++
++## English Summary
++
++### 1. Six MVP Subsystem Regressions (`MvpCapabilityRegressionSuite`)
++`services/core/src/openbot/application/mvp_regression.py` and `tests/integration/scenarios/mvp/test_mvp_capability_regression.py` verify all 6 M3 MVP capability subsystems (`cloud_and_local_providers`, `feishu_controlled_gateway`, `workspace_aci_and_isolated_process`, `browser_structured_tools`, `mcp_stdio_and_fault_guards`, and `readonly_skills_loader`) with `security_critical_failures == 0`.
++
++### 2. Honest Boundary
++- `reference_only_or_deferred_claimed_as_active = False` and `claims_three_os_release_complete = False`: single-OS (`Darwin-arm64`) verification never substitutes for native Windows/Linux hardware or live Feishu tenant qualification.
++
++### 3. Reproducible Command
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv-m1/bin/python -m pytest tests/integration/scenarios/mvp/test_mvp_capability_regression.py -q` (`1 passed`)
+--- /dev/null
 +++ b/docs/dependency-evidence.md
 @@ -0,0 +1,13 @@
 +# OB-004 / OB-089：阶段依赖证据
@@ -3265,7 +3300,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,94 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3353,12 +3388,13 @@
 +- 推进 OB-064（实现 MCP 进程和网络权限）：实现 McpIsolatedExecutor、ReviewedLocalMcpManifest 与 McpDispatchPlan（要求已验证隔离后端，剥离父进程 HOME 与密钥环境，忽略第三方 readOnlyHint/idempotentHint 注释而由本地已审 manifest 决定 retry_class，并禁用 MCP sampling）；新增单元测试通过，M0 增至 286 passed/3 skipped，M1 增至 305 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-064 记 IN_PROGRESS。
 +- 推进 OB-065（建立 MCP 恶意与故障服务器测试）：实现 McpFaultAndMaliciousHarness 与 McpFaultReport（验证 list_changed 漂移隔离、超长输出截断与秘密脱敏、Schema 深度洪泛阻断、重复请求 ID 拒绝、内建工具名碰撞拦截与执行后断连转 UNKNOWN 零重试）；新增集成测试通过，M0 增至 287 passed/3 skipped，M1 增至 306 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-065 记 IN_PROGRESS。
 +- 推进 OB-066（实现只读技能指令加载）：新增 contracts/schemas/skill_manifest.schema.json 与 ReadOnlySkillLoader（核验来源、版本、license、SHA-256 与能力白名单，强制 can_mutate_policy=False、can_expand_workspace=False、can_promote_reference_only_components=False，生成技能仅存为 DRAFT_NOT_INSTALLED 且绝不自动安装）；新增单元测试通过，M0 增至 288 passed/3 skipped，M1 增至 307 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-066 记 IN_PROGRESS。
++- 推进 OB-067（交付全 MVP 能力集回归）：实现 MvpCapabilityRegressionSuite、双语说明 docs/demos/mvp.md 与集成测试 tests/integration/scenarios/mvp/test_mvp_capability_regression.py（联合验证云+本地 Provider、飞书受控网关、工作区 ACI 与隔离进程、结构化浏览器、MCP 与只读技能六大子系统，security_critical_failures == 0，诚实声明 claims_three_os_release_complete=False）；M0 增至 289 passed/3 skipped，M1 增至 308 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-067 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-066`, and `OB-095`, reaching 288 passed M0 checks and 307 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-067`, and `OB-095`, reaching 289 passed M0 checks and 308 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -6888,6 +6924,130 @@
 +            )
 +        finally:
 +            harness.close()
+--- /dev/null
++++ b/services/core/src/openbot/application/mvp_regression.py
+@@ -0,0 +1,121 @@
++"""M3 full MVP capability regression suite across providers, Feishu, ACI, browser, and MCP."""
++
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++from openbot_feishu.e2e_harness import FeishuM2EndToEndHarness
++
++from openbot.application.skills import ReadOnlySkillLoader, SkillManifestSpec
++from openbot.application.vertical_slice import M1VerticalSliceHarness
++from openbot.providers.ollama import (
++    LocalModelEndpointAttestation,
++    OllamaLocalProviderAdapter,
++    OllamaRawResponse,
++)
++from openbot.tools.browser.verifier import BrowserOutcomeRegressionHarness
++from openbot.tools.mcp.fault_harness import McpFaultAndMaliciousHarness
++
++
++class _OfflineOllamaTransport:
++    def post_chat(self, payload: dict[str, object]) -> OllamaRawResponse:
++        del payload
++        return OllamaRawResponse(content="ok", tool_calls=(), prompt_tokens=4, eval_tokens=4)
++
++
++@dataclass(frozen=True, slots=True)
++class MvpCapabilityRegressionReport:
++    subsystems_verified: tuple[str, ...]
++    security_critical_failures: int
++    reference_only_or_deferred_claimed_as_active: Literal[False] = False
++    claims_three_os_release_complete: Literal[False] = False
++
++
++class MvpCapabilityRegressionSuite:
++    """Verify the combined M3 MVP capability matrix and record honest boundary limits."""
++
++    def __init__(self, base_dir: Path) -> None:
++        self._base = base_dir
++
++    def run_all(self) -> MvpCapabilityRegressionReport:
++        self._base.mkdir(parents=True, exist_ok=True)
++        repo_root = Path(__file__).resolve().parents[5]
++        subsystems: list[str] = []
++        failures = 0
++
++        # 1. Cloud & Local Ollama providers
++        ollama = OllamaLocalProviderAdapter(
++            attestation=LocalModelEndpointAttestation(
++                endpoint_url="http://127.0.0.1:11434/api/chat",
++                model_id="qwen2.5-coder:7b",
++                local_weights_digest="sha256:" + "a" * 64,
++                runner_offline_egress_verified=True,
++                cloud_relay_enabled=False,
++                web_search_plugin_enabled=False,
++                supports_structured_tools=True,
++            ),
++            transport=_OfflineOllamaTransport(),
++        )
++        res_loc = ollama.generate(prompt="ping", require_tools=True, privacy_mode="OFFLINE")
++        if res_loc.status == "OK" and not res_loc.cloud_fallback_attempted:
++            subsystems.append("cloud_and_local_providers")
++        else:
++            failures += 1
++
++        # 2. Feishu controlled gateway
++        feishu_rep = FeishuM2EndToEndHarness(self._base / "feishu").run_all()
++        if feishu_rep.main_flow_passed and len(feishu_rep.failure_scenarios_verified) == 6:
++            subsystems.append("feishu_controlled_gateway")
++        else:
++            failures += 1
++
++        # 3. Workspace ACI & isolated process
++        slice_h = M1VerticalSliceHarness.create(self._base / "aci")
++        try:
++            aci_res = slice_h.run_local_restricted_effect_slice()
++            if aci_res["task_final_state"] == "SUCCEEDED" and aci_res["workspace_file_patched"]:
++                subsystems.append("workspace_aci_and_isolated_process")
++            else:
++                failures += 1
++        finally:
++            slice_h.close()
++
++        # 4. Browser structured tools
++        br_rep = BrowserOutcomeRegressionHarness(self._base / "browser").run_all_fixture_scenarios()
++        if len(br_rep.scenarios_verified) == 5:
++            subsystems.append("browser_structured_tools")
++        else:
++            failures += 1
++
++        # 5. MCP stdio and fault guards
++        mcp_rep = McpFaultAndMaliciousHarness().run_all()
++        if len(mcp_rep.cases_verified) == 6 and mcp_rep.post_dispatch_disconnect_retried_count == 0:
++            subsystems.append("mcp_stdio_and_fault_guards")
++        else:
++            failures += 1
++
++        # 6. Read-only skills loader
++        loader = ReadOnlySkillLoader(
++            schema_path=repo_root / "contracts/schemas/skill_manifest.schema.json"
++        )
++        skl = loader.load_readonly_skill(
++            SkillManifestSpec(
++                skill_id="skl_mvp",
++                name="MVP Skill",
++                version="1.0.0",
++                source_uri="local://skills/mvp",
++                license="MIT",
++                sha256="b" * 64,
++                required_capabilities=("workspace.read",),
++                instructions_markdown="# Read-only",
++            )
++        )
++        if not skl.can_mutate_policy and not skl.can_expand_workspace:
++            subsystems.append("readonly_skills_loader")
++        else:
++            failures += 1
++
++        return MvpCapabilityRegressionReport(
++            subsystems_verified=tuple(subsystems),
++            security_critical_failures=failures,
++        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/operations.py
 @@ -0,0 +1,366 @@
@@ -20781,6 +20941,15 @@
  
  **需求** [RQ09](requirements_traceability.md#rq09)、[RQ12](requirements_traceability.md#rq12)
  
+@@ -4837,7 +4837,7 @@
+ 
+ **交付全MVP能力集回归**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 QA · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
+ 
+ **需求** [RQ07](requirements_traceability.md#rq07)、[RQ08](requirements_traceability.md#rq08)、[RQ09](requirements_traceability.md#rq09)、[RQ12](requirements_traceability.md#rq12)
+ 
 --- a/tasks/backlog.json
 +++ b/tasks/backlog.json
 @@ -4,7 +4,7 @@
@@ -22670,7 +22839,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -4076,7 +4865,20 @@
+@@ -4076,14 +4865,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -22692,7 +22861,36 @@
    },
    {
      "id": "OB-067",
-@@ -4279,7 +5081,7 @@
+     "title": "交付全MVP能力集回归",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "QA",
+     "size": "M",
+     "req_ids": [
+@@ -4140,7 +4942,19 @@
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
+       "启用组件组合清单、关联Q/任务证据与每项能力的真实/模拟区分。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第19–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第19–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 MvpCapabilityRegressionSuite verifying all 6 MVP subsystems with honest real-tenant and multi-OS boundary reporting",
++      "evidence": [
++        "docs/demos/mvp.md",
++        "tests/integration/scenarios/mvp/test_mvp_capability_regression.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-026、OB-056、OB-061、OB-065、OB-066 仍为 IN_PROGRESS，且缺少真实飞书租户与 Windows/Linux 原生实机；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs, reuse_type (qualification), and reuse_notes; verified combined MVP capability regression without claiming unverified platforms or tenants."
++    }
+   },
+   {
+     "id": "OB-068",
+@@ -4279,7 +5093,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -22701,7 +22899,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +5139,26 @@
+@@ -4337,14 +5151,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -22730,7 +22928,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5215,19 @@
+@@ -4401,7 +5227,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -22751,7 +22949,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5835,7 @@
+@@ -5009,7 +5847,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -22760,7 +22958,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5904,20 @@
+@@ -5078,7 +5916,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -22782,7 +22980,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6362,7 @@
+@@ -5523,7 +6374,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -22791,7 +22989,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6415,26 @@
+@@ -5576,14 +6427,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22820,7 +23018,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6493,26 @@
+@@ -5642,14 +6505,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -22849,7 +23047,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6567,26 @@
+@@ -5704,14 +6579,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22878,7 +23076,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6653,25 @@
+@@ -5778,14 +6665,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22906,7 +23104,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6739,26 @@
+@@ -5853,14 +6751,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -22935,7 +23133,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6812,27 @@
+@@ -5914,14 +6824,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -22965,7 +23163,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,7 +6888,20 @@
+@@ -5977,7 +6900,20 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -25753,6 +25951,30 @@
 +    assert "Linux-native" in report.unsupported_or_unverified_capabilities
 +    assert "real_feishu_tenant" in report.unsupported_or_unverified_capabilities
 +    assert report.claims_full_mvp_complete is False
+--- /dev/null
++++ b/tests/integration/scenarios/mvp/test_mvp_capability_regression.py
+@@ -0,0 +1,21 @@
++from pathlib import Path
++
++from openbot.application.mvp_regression import MvpCapabilityRegressionSuite
++
++
++def test_mvp_capability_regression_verifies_all_subsystems_and_reports_honest_boundaries(
++    tmp_path: Path,
++) -> None:
++    suite = MvpCapabilityRegressionSuite(tmp_path / "mvp_reg")
++    report = suite.run_all()
++    assert report.security_critical_failures == 0
++    assert report.reference_only_or_deferred_claimed_as_active is False
++    assert report.claims_three_os_release_complete is False
++    assert set(report.subsystems_verified) == {
++        "cloud_and_local_providers",
++        "feishu_controlled_gateway",
++        "workspace_aci_and_isolated_process",
++        "browser_structured_tools",
++        "mcp_stdio_and_fault_guards",
++        "readonly_skills_loader",
++    }
 --- /dev/null
 +++ b/tests/integration/storage/test_approvals.py
 @@ -0,0 +1,363 @@
