@@ -1,0 +1,24 @@
+{
+  "kind": "SOURCE_REUSE_DECISION_RECORD",
+  "decision": "NO_COPY",
+  "task_id": "OB-095",
+  "candidates_reviewed": [
+    "browser-use",
+    "playwright"
+  ],
+  "upstream_url": null,
+  "commit": null,
+  "files": [],
+  "license_expression": null,
+  "license_files": [],
+  "local_patch": null,
+  "owner": "Platform",
+  "regression_tests": [
+    "tests/unit/test_source_reuse_browser_dom.py"
+  ],
+  "autonomous_agent_run_permitted": false,
+  "extraction_verification": "NOT_APPLICABLE",
+  "upgrade_trigger": null,
+  "replacement_plan": "OpenBot native bounded read-only DOM snapshot extractor in services/core/src/openbot/tools/browser/read.py",
+  "reason": "browser-use couples DOM tree indexing with autonomous Agent.run() multi-step action loops and in-page highlight overlays. OpenBot requires read-only bounded snapshots tagged TAINTED_EXTERNAL with explicit page_id/frame_id/snapshot_revision and per-action Broker re-verification."
+}

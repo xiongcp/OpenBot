@@ -64,6 +64,12 @@
       "included_in_patch": false
     },
     {
+      "path": "components/source-reuse/browser-dom.json",
+      "before_sha256": null,
+      "after_sha256": "285227f281cddd2994546a5ebbaad7aa427b5e92873368abb874d38f6f0723a7",
+      "included_in_patch": true
+    },
+    {
       "path": "components/source-reuse/feishu.json",
       "before_sha256": null,
       "after_sha256": "5f7f6c88ec6e8f7db4c461a347592ff6e2e1613f3df6187b985e554e283aac77",
@@ -202,6 +208,12 @@
       "included_in_patch": true
     },
     {
+      "path": "docs/evidence/source-reuse-browser-dom.md",
+      "before_sha256": null,
+      "after_sha256": "914e3e0d157ce85a8a4d3e678874c3f972628099fd8229fe0f8921a9b2fa1061",
+      "included_in_patch": true
+    },
+    {
       "path": "docs/evidence/source-reuse-feishu.md",
       "before_sha256": null,
       "after_sha256": "87c40b55c0eda8f34b30c921ef98485202f44090c58fb40fa51bd71337409855",
@@ -282,7 +294,7 @@
     {
       "path": "evidence/implementation/database-design.log",
       "before_sha256": null,
-      "after_sha256": "424ba2a34ccd0c12d1b7e4607944be12d026f04c02ae9eb12dcae68732f4f2e4",
+      "after_sha256": "2bb3d2f02e1fa2a1697a400940607ae6576f1066f23acd194c8740ef073689ee",
       "included_in_patch": false
     },
     {
@@ -294,7 +306,7 @@
     {
       "path": "evidence/implementation/design.log",
       "before_sha256": null,
-      "after_sha256": "cccb51e083501311d62e1643b4e1896601fe711bdc0294113fde2d5df72df35a",
+      "after_sha256": "3ef7812a95634a2d8278c5a66d466994f9e4a1ff7ff6e4e06817826033aeffcd",
       "included_in_patch": false
     },
     {
@@ -306,7 +318,7 @@
     {
       "path": "evidence/implementation/format.log",
       "before_sha256": null,
-      "after_sha256": "7a340da38ae65b1fde7d1e27b294de067e2bd0ac37ef92c9f1edbe0cafbed9ba",
+      "after_sha256": "16006ccc54d042d314cab75dd45b99fd6bc649a8eef755d9c74562102b097290",
       "included_in_patch": false
     },
     {
@@ -576,7 +588,7 @@
     {
       "path": "evidence/implementation/m1-database-design.log",
       "before_sha256": null,
-      "after_sha256": "2e0c4b3578d061d566a00c3f1c56ff2900f05747108ce140db0dbbed5e7d46c2",
+      "after_sha256": "59bbb57c04ff0094d57a31ee38cb810137132e8e1b3bffb8058d3d80317aa89c",
       "included_in_patch": false
     },
     {
@@ -588,13 +600,13 @@
     {
       "path": "evidence/implementation/m1-design.log",
       "before_sha256": null,
-      "after_sha256": "cccb51e083501311d62e1643b4e1896601fe711bdc0294113fde2d5df72df35a",
+      "after_sha256": "3ef7812a95634a2d8278c5a66d466994f9e4a1ff7ff6e4e06817826033aeffcd",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-format.log",
       "before_sha256": null,
-      "after_sha256": "7a340da38ae65b1fde7d1e27b294de067e2bd0ac37ef92c9f1edbe0cafbed9ba",
+      "after_sha256": "16006ccc54d042d314cab75dd45b99fd6bc649a8eef755d9c74562102b097290",
       "included_in_patch": false
     },
     {
@@ -630,13 +642,13 @@
     {
       "path": "evidence/implementation/m1-unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "6e0085fecf6fe2734a8b2cc57aec74e374a9be456ea8d6eb824e9a054bba396e",
+      "after_sha256": "5eb531bde3614288638b5a4b27a4d87285c157b8d96b7fb62f8de41fc4216f41",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/m1-verification.json",
       "before_sha256": null,
-      "after_sha256": "03e6f26951c8d69bd7d1a41ee13e7107ad4de247ba80e7effe8c1b3945862542",
+      "after_sha256": "4a8b05073706e28f4d8b2ada9dfae19d5fd4dd57d8e2edd062996727ca6456ad",
       "included_in_patch": false
     },
     {
@@ -916,6 +928,12 @@
       "included_in_patch": false
     },
     {
+      "path": "evidence/implementation/ob095-red.log",
+      "before_sha256": null,
+      "after_sha256": "f7a39c49228a5a3510c230f6326a2ff2349080538a9b36a420f4c7044a21db62",
+      "included_in_patch": false
+    },
+    {
       "path": "evidence/implementation/probe-file-green.log",
       "before_sha256": null,
       "after_sha256": "87a60d5f0e877f12a64ce616288d296d98c12639c9d5ed55dc65a5ecd1c118d6",
@@ -942,13 +960,13 @@
     {
       "path": "evidence/implementation/unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "81153bcc8dc32ce5853221b51f836ee1df33dcf01be3f9c305a909a59f704ae6",
+      "after_sha256": "c55c6f8cbef1cd0eccfe589f39eb03b0bc48470349350fbf88ba64001c3751cc",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/verification.json",
       "before_sha256": null,
-      "after_sha256": "b3839bc05e050f9e1f0175096e84ca5f63fe27cfb8094256b4c31ab9a4c90d4e",
+      "after_sha256": "f8320900a6300a0dac14d03c9431c698f1cc4e9df3d3cbf1935e6d2f0696c412",
       "included_in_patch": false
     },
     {
@@ -960,7 +978,7 @@
     {
       "path": "progress.md",
       "before_sha256": null,
-      "after_sha256": "24a0d02ab3f4a3e9ef4580266eb8c2aff774dc4326256cec6923782696d369c5",
+      "after_sha256": "132ea718ebf464783f1c4c6344e5eb21c8c0980e48b69e8047f473b6991f5a93",
       "included_in_patch": true
     },
     {
@@ -1482,13 +1500,13 @@
     {
       "path": "tasks/TASKS.md",
       "before_sha256": "62011244f45e5fc158ac1528b2bf737a2bd80c937751744c1059e6899a7c43ae",
-      "after_sha256": "4aba4b168b23bc8f3a963784504f777dc163a3d9fc9c0467cb87002362a024c2",
+      "after_sha256": "b1a02d2585528229584ecd56ba66c8e3ec7058ae40e3464cf2822c26dc901bec",
       "included_in_patch": true
     },
     {
       "path": "tasks/backlog.json",
       "before_sha256": "343bc2c906a0f19539db16609498bf63f796069c75995944833089a6ae550e20",
-      "after_sha256": "20e38ae746a72f5321c670a860bf96f7866990a86acdf8ed0a9eb80c00a51e30",
+      "after_sha256": "453c525dc2f4fad74282e73f990b067beb5966874a6691662f539dcf5493dded",
       "included_in_patch": true
     },
     {
@@ -1873,6 +1891,12 @@
       "path": "tests/unit/test_secrets_broker.py",
       "before_sha256": null,
       "after_sha256": "c7dc084bf0f60508e0ef611281e9372b6df83c2ede9cb2bbb59b7b6ff968960f",
+      "included_in_patch": true
+    },
+    {
+      "path": "tests/unit/test_source_reuse_browser_dom.py",
+      "before_sha256": null,
+      "after_sha256": "de18152bf88e3262c7170e4302618dc402e637cdabebe04ec38fceae99706212",
       "included_in_patch": true
     },
     {

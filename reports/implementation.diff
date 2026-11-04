@@ -1347,6 +1347,33 @@
 +  "preparation_log": "evidence/implementation/container-asset-prepare.log"
 +}
 --- /dev/null
++++ b/components/source-reuse/browser-dom.json
+@@ -0,0 +1,24 @@
++{
++  "kind": "SOURCE_REUSE_DECISION_RECORD",
++  "decision": "NO_COPY",
++  "task_id": "OB-095",
++  "candidates_reviewed": [
++    "browser-use",
++    "playwright"
++  ],
++  "upstream_url": null,
++  "commit": null,
++  "files": [],
++  "license_expression": null,
++  "license_files": [],
++  "local_patch": null,
++  "owner": "Platform",
++  "regression_tests": [
++    "tests/unit/test_source_reuse_browser_dom.py"
++  ],
++  "autonomous_agent_run_permitted": false,
++  "extraction_verification": "NOT_APPLICABLE",
++  "upgrade_trigger": null,
++  "replacement_plan": "OpenBot native bounded read-only DOM snapshot extractor in services/core/src/openbot/tools/browser/read.py",
++  "reason": "browser-use couples DOM tree indexing with autonomous Agent.run() multi-step action loops and in-page highlight overlays. OpenBot requires read-only bounded snapshots tagged TAINTED_EXTERNAL with explicit page_id/frame_id/snapshot_revision and per-action Broker re-verification."
++}
+--- /dev/null
 +++ b/components/source-reuse/feishu.json
 @@ -0,0 +1,23 @@
 +{
@@ -2676,6 +2703,39 @@
 +
 +Command: `.venv/bin/python scripts/run_protocol_poc.py` and `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/protocol -q`. Verifies the OB-091 crash-recovery protocol PoC on real temporary SQLite across 8 crash injection points (`claim`, `begin_dispatch`, post-effect before local commit, and `os._exit(78)` subprocess exits), proving one-time `CONSUMED` approval grants, attempt-scoped `dispatch_id` vs operation-scoped `provider_idempotency_key`, and `UNKNOWN` quarantine.
 --- /dev/null
++++ b/docs/evidence/source-reuse-browser-dom.md
+@@ -0,0 +1,30 @@
++# OB-095：浏览器 DOM 提取脚本最小源码复用审查与 NO_COPY 决策记录 / Browser DOM Extractor Source-Reuse Audit & NO_COPY Decision
++
++## 中文说明
++
++### 1. 候选方案对比（`browser-use` DOM 脚本 vs OpenBot 自有最小提取器）
++- **`browser-use`（`REFERENCE_ONLY`）**：
++  - 上游 DOM 脚本将元素高亮注入、跨 frame 索引缓存与 `Agent.run()` 自治多步执行循环耦合；且整段 JS 体积大、修改了宿主页面 DOM 树样式。
++  - 按 OpenBot 架构不变量，任何网页文本与属性均属 `TAINTED_EXTERNAL`，元素引用必须绑定 `(page_id, frame_id, snapshot_revision, origin)`，且每次写动作必须单独经过 Broker 审批并在 `DISPATCHING` 前复验 revision（严禁 `Agent.run()` 批量自治越权）。
++- **OpenBot 自有最小只读提取器（`services/core/src/openbot/tools/browser/read.py`）**：
++  - 仅提取有界节点数量与字符长度的只读快照，不向页面注入高亮样式或触发额外网络请求，天然携带 `page_id`、`frame_id`、`snapshot_revision`、`final_origin` 与 `provenance_kind='TAINTED_EXTERNAL'`。
++
++### 2. 审查结论：`NO_COPY`
++- **正式决定**：`NO_COPY`（记录于 `components/source-reuse/browser-dom.json`，`autonomous_agent_run_permitted = false`，`extraction_verification = 'NOT_APPLICABLE'`）。
++
++### 3. 可复现验证命令
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/unit/test_source_reuse_browser_dom.py -q`（1 passed）
++
++---
++
++## English Summary
++
++### 1. Candidate Comparison (`browser-use` vs OpenBot Native Extractor)
++- **`browser-use` (`REFERENCE_ONLY`)**: Couples DOM tree traversal with in-page highlight mutations and autonomous `Agent.run()` multi-action loops.
++- **OpenBot Native Read-Only Extractor (`services/core/src/openbot/tools/browser/read.py`)**: Extracts bounded, side-effect-free snapshots bound to `(page_id, frame_id, snapshot_revision, final_origin)` with `provenance_kind='TAINTED_EXTERNAL'`.
++
++### 2. Audited Decision: `NO_COPY`
++- **Decision**: `NO_COPY` (`components/source-reuse/browser-dom.json`, `autonomous_agent_run_permitted = false`, `extraction_verification = 'NOT_APPLICABLE'`).
++
++### 3. Reproducible Command
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/unit/test_source_reuse_browser_dom.py -q` (`1 passed`)
+--- /dev/null
 +++ b/docs/evidence/source-reuse-feishu.md
 @@ -0,0 +1,33 @@
 +# OB-094：飞书模板最小源码复用审查与 NO_COPY 决策记录 / Feishu Card Template Source-Reuse Audit & NO_COPY Decision
@@ -2978,7 +3038,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,85 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3057,12 +3117,13 @@
 +- 推进 OB-026（实现 Ollama 或第二 Provider）：实现 OllamaLocalProviderAdapter 与 LocalModelEndpointAttestation（同时核验模型权重哈希、runner 无外网出口证明、禁用 localhost 云转发与联网搜索插件、禁止运行期拉取模型；不支持工具的模型明确返回 CAPABILITY_UNAVAILABLE_NO_TOOL_SUPPORT，本地失败时 cloud_fallback_attempted=False 绝不云回退）；新增单元测试通过，M0 增至 277 passed/3 skipped，M1 增至 296 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-026 记 IN_PROGRESS。
 +- 推进 OB-057（实现专用浏览器 profile 与会话锁）：实现 BrowserProfileSessionManager、BrowserSessionSpec 与 BrowserIsolationAttestation（强制专用 user_data_dir 与 profile 独占锁，拒绝复制日常 Chrome profile、解密 cookies、连接任意 CDP 端口或添加 --no-sandbox；Artifact 导出自动剥离敏感 cookie 值）；新增单元测试通过，M0 增至 278 passed/3 skipped，M1 增至 297 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-057 记 IN_PROGRESS。
 +- 推进 OB-058（实现浏览器网络与下载策略）：实现 BrowserNetworkPolicyEnforcer 与 BrowserNetworkBoundaryConfig（统一拦截导航/重定向/iframe/subrequest 的 file://、loopback、内网与 169.254.169.254 元数据地址；禁止仅靠 Page.route 声称完整隔离，强制禁用 Service Worker 或校验外层网络命名空间；净化下载路径穿越并拦截未批准文件上传）；新增单元测试通过，M0 增至 279 passed/3 skipped，M1 增至 298 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-058 记 IN_PROGRESS。
++- 推进 OB-095（审查 DOM 提取脚本的最小源码复用）：完成 browser-use DOM 脚本边界审查，正式记录 NO_COPY 决策至 components/source-reuse/browser-dom.json 与双语证据 docs/evidence/source-reuse-browser-dom.md（禁止引入自治 Agent.run 循环与页面高亮篡改，采用自有有界只读快照提取器并强制标记 TAINTED_EXTERNAL）；新增单元测试通过，M0 增至 280 passed/3 skipped，M1 增至 299 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-095 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`, and `OB-058`, reaching 279 passed M0 checks and 298 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`, `OB-058`, and `OB-095`, reaching 280 passed M0 checks and 299 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -19619,6 +19680,15 @@
  
  **需求** [RQ05](requirements_traceability.md#rq05)、[RQ11](requirements_traceability.md#rq11)
  
+@@ -4610,7 +4610,7 @@
+ 
+ **审查DOM提取脚本的最小源码复用**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Platform · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
+ 
+ **需求** [RQ06](requirements_traceability.md#rq06)、[RQ09](requirements_traceability.md#rq09)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
+ 
 --- a/tasks/backlog.json
 +++ b/tasks/backlog.json
 @@ -4,7 +4,7 @@
@@ -21540,7 +21610,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,7 +6715,20 @@
+@@ -5914,14 +6715,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -21562,6 +21632,36 @@
    },
    {
      "id": "OB-095",
+     "title": "审查DOM提取脚本的最小源码复用",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Platform",
+     "size": "M",
+     "req_ids": [
+@@ -5977,7 +6791,20 @@
+       "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
+       "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
+     ],
+-    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。"
++    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。",
++    "execution": {
++      "scope": "Audited browser-use DOM script vs native read-only snapshot extractor and recorded formal NO_COPY decision",
++      "evidence": [
++        "docs/evidence/source-reuse-browser-dom.md",
++        "components/source-reuse/browser-dom.json",
++        "tests/unit/test_source_reuse_browser_dom.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-057、OB-058、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (browser-use, playwright), reuse_type (source_review), and reuse_notes; documented NO_COPY decision forbidding autonomous Agent.run()."
++    }
+   },
+   {
+     "id": "OB-096",
 --- /dev/null
 +++ b/tests/components/contracts/test_openai_faults.py
 @@ -0,0 +1,305 @@
@@ -33374,6 +33474,25 @@
 +    except SecretUnavailableError:
 +        tb = traceback.format_exc()
 +        assert canary not in tb
+--- /dev/null
++++ b/tests/unit/test_source_reuse_browser_dom.py
+@@ -0,0 +1,16 @@
++import json
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[2]
++
++
++def test_browser_dom_source_reuse_audit_records_no_copy_and_forbids_agent_run() -> None:
++    rec_path = ROOT / "components/source-reuse/browser-dom.json"
++    doc_path = ROOT / "docs/evidence/source-reuse-browser-dom.md"
++    assert rec_path.is_file()
++    assert doc_path.is_file()
++    rec = json.loads(rec_path.read_text(encoding="utf-8"))
++    assert rec["task_id"] == "OB-095"
++    assert rec["decision"] == "NO_COPY"
++    assert rec["autonomous_agent_run_permitted"] is False
++    assert rec["extraction_verification"] == "NOT_APPLICABLE"
 --- /dev/null
 +++ b/tests/unit/test_source_reuse_feishu.py
 @@ -0,0 +1,18 @@

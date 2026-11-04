@@ -6735,7 +6735,7 @@
     "title": "审查DOM提取脚本的最小源码复用",
     "milestone": "M3",
     "priority": "P1",
-    "status": "TODO",
+    "status": "IN_PROGRESS",
     "owner_lane": "Platform",
     "size": "M",
     "req_ids": [
@@ -6791,7 +6791,20 @@
       "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
       "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
     ],
-    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。"
+    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。",
+    "execution": {
+      "scope": "Audited browser-use DOM script vs native read-only snapshot extractor and recorded formal NO_COPY decision",
+      "evidence": [
+        "docs/evidence/source-reuse-browser-dom.md",
+        "components/source-reuse/browser-dom.json",
+        "tests/unit/test_source_reuse_browser_dom.py",
+        "evidence/implementation/verification.json"
+      ],
+      "blockers": [
+        "上游 OB-057、OB-058、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
+      ],
+      "review": "Read component_refs (browser-use, playwright), reuse_type (source_review), and reuse_notes; documented NO_COPY decision forbidding autonomous Agent.run()."
+    }
   },
   {
     "id": "OB-096",
