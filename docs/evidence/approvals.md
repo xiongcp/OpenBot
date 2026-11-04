@@ -137,6 +137,9 @@
 实现（OB-062）：新增 `services/core/src/openbot/tools/mcp/client.py`（`McpStdioLifecycleClient`、`McpCompatibilityManifest`）与 `tests/unit/test_mcp_client.py`：
 1. 固定版本 stdio MCP 协商与禁止动态拉包：强制要求 `sha256:` 包摘要，拦截 `npx`/`uvx`/`pipx` 与 `@latest` 动态启动（`DYNAMIC_MCP_PACKAGE_RUNNER_FORBIDDEN`）；协议版本不匹配时立即拒绝（`MCP_PROTOCOL_VERSION_MISMATCH`），不静默降级 transport 且对响应字节实施有界截断。
 
+实现（OB-063）：新增 `services/core/src/openbot/tools/mcp/registry.py`（`McpToolPinRegistry`、`McpToolSnapshot`、`PinnedMcpToolRecord`）与 `tests/unit/test_mcp_registry.py`：
+1. 全量元数据 JCS 锁定与漂移隔离：对 `server_id`、`package_digest`、`command_argv`、`env_keys`、`transport`、`tool_name`、`description`、`input_schema`、`output_schema`、`annotations` 计算完整 JCS SHA-256（同时声明 `jcs_hash_proves_server_code_safe=False`）；禁止覆盖内建工具名称（`BUILTIN_TOOL_SHADOWING_FORBIDDEN`），阻断远程 `$ref`（`REMOTE_SCHEMA_REF_FORBIDDEN`），且任何描述/Schema/注释变化立即将工具转入 `QUARANTINED_ON_DRIFT` 并使旧批准失效。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -164,6 +167,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_actions.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/browser/test_browser_outcome_regression.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_client.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_registry.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -253,3 +257,5 @@
   1. Verifies 5 fixture scenarios (checkout amount drift, form submit lost receipt -> `UNKNOWN`, download quarantine, metadata redirect blocking, and expired login session rejection) without accepting model self-claims or driver no-error returns as proof.
 - **OB-062 (`IN_PROGRESS`)**: MCP version negotiation and lifecycle client (`services/core/src/openbot/tools/mcp/client.py` and `tests/unit/test_mcp_client.py`, 1 passed):
   1. Enforces pinned `sha256` package digests and explicit stdio protocol versions, blocks `npx`/`uvx`/`@latest` dynamic package runners (`DYNAMIC_MCP_PACKAGE_RUNNER_FORBIDDEN`), rejects protocol mismatches without silent transport downgrade, and bounds output bytes.
+- **OB-063 (`IN_PROGRESS`)**: MCP tool registration and JCS metadata pinning (`services/core/src/openbot/tools/mcp/registry.py` and `tests/unit/test_mcp_registry.py`, 1 passed):
+  1. Pins full MCP tool metadata via JCS SHA-256 (`jcs_hash_proves_server_code_safe=False`), blocks builtin tool name shadowing and remote `$ref` URIs, and quarantines tools (`MCP_METADATA_DRIFT_QUARANTINED`) if description, schema, or annotations change.
