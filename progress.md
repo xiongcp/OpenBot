@@ -77,9 +77,10 @@
 - 推进 OB-057（实现专用浏览器 profile 与会话锁）：实现 BrowserProfileSessionManager、BrowserSessionSpec 与 BrowserIsolationAttestation（强制专用 user_data_dir 与 profile 独占锁，拒绝复制日常 Chrome profile、解密 cookies、连接任意 CDP 端口或添加 --no-sandbox；Artifact 导出自动剥离敏感 cookie 值）；新增单元测试通过，M0 增至 278 passed/3 skipped，M1 增至 297 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-057 记 IN_PROGRESS。
 - 推进 OB-058（实现浏览器网络与下载策略）：实现 BrowserNetworkPolicyEnforcer 与 BrowserNetworkBoundaryConfig（统一拦截导航/重定向/iframe/subrequest 的 file://、loopback、内网与 169.254.169.254 元数据地址；禁止仅靠 Page.route 声称完整隔离，强制禁用 Service Worker 或校验外层网络命名空间；净化下载路径穿越并拦截未批准文件上传）；新增单元测试通过，M0 增至 279 passed/3 skipped，M1 增至 298 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-058 记 IN_PROGRESS。
 - 推进 OB-095（审查 DOM 提取脚本的最小源码复用）：完成 browser-use DOM 脚本边界审查，正式记录 NO_COPY 决策至 components/source-reuse/browser-dom.json 与双语证据 docs/evidence/source-reuse-browser-dom.md（禁止引入自治 Agent.run 循环与页面高亮篡改，采用自有有界只读快照提取器并强制标记 TAINTED_EXTERNAL）；新增单元测试通过，M0 增至 280 passed/3 skipped，M1 增至 299 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-095 记 IN_PROGRESS。
+- 推进 OB-059（实现结构化浏览器读工具）：实现 BrowserReadTool、BrowserPageSnapshot 与 BoundElementRef（有界提取只读 DOM 快照，强制标记 TAINTED_EXTERNAL 与 grants_policy_or_owner_authority=False，绑定 page_id/frame_id/snapshot_revision/final_origin，跨页面或导航后旧元素引用立即抛出 STALE_BROWSER_ELEMENT_REF）；新增单元测试通过，M0 增至 281 passed/3 skipped，M1 增至 300 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-059 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`, `OB-058`, and `OB-095`, reaching 280 passed M0 checks and 299 passed M1 checks.
+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`, `OB-058`, `OB-095`, and `OB-059`, reaching 281 passed M0 checks and 300 passed M1 checks.

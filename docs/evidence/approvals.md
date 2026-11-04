@@ -125,6 +125,9 @@
 1. 导航/重定向/iframe/subrequest 与 Service Worker 防旁路：阻断 `file://`、内网/loopback 与云元数据地址（`169.254.169.254`）；明确声明 `page_route_alone_is_complete_isolation=False`，未禁用 Service Worker 且无外层网络隔离时直接拒绝启动（`SERVICE_WORKER_BYPASS_RISK`）。
 2. 下载路径净化与受批上传门禁：下载文件名剥离路径穿越并限制在隔离检疫目录内，未获批准的本地文件上传直接抛出 `UNAPPROVED_UPLOAD_FILE`。
 
+实现（OB-059）：新增 `services/core/src/openbot/tools/browser/read.py`（`BrowserReadTool`、`BrowserPageSnapshot`、`BoundElementRef`）与 `tests/unit/test_browser_read.py`：
+1. 有界结构化快照与不可信标注：每次快照返回单调递增 `snapshot_revision`、`page_id`、`frame_id`、`final_origin`，并强制标记 `provenance_kind='TAINTED_EXTERNAL'` 与 `grants_policy_or_owner_authority=False`；页面发生导航或 revision 变化后旧 `BoundElementRef` 立即失效（`STALE_BROWSER_ELEMENT_REF`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -148,6 +151,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_session.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_network_policy.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_read.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -229,3 +233,5 @@
   1. Enforces OpenBot-dedicated `user_data_dir`, profile mutex locks (`BROWSER_PROFILE_LOCKED`), and both Chromium sandbox and outer isolation (`--no-sandbox`, CDP attach, and system cookie decryption forbidden); strips cookie values from Artifact exports.
 - **OB-058 (`IN_PROGRESS`)**: Browser network, Service Worker, download, and upload policy (`services/core/src/openbot/tools/executors/browser/network_policy.py` and `tests/unit/test_browser_network_policy.py`, 1 passed):
   1. Blocks `file://`, loopback, private-IP, and cloud metadata (`169.254.169.254`) navigation/redirects/subrequests, requires Service Worker blocking or verified outer network isolation (`page_route_alone_is_complete_isolation=False`), sanitizes download paths into quarantine, and blocks unapproved file uploads.
+- **OB-059 (`IN_PROGRESS`)**: Structured browser read tool (`services/core/src/openbot/tools/browser/read.py` and `tests/unit/test_browser_read.py`, 1 passed):
+  1. Extracts bounded snapshots tagged `TAINTED_EXTERNAL` (`grants_policy_or_owner_authority=False`) bound to `(page_id, frame_id, snapshot_revision, final_origin)`, invalidating stale element references across navigations (`STALE_BROWSER_ELEMENT_REF`).

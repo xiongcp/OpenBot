@@ -4666,7 +4666,7 @@ U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页提出复用�
 
 **实现结构化浏览器读工具**
 
-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Runtime · 规模 M
+阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
 
 **需求** [RQ07](requirements_traceability.md#rq07)、[RQ09](requirements_traceability.md#rq09)
 
