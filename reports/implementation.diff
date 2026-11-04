@@ -2286,8 +2286,10 @@
 +独立审批审查在修复前实际跑 33 项审批/迁移测试，没有声称评审 API、持久 challenge、预览、claim/dispatch/recovery。上述明示待实现范围也未被其他审查认证。修复后由 Integrator 运行当前完整 M0/M1 套件；单测、合成服务与本机容器证据分别保留。
 --- /dev/null
 +++ b/docs/evidence/component-fault-contract.md
-@@ -0,0 +1,11 @@
-+# OB-092：SDK 副作用合同（当前子集）
+@@ -0,0 +1,26 @@
++# OB-092 / OB-025：SDK 副作用合同与首个云模型适配器 / SDK Fault Contract and First Cloud Model Adapter
++
++## 中文说明
 +
 +真实安装：OpenAI Python 2.26.0 / httpx 0.28.1 及各自传递依赖。精确 wheel / hash / 许可 / 原锁快照在 components/admissions/m1-sdk.json；未启用产品运行能力。
 +
@@ -2298,6 +2300,19 @@
 +本轮已补连接中断、307 重定向、流内 deadline、服务端工具提案 canary、环境 organization/project 继承和非法 usage（负数/字符串/bool/超限）反例；最新完整 M1 套件包含 19 项回环/探针合同，早期单独日志为加文件 canary 前的 18 项，见 m1-unit-contract-protocol.log。工具 canary 没有产生文件或追加请求，预算未因未知 usage 被清零。真实云端未调用。
 +
 +当前 budget 为资格用 counter port，未替代 OB-023 的正式持久预算；只实现 text_stream 能力，正式 function-call / Provider 质量、数据出口、凭据和日志门禁仍属 OB-025 等任务。未安装 Ollama / Anthropic / lark / Playwright / MCP / detect-secrets；各自真实资格 NOT_RUN。持久预算映射与后续 SDK 各阶段资格仍待实现，不能由本子集直接宣称全部 Q04 / Q13 完成。
++
++实现（OB-025）：新增 `services/core/src/openbot/providers/openai_compatible.py`（`OpenAICompatibleAdapter`、`ProviderCapabilityProfile`、`PROVIDER_CAPABILITY_MATRIX`、`ALLOWED_OPENAI_REQUEST_FIELDS`、`FORBIDDEN_SDK_HELPERS`、`validate_outbound_sdk_payload`）与 `tests/unit/test_openai_compatible_adapter.py`：
++1. SDK API 白名单与能力矩阵：仅允许 `chat.completions.with_streaming_response.create` 与白名单请求字段（`model`、`messages`、`tools`、`tool_choice`、`stream`、`stream_options`、`max_completion_tokens`、`temperature`），硬拒绝 `beta.chat.completions.run_tools`、`responses.create`、`agents.run`、`tool_runner` 以及任何 `extra_body`、`extra_headers`、`web_search_options`、`mcp_servers` 透传；通过 `PROVIDER_CAPABILITY_MATRIX` 区分 `openai_official` 与 `openai_compatible_generic` 的流式 usage 和严格 Schema 差异。
++2. 出口策略与逐次尝试预算门禁：每次真实 HTTP 尝试前先经过 `EgressGuard.evaluate`（`surface='MODEL_GATEWAY'`）并按 `f'{request_id}:try_{attempt_idx}'` 单独调用 `budget.reserve`；仅在未收到任何流分片前的 `429`/`503` 且未取消时允许网关唯一有界重试（不叠加 `tenacity` 或 SDK 内建重试），可控服务器请求计数、Gateway attempt 与预算预留三者完全一致。
++3. 分片流式工具调用重组与半包/断流保护：跨多个 SSE 帧累积 `tool_calls` 的 `id`、`function.name` 与 `function.arguments` 分片，仅在收到合法 `finish_reason` 与 `[DONE]` 后经 `strict_json` 与本地 `ToolManifest` Schema（`accept_model_call`）校验生成 `ToolCall` 提案；任何批准前 canary 函数调用数为 0；半包/畸形 JSON/缺失 `tool_call_id`/首块后取消均丢弃未完成输出、将当次预留记为 `UNKNOWN`（半包丢弃不等于服务端未计费）且绝不触发重发；取消后新请求数为 0。因缺少真实云端 API Key 凭据做最终真实在线 smoke，且上游依赖 `OB-023`/`OB-024`/`OB-037`/`OB-038`/`OB-039`/`OB-092` 仍为 `IN_PROGRESS`，`OB-025` 记为 `IN_PROGRESS`。
++
++## English Summary
++
++- **OB-092 (`IN_PROGRESS`)**: Synthetic loopback HTTP fault contract (`tests/components/contracts/test_openai_faults.py` and `test_probe.py`) for pinned `openai==2.26.0` and `httpx==0.28.1` (`max_retries=0`, `trust_env=False`, `follow_redirects=False`), verifying 1:1 request/budget accounting on 429/503/disconnect/307/stream-cut and `sys.addaudithook` import isolation.
++- **OB-025 (`IN_PROGRESS`)**: First cloud model adapter (`services/core/src/openbot/providers/openai_compatible.py` and `tests/unit/test_openai_compatible_adapter.py`, 3 passed):
++  1. Enforces `ALLOWED_OPENAI_REQUEST_FIELDS` and blocks `FORBIDDEN_SDK_HELPERS` (`run_tools`, `tool_runner`, `extra_body`, `extra_headers`, `web_search_options`, `mcp_servers`); documents `openai_official` vs `openai_compatible_generic` in `PROVIDER_CAPABILITY_MATRIX`.
++  2. Gates every HTTP attempt on `EgressGuard` and per-attempt `budget.reserve(f'{request_id}:try_{attempt}')` with single-owner bounded pre-stream retry (zero `tenacity` or SDK retry stacking); server HTTP count equals gateway attempts and budget reservations.
++  3. Accumulates fragmented `tool_calls` SSE deltas until `[DONE]`, validating complete JSON and `ToolManifest` schema via `accept_model_call` to return `ToolCall` proposals (0 canary executions before approval); half-packets, missing `tool_call_id`, or post-chunk cancellations discard output, hold cost as `UNKNOWN`, and never retry. Real cloud smoke remains unverified without live credentials.
 --- /dev/null
 +++ b/docs/evidence/external-environments.md
 @@ -0,0 +1,14 @@
@@ -2518,7 +2533,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,51 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2569,6 +2584,7 @@
 +- 推进 OB-037（实现统一数据外发策略）：实现 EgressGuard、LocalModelRunnerAttestation 与 build_controlled_http_config（统一覆盖模型、飞书通知、Browser、MCP、上传与消息工具；OFFLINE 全出口阻断；SENSITIVE 在卡片预览返回 REQUIRE_LOCAL、经摘要/Artifact 仍须 ASK，SECRET 硬拒绝；阻断托管 web_search/remote_mcp/词表下载/扫描器联网验证；要求 LocalModelRunnerAttestation 证明非云转发；强制 trust_env=False、剥离环境代理并记录 Python 探针覆盖与 OS 隔离边界）；新增 3 项测试通过，M0 增至 229 passed/3 skipped，M1 增至 248 passed/1 skipped。因上游 OB-031/036 仍为 IN_PROGRESS，OB-037 记 IN_PROGRESS。
 +- 推进 OB-038（实现密钥存储与最小注入）：实现 SecretBroker、SingleUseSecretHandle、build_minimal_child_spawn_spec 与 native/supervisor/src/credential_transport.rs（锁定获准 OS 钥匙串后端，拒绝明文或自制 Fernet 文件回退；飞书网关/被选模型 Provider/Worker 单用途 attempt 绑定 IPC 句柄三域隔离；撤销与轮换立即失效在途句柄；子进程禁继承全量 env、禁挂宿主 HOME、禁 argv 传 token 且异常栈零密钥泄漏）；新增 3 项测试通过，M0 增至 232 passed/3 skipped，M1 增至 251 passed/1 skipped。因上游 OB-031/092 及三平台原生钥匙串实测待闭合，OB-038 记 IN_PROGRESS。
 +- 推进 OB-039（实现敏感数据输出过滤）：实现 StreamingSecretRedactor 与 RedactionPipeline（按最长注册秘密及 Base64/URL/JSON 编码变体动态扩展跨分片窗口，不依赖固定 128 字节窗口；忽略外部 pragma allowlist secret 注释，永久禁用网络验证；统一过滤 stdout/stderr/sdk_debug/exception/http_header/ui_event/artifact/diagnostic/model_input 九类出口，扫描阴性不降低 SECRET/SENSITIVE 分类）；新增 2 项测试通过，M0 增至 234 passed/3 skipped，M1 增至 253 passed/1 skipped。因上游 OB-036/037/038/092 仍为 IN_PROGRESS，OB-039 记 IN_PROGRESS。
++- 推进 OB-025（实现首个云模型适配器）：实现 OpenAICompatibleAdapter、PROVIDER_CAPABILITY_MATRIX 与 validate_outbound_sdk_payload（锁定允许 SDK 字段白名单，禁用 run_tools/extra_body/extra_headers/web_search/remote_mcp；每次请求先经 EgressGuard 与按尝试预留预算，唯一有界重试计数与服务器请求及预算记录三者一致；跨分片重组完整 JSON 与 ToolManifest Schema 后仅返回 ToolCall 提案，批准前 canary 调用为 0；半包/断流/取消丢弃输出并保留 UNKNOWN 费用）；新增 3 项测试通过，M0 增至 237 passed/3 skipped，M1 增至 256 passed/1 skipped。因缺少真实云凭据 smoke 且上游依赖仍为 IN_PROGRESS，OB-025 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -10660,6 +10676,316 @@
 +            await asyncio.gather(*tasks, return_exceptions=True)
 +        await self._sdk.close()
 --- /dev/null
++++ b/services/core/src/openbot/providers/openai_compatible.py
+@@ -0,0 +1,307 @@
++"""OB-025 cloud model adapter with egress/budget gating and full-JSON tool proposal assembly."""
++
++import asyncio
++import time
++from dataclasses import dataclass
++from typing import Any, Protocol
++
++from openbot.boundaries import accept_model_call
++from openbot.contracts import canonicalize, strict_json
++from openbot.domain.providers import Block, ModelRequest, ModelResponse, RequestBudget, Text
++from openbot.domain.tools import ToolManifest
++from openbot.policy.egress import EgressGuard, EgressRequest
++from openbot.providers.openai import ProviderFailure, _sse_data
++
++ALLOWED_OPENAI_SDK_METHODS = frozenset({"chat.completions.with_streaming_response.create"})
++FORBIDDEN_SDK_HELPERS = frozenset(
++    {
++        "beta.chat.completions.run_tools",
++        "responses.create",
++        "agents.run",
++        "tool_runner",
++    }
++)
++ALLOWED_OPENAI_REQUEST_FIELDS = frozenset(
++    {
++        "model",
++        "messages",
++        "tools",
++        "tool_choice",
++        "stream",
++        "stream_options",
++        "max_completion_tokens",
++        "temperature",
++    }
++)
++
++
++@dataclass(frozen=True, slots=True)
++class ProviderCapabilityProfile:
++    profile_name: str
++    supports_stream_usage: bool
++    supports_strict_tool_schema: bool
++    supports_parallel_tool_calls: bool = False
++
++
++PROVIDER_CAPABILITY_MATRIX: dict[str, ProviderCapabilityProfile] = {
++    "openai_official": ProviderCapabilityProfile(
++        profile_name="openai_official",
++        supports_stream_usage=True,
++        supports_strict_tool_schema=True,
++        supports_parallel_tool_calls=False,
++    ),
++    "openai_compatible_generic": ProviderCapabilityProfile(
++        profile_name="openai_compatible_generic",
++        supports_stream_usage=False,
++        supports_strict_tool_schema=False,
++        supports_parallel_tool_calls=False,
++    ),
++}
++
++
++def validate_outbound_sdk_payload(payload: dict[str, Any]) -> None:
++    """Reject extra_body, extra_headers, provider-hosted web_search/remote_mcp, or unknown keys."""
++    unexpected = set(payload) - ALLOWED_OPENAI_REQUEST_FIELDS
++    if unexpected:
++        raise PermissionError(f"Forbidden or unapproved SDK request fields: {sorted(unexpected)}")
++
++
++class SSEStreamTransportPort(Protocol):
++    async def stream_chat(self, payload: dict[str, Any]) -> list[bytes]: ...
++
++
++class _ByteListResponse:
++    def __init__(self, chunks: list[bytes]) -> None:
++        self._chunks = chunks
++
++    async def iter_bytes(self):  # type: ignore[no-untyped-def]
++        for chunk in self._chunks:
++            yield chunk
++
++
++class OpenAICompatibleAdapter:
++    """Cloud model adapter enforcing egress, per-attempt budget, and full-JSON tool assembly."""
++
++    def __init__(
++        self,
++        *,
++        endpoint: str,
++        model: str,
++        egress_guard: EgressGuard,
++        budget: RequestBudget,
++        manifests: dict[str, ToolManifest],
++        stream_transport: SSEStreamTransportPort,
++        capability_profile: str = "openai_official",
++        task_network_mode: str = "CONNECTED",
++        data_class: str = "WORKSPACE",
++        max_gateway_retries: int = 0,
++        retry_backoff_ms: int = 100,
++    ) -> None:
++        if capability_profile not in PROVIDER_CAPABILITY_MATRIX:
++            raise ValueError(f"Unknown capability_profile: {capability_profile}")
++        if max_gateway_retries < 0 or retry_backoff_ms < 0:
++            raise ValueError("Invalid gateway retry configuration")
++        self._endpoint = endpoint
++        self._model = model
++        self._egress = egress_guard
++        self._budget = budget
++        self._manifests = dict(manifests)
++        self._transport = stream_transport
++        self._profile = PROVIDER_CAPABILITY_MATRIX[capability_profile]
++        self._task_mode = task_network_mode
++        self._data_class = data_class
++        self._max_retries = max_gateway_retries
++        self._backoff_ms = retry_backoff_ms
++        self._cancelled: set[str] = set()
++        self._closed = False
++
++    def capabilities(self) -> frozenset[str]:
++        return frozenset({"text_stream", "function_proposals"})
++
++    def _build_payload(self, request: ModelRequest) -> dict[str, Any]:
++        content = "\n".join(b.text for b in request.blocks if isinstance(b, Text))
++        tools_list = [
++            {
++                "type": "function",
++                "function": {
++                    "name": m.name,
++                    "parameters": strict_json(m.input_schema),
++                },
++            }
++            for m in self._manifests.values()
++        ]
++        payload: dict[str, Any] = {
++            "model": self._model,
++            "messages": [{"role": "user", "content": content}],
++            "stream": True,
++            "max_completion_tokens": 256,
++        }
++        if self._profile.supports_stream_usage:
++            payload["stream_options"] = {"include_usage": True}
++        if tools_list:
++            payload["tools"] = tools_list
++            payload["tool_choice"] = "auto"
++        validate_outbound_sdk_payload(payload)
++        return payload
++
++    async def generate(self, request: ModelRequest) -> ModelResponse:
++        if self._closed or request.model != self._model:
++            raise ProviderFailure("Adapter closed or model mismatch")
++        if request.request_id in self._cancelled:
++            raise ProviderFailure("Request was cancelled before dispatch")
++        payload = self._build_payload(request)
++
++        total_allowed_attempts = 1 + self._max_retries
++        for attempt_idx in range(1, total_allowed_attempts + 1):
++            if request.request_id in self._cancelled:
++                raise ProviderFailure("Request cancelled during retry backoff")
++            remaining_s = (request.deadline_monotonic_ms - time.monotonic() * 1000) / 1000
++            if remaining_s <= 0:
++                raise ProviderFailure("Request deadline expired before attempt")
++
++            # 1. Egress check before EVERY HTTP attempt
++            eg_dec = self._egress.evaluate(
++                EgressRequest(
++                    surface="MODEL_GATEWAY",
++                    task_network_mode=self._task_mode,
++                    data_class=self._data_class,
++                    destination_url=self._endpoint,
++                )
++            )
++            if eg_dec.decision != "ALLOW":
++                raise ProviderFailure(f"Egress denied: {eg_dec.reason_code}")
++
++            # 2. Reserve budget for this exact HTTP attempt
++            attempt_ref = f"{request.request_id}:try_{attempt_idx}"
++            self._budget.reserve(attempt_ref, request.reserved_cost_units)
++            received_any_chunk = False
++            settled = False
++            try:
++                raw_chunks = await self._transport.stream_chat(payload)
++                text_parts: list[str] = []
++                tool_accum: dict[int, dict[str, str]] = {}
++                finish_reason: str | None = None
++                done = False
++                usage: dict[str, Any] | None = None
++
++                async for chunk in _sse_data(_ByteListResponse(raw_chunks)):
++                    received_any_chunk = True
++                    if request.request_id in self._cancelled:
++                        raise ProviderFailure("Request cancelled after first stream chunk")
++                    if chunk is None:
++                        done = True
++                        break
++                    if chunk.get("usage") is not None:
++                        if type(chunk["usage"]) is not dict:
++                            raise ProviderFailure("Malformed usage object")
++                        usage = chunk["usage"]
++                    choices = chunk.get("choices")
++                    if type(choices) is not list or len(choices) > 1:
++                        raise ProviderFailure("Malformed choices in stream")
++                    for choice in choices:
++                        delta = choice.get("delta", {})
++                        if type(delta) is not dict:
++                            raise ProviderFailure("Malformed delta object")
++                        c_delta = delta.get("content")
++                        if c_delta is not None:
++                            if type(c_delta) is not str or finish_reason is not None:
++                                raise ProviderFailure("Invalid content delta")
++                            text_parts.append(c_delta)
++                        t_calls = delta.get("tool_calls")
++                        if t_calls is not None:
++                            if type(t_calls) is not list or finish_reason is not None:
++                                raise ProviderFailure("Invalid tool_calls delta")
++                            for tc in t_calls:
++                                idx = tc.get("index", 0)
++                                if type(idx) is not int or idx < 0:
++                                    raise ProviderFailure("Invalid tool_call index")
++                                slot = tool_accum.setdefault(
++                                    idx, {"id": "", "name": "", "arguments": ""}
++                                )
++                                if tc.get("id"):
++                                    slot["id"] += str(tc["id"])
++                                fn = tc.get("function")
++                                if isinstance(fn, dict):
++                                    if fn.get("name"):
++                                        slot["name"] += str(fn["name"])
++                                    if fn.get("arguments"):
++                                        slot["arguments"] += str(fn["arguments"])
++                        r_reason = choice.get("finish_reason")
++                        if r_reason is not None:
++                            if r_reason not in {"stop", "tool_calls"} or finish_reason is not None:
++                                raise ProviderFailure("Unsupported or duplicate finish_reason")
++                            finish_reason = str(r_reason)
++
++                if not done or finish_reason is None:
++                    raise ProviderFailure("Stream ended before complete output and [DONE]")
++
++                # 3. Validate complete JSON and schema BEFORE producing any ToolCall proposal
++                blocks: list[Block] = []
++                if text_parts:
++                    blocks.append(Text("".join(text_parts)))
++                for idx in sorted(tool_accum):
++                    slot = tool_accum[idx]
++                    call_id = slot["id"].strip()
++                    tool_name = slot["name"].strip()
++                    raw_args = slot["arguments"]
++                    if not call_id or not tool_name or not raw_args:
++                        raise ProviderFailure("Incomplete tool_call_id, name, or arguments")
++                    if tool_name not in self._manifests:
++                        raise ProviderFailure(f"Unregistered tool proposed: {tool_name}")
++                    parsed_args = strict_json(raw_args)
++                    if type(parsed_args) is not dict:
++                        raise ProviderFailure("Tool arguments must be a JSON object")
++                    envelope = canonicalize({"tool_name": tool_name, "args": parsed_args})
++                    validated_call = accept_model_call(
++                        envelope, self._manifests[tool_name], call_id
++                    )
++                    blocks.append(validated_call)
++
++                if usage is None:
++                    self._budget.unknown(attempt_ref)
++                else:
++                    p_tok = usage.get("prompt_tokens")
++                    c_tok = usage.get("completion_tokens")
++                    t_tok = usage.get("total_tokens")
++                    if (
++                        type(p_tok) is not int
++                        or type(c_tok) is not int
++                        or type(t_tok) is not int
++                        or p_tok < 0
++                        or c_tok < 0
++                        or t_tok != p_tok + c_tok
++                    ):
++                        raise ProviderFailure("Invalid usage token counts")
++                    self._budget.settle(attempt_ref, p_tok, c_tok)
++                    settled = True
++
++                return ModelResponse(
++                    tuple(blocks),
++                    None if usage is None else int(usage["prompt_tokens"]),
++                    None if usage is None else int(usage["completion_tokens"]),
++                    usage is None,
++                )
++            except Exception as exc:
++                if not settled:
++                    self._budget.unknown(attempt_ref)
++                is_retryable_pre_stream = (
++                    not received_any_chunk
++                    and attempt_idx < total_allowed_attempts
++                    and request.request_id not in self._cancelled
++                    and str(exc) in {"HTTP_429", "HTTP_503"}
++                )
++                if is_retryable_pre_stream:
++                    if self._backoff_ms > 0:
++                        await asyncio.sleep(self._backoff_ms / 1000)
++                    continue
++                if isinstance(exc, ProviderFailure):
++                    raise
++                raise ProviderFailure("Model generation failed; usage held as UNKNOWN") from exc
++
++        raise ProviderFailure("Exhausted gateway retry budget")
++
++    async def cancel(self, request_id: str) -> None:
++        self._cancelled.add(request_id)
++
++    async def close(self) -> None:
++        self._closed = True
+--- /dev/null
 +++ b/services/core/src/openbot/storage/__init__.py
 @@ -0,0 +1 @@
 +"""SQLite infrastructure; write connections remain owned by the storage writer."""
@@ -12568,7 +12894,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/030/031/032/036/037/038/039 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、工作区文件句柄守卫、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入与敏感输出过滤；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/036/037/038/039 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入与敏感输出过滤；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -12848,6 +13174,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
  
  **需求** [RQ06](requirements_traceability.md#rq06)、[RQ12](requirements_traceability.md#rq12)
+ 
+@@ -1945,7 +1945,7 @@
+ 
+ **实现首个云模型适配器**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Runtime · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
+ 
+ **需求** [RQ06](requirements_traceability.md#rq06)、[RQ07](requirements_traceability.md#rq07)
  
 @@ -2003,7 +2003,7 @@
  
@@ -13579,7 +13914,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1441,7 +1704,20 @@
+@@ -1441,14 +1704,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -13601,7 +13936,37 @@
    },
    {
      "id": "OB-025",
-@@ -1786,7 +2062,7 @@
+     "title": "实现首个云模型适配器",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Runtime",
+     "size": "M",
+     "req_ids": [
+@@ -1512,7 +1788,20 @@
+       "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
+       "SDK允许API/字段清单、显式重试/timeout/代理配置、实际HTTP尝试和usage记录。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第8–9、16、21–22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第8–9、16、21–22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 OpenAICompatibleAdapter (SDK request field whitelist, PROVIDER_CAPABILITY_MATRIX, per-attempt EgressGuard + RequestBudget gating, fragmented SSE tool_calls assembly with strict JSON/manifest validation, and half-packet UNKNOWN cost retention)",
++      "evidence": [
++        "docs/evidence/component-fault-contract.md",
++        "tests/unit/test_openai_compatible_adapter.py",
++        "evidence/implementation/unit-contract-protocol.log",
++        "evidence/implementation/m1-verification.json"
++      ],
++      "blockers": [
++        "上游 OB-023/024/037/038/039/092 仍为 IN_PROGRESS，且本机无专用真实 OpenAI 云 API Key 凭据执行真实云端 smoke；可控 fake 流测试已全部通过，保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (model-openai, httpx, tiktoken, tenacity, litellm, model-runner), reuse_type (dependency_adapter), and reuse_notes; used thin OpenAI/SSE adapter without litellm or tenacity retry stacking; verified 1:1 server/gateway/budget attempt counts, fragmented tool_call assembly, zero canary execution, and UNKNOWN cost retention on cut streams."
++    }
+   },
+   {
+     "id": "OB-026",
+@@ -1786,7 +2075,7 @@
      "title": "实现数据库备份恢复与保留策略",
      "milestone": "M1",
      "priority": "P1",
@@ -13610,7 +13975,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1841,14 +2117,27 @@
+@@ -1841,14 +2130,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "GC pin生命周期、快照/manifest校验、secret_ref失效与UNKNOWN恢复反例。"
      ],
@@ -13640,7 +14005,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1900,14 +2189,26 @@
+@@ -1900,14 +2202,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -13669,7 +14034,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1960,7 +2261,20 @@
+@@ -1960,7 +2274,20 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -13691,7 +14056,7 @@
    },
    {
      "id": "OB-033",
-@@ -2158,7 +2472,7 @@
+@@ -2158,7 +2485,7 @@
      "title": "实现Artifact存储与可信元数据",
      "milestone": "M1",
      "priority": "P0",
@@ -13700,7 +14065,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2207,14 +2521,27 @@
+@@ -2207,14 +2534,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -13730,7 +14095,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2269,14 +2596,27 @@
+@@ -2269,14 +2609,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "受管进程/runner/浏览器出口范围、代理配置及绕过反例。"
      ],
@@ -13760,7 +14125,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2330,14 +2670,27 @@
+@@ -2330,14 +2683,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -13790,7 +14155,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2392,7 +2745,20 @@
+@@ -2392,7 +2758,20 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "redactor规则/长度/flush合同、网络验证禁用配置、canary矩阵及明确未覆盖风险。"
      ],
@@ -13812,7 +14177,7 @@
    },
    {
      "id": "OB-040",
-@@ -2851,7 +3217,7 @@
+@@ -2851,7 +3230,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -13821,7 +14186,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3274,19 @@
+@@ -2908,7 +3287,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -13842,7 +14207,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4657,7 @@
+@@ -4279,7 +4670,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -13851,7 +14216,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4715,26 @@
+@@ -4337,14 +4728,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -13880,7 +14245,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4791,19 @@
+@@ -4401,7 +4804,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -13901,7 +14266,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5925,7 @@
+@@ -5523,7 +5938,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -13910,7 +14275,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5978,26 @@
+@@ -5576,14 +5991,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -13939,7 +14304,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6056,26 @@
+@@ -5642,14 +6069,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -13968,7 +14333,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6130,26 @@
+@@ -5704,14 +6143,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -13997,7 +14362,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6216,25 @@
+@@ -5778,14 +6229,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -14025,7 +14390,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6302,19 @@
+@@ -5853,7 +6315,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21645,6 +22010,314 @@
 +    # Pattern is placed after '--' so leading-dash patterns cannot inject flags like --pre
 +    dash_idx = rg_argv.index("--")
 +    assert rg_argv[dash_idx + 1] == "--pre=sh"
+--- /dev/null
++++ b/tests/unit/test_openai_compatible_adapter.py
+@@ -0,0 +1,305 @@
++import asyncio
++import json
++import time
++from typing import Any
++
++import pytest
++from openbot.domain.providers import ModelRequest, Text, ToolCall
++from openbot.domain.tools import Effect, RetryClass, ToolManifest
++from openbot.policy.egress import EgressGuard
++from openbot.providers.openai import ProviderFailure
++from openbot.providers.openai_compatible import (
++    ALLOWED_OPENAI_REQUEST_FIELDS,
++    FORBIDDEN_SDK_HELPERS,
++    PROVIDER_CAPABILITY_MATRIX,
++    OpenAICompatibleAdapter,
++    validate_outbound_sdk_payload,
++)
++
++
++class RecordingBudgetLedger:
++    def __init__(self) -> None:
++        self.reserved: list[tuple[str, int]] = []
++        self.settled: list[tuple[str, int, int]] = []
++        self.unknowns: list[str] = []
++
++    def reserve(self, request_id: str, units: int) -> None:
++        self.reserved.append((request_id, units))
++
++    def settle(self, request_id: str, input_tokens: int, output_tokens: int) -> None:
++        self.settled.append((request_id, input_tokens, output_tokens))
++
++    def unknown(self, request_id: str) -> None:
++        self.unknowns.append(request_id)
++
++
++class FakeSSEStreamTransport:
++    """Deterministic SSE stream double counting exact HTTP attempts without socket bind."""
++
++    def __init__(self, scripts: list[list[bytes] | int]) -> None:
++        self.scripts = list(scripts)
++        self.http_attempts = 0
++        self.last_payloads: list[dict[str, Any]] = []
++
++    async def stream_chat(self, payload: dict[str, Any]) -> list[bytes]:
++        self.http_attempts += 1
++        self.last_payloads.append(payload)
++        nxt = self.scripts.pop(0)
++        if isinstance(nxt, int):
++            raise ProviderFailure(f"HTTP_{nxt}")
++        return nxt
++
++
++def _manifest(*, canary_tracker: list[int]) -> ToolManifest:
++    # Canary tracker proves no tool function is ever invoked during model generation
++    assert len(canary_tracker) == 0
++    return ToolManifest(
++        "fs.patch",
++        "1.0.0",
++        b'{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},'
++        b'"required":["path","content"],"additionalProperties":false}',
++        b'{"type":"object"}',
++        Effect.LOCAL_WRITE,
++        RetryClass.IDEMPOTENT_WRITE,
++        ("workspace",),
++        "stop",
++        "patch",
++        1000,
++        1024,
++    )
++
++
++def _egress() -> EgressGuard:
++    return EgressGuard(
++        profile_network_mode="CONNECTED",
++        profile_allowed_domains=frozenset({"api.openai.com"}),
++        workspace_allowed_domains=frozenset({"api.openai.com"}),
++    )
++
++
++def _sse(obj: dict[str, Any]) -> bytes:
++    return b"data: " + json.dumps(obj).encode("utf-8") + b"\n\n"
++
++
++def test_sdk_whitelist_capability_matrix_and_rejection_of_extra_fields_or_hosted_tools():
++    assert "beta.chat.completions.run_tools" in FORBIDDEN_SDK_HELPERS
++    assert "extra_body" not in ALLOWED_OPENAI_REQUEST_FIELDS
++    assert "extra_headers" not in ALLOWED_OPENAI_REQUEST_FIELDS
++    assert PROVIDER_CAPABILITY_MATRIX["openai_official"].supports_stream_usage is True
++    assert PROVIDER_CAPABILITY_MATRIX["openai_compatible_generic"].supports_stream_usage is False
++
++    for bad in (
++        {"model": "gpt-4o-mini", "messages": [], "extra_body": {"web_search": True}},
++        {"model": "gpt-4o-mini", "messages": [], "extra_headers": {"Authorization": "Bearer evil"}},
++        {"model": "gpt-4o-mini", "messages": [], "web_search_options": {}},
++        {"model": "gpt-4o-mini", "messages": [], "mcp_servers": ["https://evil.invalid"]},
++    ):
++        with pytest.raises(PermissionError):
++            validate_outbound_sdk_payload(bad)
++
++
++def test_fragmented_tool_call_assembly_429_retry_accounting_and_zero_canary_execution():
++    canary_calls: list[int] = []
++    manifest = _manifest(canary_tracker=canary_calls)
++    budget = RecordingBudgetLedger()
++
++    # Attempt 1 returns 429; Attempt 2 streams fragmented tool call JSON across 3 chunks + usage
++    sse_frames = [
++        _sse(
++            {
++                "choices": [
++                    {
++                        "index": 0,
++                        "delta": {
++                            "tool_calls": [
++                                {
++                                    "index": 0,
++                                    "id": "call_frag_1",
++                                    "type": "function",
++                                    "function": {
++                                        "name": "fs.patch",
++                                        "arguments": '{"path":"a.',
++                                    },
++                                }
++                            ]
++                        },
++                    }
++                ],
++                "usage": None,
++            }
++        ),
++        _sse(
++            {
++                "choices": [
++                    {
++                        "index": 0,
++                        "delta": {
++                            "tool_calls": [
++                                {
++                                    "index": 0,
++                                    "function": {"arguments": 'txt","content":"hello"}'},
++                                }
++                            ]
++                        },
++                    }
++                ],
++                "usage": None,
++            }
++        ),
++        _sse(
++            {
++                "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
++                "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
++            }
++        ),
++        b"data: [DONE]\n\n",
++    ]
++    transport = FakeSSEStreamTransport([429, sse_frames])
++    adapter = OpenAICompatibleAdapter(
++        endpoint="https://api.openai.com/v1",
++        model="gpt-4o-mini",
++        egress_guard=_egress(),
++        budget=budget,
++        manifests={"fs.patch": manifest},
++        stream_transport=transport,
++        max_gateway_retries=1,
++        retry_backoff_ms=0,
++    )
++    req = ModelRequest(
++        request_id="req_frag_1",
++        model="gpt-4o-mini",
++        blocks=(Text("patch a.txt"),),
++        deadline_monotonic_ms=int(time.monotonic() * 1000) + 5000,
++        reserved_cost_units=100,
++    )
++    resp = asyncio.run(adapter.generate(req))
++    # 1. Server HTTP attempts == Gateway attempts == Budget reservations == 2
++    assert transport.http_attempts == 2
++    assert len(budget.reserved) == 2
++    assert budget.unknowns == ["req_frag_1:try_1"]
++    assert budget.settled == [("req_frag_1:try_2", 12, 8)]
++    # 2. Assembled ToolCall proposal is canonical and validated against manifest schema; canary == 0
++    assert len(resp.blocks) == 1
++    call = resp.blocks[0]
++    assert isinstance(call, ToolCall)
++    assert call.call_id == "call_frag_1"
++    assert call.tool_name == "fs.patch"
++    assert call.arguments == b'{"content":"hello","path":"a.txt"}'
++    assert canary_calls == []
++
++
++def test_malformed_json_missing_tool_id_stream_cut_and_cancel_hold_cost_without_retry():
++    canary_calls: list[int] = []
++    manifest = _manifest(canary_tracker=canary_calls)
++
++    # 1. Half-packet / truncated tool call JSON is discarded, cost held as UNKNOWN, and NOT retried
++    cut_frames = [
++        _sse(
++            {
++                "choices": [
++                    {
++                        "index": 0,
++                        "delta": {
++                            "tool_calls": [
++                                {
++                                    "index": 0,
++                                    "id": "call_cut",
++                                    "type": "function",
++                                    "function": {
++                                        "name": "fs.patch",
++                                        "arguments": '{"path":"cut',
++                                    },
++                                }
++                            ]
++                        },
++                    }
++                ]
++            }
++        ),
++    ]
++    budget_cut = RecordingBudgetLedger()
++    transport_cut = FakeSSEStreamTransport([cut_frames, cut_frames])
++    adapter_cut = OpenAICompatibleAdapter(
++        endpoint="https://api.openai.com/v1",
++        model="gpt-4o-mini",
++        egress_guard=_egress(),
++        budget=budget_cut,
++        manifests={"fs.patch": manifest},
++        stream_transport=transport_cut,
++        max_gateway_retries=2,
++        retry_backoff_ms=0,
++    )
++    req_cut = ModelRequest(
++        request_id="req_cut_1",
++        model="gpt-4o-mini",
++        blocks=(Text("cut"),),
++        deadline_monotonic_ms=int(time.monotonic() * 1000) + 5000,
++        reserved_cost_units=100,
++    )
++    with pytest.raises(ProviderFailure):
++        asyncio.run(adapter_cut.generate(req_cut))
++    # Half-packet stream must NOT be retried by gateway and must hold budget as UNKNOWN
++    assert transport_cut.http_attempts == 1
++    assert budget_cut.unknowns == ["req_cut_1:try_1"]
++
++    # 2. Missing tool_call_id is rejected and holds cost as UNKNOWN
++    no_id_frames = [
++        _sse(
++            {
++                "choices": [
++                    {
++                        "index": 0,
++                        "delta": {
++                            "tool_calls": [
++                                {
++                                    "index": 0,
++                                    "type": "function",
++                                    "function": {
++                                        "name": "fs.patch",
++                                        "arguments": '{"path":"a","content":"b"}',
++                                    },
++                                }
++                            ]
++                        },
++                        "finish_reason": "tool_calls",
++                    }
++                ]
++            }
++        ),
++        b"data: [DONE]\n\n",
++    ]
++    budget_noid = RecordingBudgetLedger()
++    transport_noid = FakeSSEStreamTransport([no_id_frames])
++    adapter_noid = OpenAICompatibleAdapter(
++        endpoint="https://api.openai.com/v1",
++        model="gpt-4o-mini",
++        egress_guard=_egress(),
++        budget=budget_noid,
++        manifests={"fs.patch": manifest},
++        stream_transport=transport_noid,
++    )
++    with pytest.raises(ProviderFailure, match="tool_call_id"):
++        asyncio.run(
++            adapter_noid.generate(
++                ModelRequest(
++                    "req_noid", "gpt-4o-mini", (Text("x"),), int(time.monotonic() * 1000) + 5000, 50
++                )
++            )
++        )
++    assert budget_noid.unknowns == ["req_noid:try_1"]
++
++    # 3. Cancelled request sends 0 new HTTP requests
++    asyncio.run(adapter_noid.cancel("req_cancelled"))
++    with pytest.raises(ProviderFailure, match="cancelled"):
++        asyncio.run(
++            adapter_noid.generate(
++                ModelRequest(
++                    "req_cancelled",
++                    "gpt-4o-mini",
++                    (Text("x"),),
++                    int(time.monotonic() * 1000) + 5000,
++                    50,
++                )
++            )
++        )
++    assert transport_noid.http_attempts == 1
 --- /dev/null
 +++ b/tests/unit/test_policy_evaluator.py
 @@ -0,0 +1,359 @@
