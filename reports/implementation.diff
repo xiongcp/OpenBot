@@ -2160,20 +2160,23 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,13 @@
-+# OB-017 / OB-018：本地内部提案与审批决定子集
+@@ -0,0 +1,16 @@
++# OB-017 / OB-018 / OB-031：本地内部提案、审批决定与确定性策略评估器
 +
-+先读取两项 component_refs/reuse_type/reuse_notes：复用已通过本机标准向量的 rfc8785/jsonschema；SQLite 标准库经唯一 writer 使用。没有引入新 SDK、ORM、自动 runner 或第二账本。
++先读取各项 component_refs/reuse_type/reuse_notes：复用已通过本机标准向量的 rfc8785/jsonschema；SQLite 标准库经唯一 writer 使用。OB-031 保持纯代码表驱动评估器，不引入 OPA/Casbin，也不以 pathspec 匹配结果充当安全路径白名单或授权判定。没有引入新 SDK、ORM、自动 runner 或第二账本。
 +
-+实现：Operation 从本地 ACTIVE manifest、可信上下文、固定 TTL/nonce 和工具 args schema 构造；完整 JCS 字节保存到原 operations 表新增列，索引投影逐项复核。新增 migration 0002，原 0001/23 表设计基线未改。批准只使 Operation READY；本子集不创建 Attempt、不派发工具。审批状态、Task、脱敏 event/outbox 在同一事务提交；稳定 request_id 包含认证来源作用域。
++实现（OB-017/018）：Operation 从本地 ACTIVE manifest、可信上下文、固定 TTL/nonce 和工具 args schema 构造；完整 JCS 字节保存到原 operations 表新增列，索引投影逐项复核。新增 migration 0002，原 0001/23 表设计基线未改。批准只使 Operation READY；本子集不创建 Attempt、不派发工具。审批状态、Task、脱敏 event/outbox 在同一事务提交；稳定 request_id 包含认证来源作用域。
 +
-+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`，当前 49 passed，见 evidence/implementation/m1-storage-tests.log。完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json；容器需单独显式资格命令，验证脚本不继承启用容器的环境变量。
++实现（OB-031）：新增 `services/core/src/openbot/policy/evaluator.py`，从 SQLite `profile_config`、`policy_revisions`（复核 canonical SHA-256 digest）与 `tool_registry`（仅 ACTIVE 工具）构造不可变 `PolicySnapshot`；按 `actor / resource / action / data_class / destination / execution_backend` 六维输入做纯确定性评估，输出 `ALLOW / ASK / DENY / REQUIRE_LOCAL`、理由码、有效网络模式与允许域名交集（`profile & workspace & request`，任何扩权尝试直接 `DENY`）。`LOCAL_MODEL` 强制校验 `verified_local_model` 而非仅凭 `localhost` 字面量；`TRUSTED_HOST_EXECUTION`、`SECRET` 读取、`NON_RETRYABLE` 工具、未资格化 `CODE_EXECUTION` 后端均硬拒绝；控制设置、远端 `SENSITIVE` 与截断预览返回 `REQUIRE_LOCAL`；模型风险评分、MCP `readOnlyHint`/`idempotentHint`、`pathspec` 命中或远程授权永远无法覆盖 `DENY` 或 `REQUIRE_LOCAL`，且 `CODE_EXECUTION`/`EXTERNAL_WRITE` 始终保持一次一审 `ASK`。
 +
-+验证包含：并发互斥决定仅一个落盘；body actor、错设备、旧 identity/policy/resource、nonce/hash/version、取消、过期/倒退时钟/新控制进程均不能 READY；重复请求不再执行决定；外部 dict 修改不改权威字节；SQL 重绑定被拒绝；challenge 丢失撤销旧审批。原 nonce 与 args 不进入普通审计/outbox；schema 失败的标准 traceback 不包含原 nonce。
++实际命令：
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（59 passed，见 evidence/implementation/m1-storage-tests.log）
++- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json；容器需单独显式资格命令，验证脚本不继承启用容器的环境变量。
 +
 +独立只读审查发现：canonical.operation_id 未与账本主键比对；在开启 FK 和保留触发器的异常记录下可使另一主键 READY。已先补 RED 反例再修复，并在全套中通过。自查另发现第三方 Schema ValidationError 的异常链会打印 nonce；公共 ContractError 现抑制该链。对应 RED 日志保留，合成 nonce 摘录已明确脱敏，不含真实凭据。
 +
-+当前限制：仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store。测试 challenge 为内存夹具；没有跨重启时间权威时敏感批准拒绝。普通 service 不提供 CONSUMED 复用/claim/dispatch/recovery；它们仍待 OB-015—020/031 等正式实现。未消费授权的撤销端口、完整受保护 challenge 生命周期和终态验证也待补齐。因此 OB-017/018 保持 IN_PROGRESS，不凭该子集关闭 OB-029。
++当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store。因此 OB-017/018 及其下游 OB-031 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,21 @@
@@ -2390,7 +2393,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,38 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2428,6 +2431,7 @@
 +- 当前完整本机验证：M0 150 passed/3 skipped；M1 169 passed/1 skipped；存储子集 49 passed；容器独立资格 8 passed。lint/format/mypy/组件及原设计/DDL检查通过。未通过 OB-029，未进入 M3 验收。
 +- 完成 OB-014 完整 Task 11×11 跃迁矩阵、OutcomeVerifier（DIAGNOSIS/PATCH/TEST 产物与未决项核对）、cancel（UNKNOWN/DISPATCHING 驻留 RECONCILING）与 resume_reconciled 核对恢复守卫，以及 complete 提交前后真实子进程崩溃测试；存储套件增至 54 passed，M0 155 passed/3 skipped，M1 174 passed/1 skipped。OB-014 更新为 VERIFIED。
 +- 推进 OB-016（执行资源锁与会话排队）：实现四类资源键与固定加锁顺序、单活动 Task FIFO 排队、WAITING_APPROVAL 原子释锁、重获锁时工作区 generation/version 复核、租约到期不抢占（须旧 epoch STOPPED 且未派发）及 UNKNOWN 资源 quarantine；存储套件增至 59 passed，M0 160 passed/3 skipped，M1 179 passed/1 skipped。因上游 OB-015/093 未闭合，OB-016 记 IN_PROGRESS。
++- 推进 OB-031（确定性策略评估器）：实现 PolicySnapshot（SQLite policy_revisions canonical SHA-256 摘要核验）与六维纯代码表驱动 PolicyEvaluator（ALLOW/ASK/DENY/REQUIRE_LOCAL、网络与域名交集防扩权、LOCAL_MODEL 真实核验、拒绝模型评分/MCP hint/pathspec/远程批准覆盖硬拒绝）；新增 20 项测试全部通过，M0 增至 180 passed/3 skipped，M1 增至 199 passed/1 skipped。因上游 OB-018 仍为 IN_PROGRESS，OB-031 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -5294,6 +5298,337 @@
 +            )
 +        return result
 --- /dev/null
++++ b/services/core/src/openbot/policy/evaluator.py
+@@ -0,0 +1,328 @@
++"""Deterministic six-dimensional policy evaluator. Hints and pathspec never grant authority."""
++
++import hashlib
++import sqlite3
++from collections.abc import Mapping
++from dataclasses import dataclass, field
++from typing import Any, Literal
++
++from openbot.contracts import canonicalize, strict_json
++
++type PolicyDecisionKind = Literal["ALLOW", "ASK", "DENY", "REQUIRE_LOCAL"]
++
++_NET_RANK: dict[str, int] = {"OFFLINE": 0, "LOCAL_MODEL": 1, "CONNECTED": 2}
++_VALID_EFFECTS = frozenset({"READ", "LOCAL_WRITE", "EXTERNAL_WRITE", "CODE_EXECUTION"})
++_VALID_RETRY_CLASSES = frozenset(
++    {
++        "SAFE_READ",
++        "IDEMPOTENT_WRITE",
++        "PROVIDER_IDEMPOTENT",
++        "RECONCILE_ONLY",
++        "NON_RETRYABLE",
++    }
++)
++_VALID_DATA_CLASSES = frozenset({"PUBLIC", "WORKSPACE", "SENSITIVE", "SECRET"})
++_VALID_DESTINATIONS = frozenset({"LOCAL_ONLY", "MODEL_ENDPOINT", "FEISHU", "EXTERNAL_HOST"})
++
++
++@dataclass(frozen=True, slots=True)
++class ActorContext:
++    principal_id: str
++    role: str
++    status: str
++    identity_epoch: int
++    expected_identity_epoch: int
++    channel: str
++
++
++@dataclass(frozen=True, slots=True)
++class ResourceContext:
++    workspace_id: str
++    workspace_status: str
++    path_in_workspace: bool
++    is_sensitive_path: bool
++    is_control_setting: bool = False
++
++
++@dataclass(frozen=True, slots=True)
++class ActionContext:
++    tool_name: str
++    tool_reviewed_active: bool
++    effect: str
++    retry_class: str
++
++
++@dataclass(frozen=True, slots=True)
++class DestinationContext:
++    kind: str
++    host: str | None
++    task_network_mode: str
++    verified_local_model: bool = False
++
++
++@dataclass(frozen=True, slots=True)
++class CapabilityGrant:
++    grant_id: str
++    principal_id: str
++    workspace_id: str
++    allowed_tools: frozenset[str]
++    allowed_effects: frozenset[str]
++    not_expired: bool
++
++
++@dataclass(frozen=True, slots=True)
++class EvaluationInput:
++    actor: ActorContext
++    resource: ResourceContext
++    action: ActionContext
++    data_class: str
++    destination: DestinationContext
++    execution_backend: str
++    backend_qualified: bool = False
++    preview_truncated: bool = False
++    request_allowed_hosts: frozenset[str] = field(default_factory=frozenset)
++    grant: CapabilityGrant | None = None
++    untrusted_hints: Mapping[str, Any] = field(default_factory=dict)
++
++
++@dataclass(frozen=True, slots=True)
++class PolicyDecision:
++    decision: PolicyDecisionKind
++    reason_code: str
++    policy_version: str
++    effective_network_mode: str
++    effective_allowed_hosts: tuple[str, ...]
++    ignored_hint_keys: tuple[str, ...]
++
++
++@dataclass(frozen=True, slots=True)
++class PolicySnapshot:
++    version: int
++    privacy_mode: str
++    allow_workspace_read: bool
++    reviewed_tools: frozenset[str]
++    profile_allowed_hosts: frozenset[str] = field(default_factory=frozenset)
++    workspace_allowed_hosts: frozenset[str] = field(default_factory=frozenset)
++
++    @classmethod
++    def from_raw_revision(
++        cls,
++        *,
++        version: int,
++        privacy_mode: str,
++        expected_digest: str,
++        rules_json: str | bytes,
++        reviewed_tools: frozenset[str],
++    ) -> "PolicySnapshot":
++        if type(version) is not int or version < 1 or privacy_mode not in _NET_RANK:
++            raise PermissionError("Invalid policy version or privacy_mode")
++        rules = strict_json(rules_json)
++        if not isinstance(rules, dict):
++            raise PermissionError("Policy rules must be a JSON object")
++        computed = hashlib.sha256(canonicalize(rules)).hexdigest()
++        if computed != expected_digest:
++            raise PermissionError("Policy revision digest mismatch")
++        allow_read = bool(rules.get("allow_workspace_read", True))
++        prof_hosts = frozenset(str(h) for h in rules.get("profile_allowed_hosts", []))
++        ws_hosts = frozenset(str(h) for h in rules.get("workspace_allowed_hosts", []))
++        return cls(
++            version=version,
++            privacy_mode=privacy_mode,
++            allow_workspace_read=allow_read,
++            reviewed_tools=frozenset(reviewed_tools),
++            profile_allowed_hosts=prof_hosts,
++            workspace_allowed_hosts=ws_hosts,
++        )
++
++    @classmethod
++    def from_db(cls, db: sqlite3.Connection) -> "PolicySnapshot":
++        cfg = db.execute(
++            "SELECT policy_version,privacy_mode FROM profile_config WHERE singleton=1"
++        ).fetchone()
++        if not cfg:
++            raise PermissionError("Profile config unavailable")
++        version, privacy_mode = int(cfg[0]), str(cfg[1])
++        rev = db.execute(
++            "SELECT digest,rules_json FROM policy_revisions WHERE version=?", (version,)
++        ).fetchone()
++        if not rev:
++            raise PermissionError("Active policy revision missing")
++        tools = frozenset(
++            str(r[0]) for r in db.execute("SELECT tool_id FROM tool_registry WHERE status='ACTIVE'")
++        )
++        return cls.from_raw_revision(
++            version=version,
++            privacy_mode=privacy_mode,
++            expected_digest=str(rev[0]),
++            rules_json=str(rev[1]),
++            reviewed_tools=tools,
++        )
++
++
++class PolicyEvaluator:
++    def __init__(self, snapshot: PolicySnapshot):
++        self._snapshot = snapshot
++
++    def _result(
++        self,
++        decision: PolicyDecisionKind,
++        reason_code: str,
++        effective_mode: str,
++        allowed_hosts: frozenset[str],
++        inp: EvaluationInput,
++    ) -> PolicyDecision:
++        return PolicyDecision(
++            decision=decision,
++            reason_code=reason_code,
++            policy_version=f"policy-{self._snapshot.version}",
++            effective_network_mode=effective_mode,
++            effective_allowed_hosts=tuple(sorted(allowed_hosts)),
++            ignored_hint_keys=tuple(sorted(str(k) for k in inp.untrusted_hints)),
++        )
++
++    def evaluate(self, inp: EvaluationInput) -> PolicyDecision:
++        snap = self._snapshot
++        base_hosts = snap.profile_allowed_hosts & snap.workspace_allowed_hosts
++        eff_hosts = (
++            (base_hosts & inp.request_allowed_hosts) if inp.request_allowed_hosts else base_hosts
++        )
++        mode_fallback = (
++            inp.destination.task_network_mode
++            if inp.destination.task_network_mode in _NET_RANK
++            else "OFFLINE"
++        )
++
++        # 1. Actor authority & epoch
++        actor = inp.actor
++        if (
++            actor.status != "ACTIVE"
++            or actor.role != "OWNER"
++            or type(actor.identity_epoch) is not int
++            or actor.identity_epoch < 1
++            or actor.identity_epoch != actor.expected_identity_epoch
++        ):
++            return self._result(
++                "DENY", "ACTOR_UNTRUSTED_OR_STALE_EPOCH", mode_fallback, eff_hosts, inp
++            )
++
++        # 2. Execution backend hard gates
++        if inp.execution_backend == "TRUSTED_HOST_EXECUTION":
++            return self._result(
++                "DENY", "TRUSTED_HOST_EXECUTION_FORBIDDEN", mode_fallback, eff_hosts, inp
++            )
++        if inp.execution_backend not in {"NONE", "ISOLATED_CONTAINER"}:
++            return self._result("DENY", "UNKNOWN_EXECUTION_BACKEND", mode_fallback, eff_hosts, inp)
++
++        # 3. Resource boundary gates (pathspec hints never authorize access)
++        res = inp.resource
++        if res.workspace_status != "ACTIVE" or not res.path_in_workspace or res.is_sensitive_path:
++            return self._result(
++                "DENY", "RESOURCE_OUTSIDE_OR_SENSITIVE_PATH", mode_fallback, eff_hosts, inp
++            )
++
++        # 4. Action / Tool review & retry class gates
++        act = inp.action
++        if (
++            not act.tool_reviewed_active
++            or act.tool_name not in snap.reviewed_tools
++            or act.effect not in _VALID_EFFECTS
++            or act.retry_class not in _VALID_RETRY_CLASSES
++        ):
++            return self._result("DENY", "UNKNOWN_OR_UNREVIEWED_TOOL", mode_fallback, eff_hosts, inp)
++        if act.retry_class == "NON_RETRYABLE":
++            return self._result(
++                "DENY", "NON_RETRYABLE_DISABLED_IN_MVP", mode_fallback, eff_hosts, inp
++            )
++        if act.effect == "CODE_EXECUTION" and (
++            inp.execution_backend != "ISOLATED_CONTAINER" or not inp.backend_qualified
++        ):
++            return self._result(
++                "DENY", "ISOLATION_BACKEND_UNAVAILABLE", mode_fallback, eff_hosts, inp
++            )
++
++        # 5. Data classification hard gates
++        if inp.data_class not in _VALID_DATA_CLASSES:
++            return self._result("DENY", "UNKNOWN_DATA_CLASS", mode_fallback, eff_hosts, inp)
++        if inp.data_class == "SECRET":
++            return self._result("DENY", "SECRET_DATA_ACCESS_DENIED", mode_fallback, eff_hosts, inp)
++        if inp.data_class == "SENSITIVE" and inp.destination.kind != "LOCAL_ONLY":
++            return self._result("DENY", "SENSITIVE_EGRESS_DENIED", mode_fallback, eff_hosts, inp)
++
++        # 6. Destination & network/origin intersection gates
++        dest = inp.destination
++        if dest.task_network_mode not in _NET_RANK or snap.privacy_mode not in _NET_RANK:
++            return self._result("DENY", "UNKNOWN_NETWORK_MODE", "OFFLINE", eff_hosts, inp)
++        if _NET_RANK[dest.task_network_mode] > _NET_RANK[snap.privacy_mode]:
++            return self._result(
++                "DENY", "NETWORK_SCOPE_EXPANSION_DENIED", snap.privacy_mode, eff_hosts, inp
++            )
++        effective_mode = dest.task_network_mode
++
++        if inp.request_allowed_hosts and not (inp.request_allowed_hosts <= base_hosts):
++            return self._result(
++                "DENY", "ORIGIN_SCOPE_EXPANSION_DENIED", effective_mode, eff_hosts, inp
++            )
++        if dest.kind not in _VALID_DESTINATIONS:
++            return self._result("DENY", "UNKNOWN_DESTINATION_KIND", effective_mode, eff_hosts, inp)
++        if effective_mode == "OFFLINE" and dest.kind != "LOCAL_ONLY":
++            return self._result("DENY", "OFFLINE_EGRESS_DENIED", effective_mode, eff_hosts, inp)
++        if effective_mode == "LOCAL_MODEL":
++            if dest.kind == "MODEL_ENDPOINT" and not dest.verified_local_model:
++                return self._result(
++                    "DENY", "UNVERIFIED_LOCAL_MODEL_ENDPOINT", effective_mode, eff_hosts, inp
++                )
++            if dest.kind == "EXTERNAL_HOST" and (not dest.host or dest.host not in eff_hosts):
++                return self._result(
++                    "DENY", "DESTINATION_NOT_IN_ALLOWED_ORIGINS", effective_mode, eff_hosts, inp
++                )
++        if effective_mode == "CONNECTED" and dest.kind == "EXTERNAL_HOST":
++            if not dest.host or dest.host not in eff_hosts:
++                return self._result(
++                    "DENY", "DESTINATION_NOT_IN_ALLOWED_ORIGINS", effective_mode, eff_hosts, inp
++                )
++
++        # 7. REQUIRE_LOCAL surface gates (cannot be bypassed by remote approval or grants)
++        if res.is_control_setting:
++            return self._result(
++                "REQUIRE_LOCAL", "CONTROL_SETTING_REQUIRES_LOCAL", effective_mode, eff_hosts, inp
++            )
++        if inp.data_class == "SENSITIVE" and actor.channel != "local":
++            return self._result(
++                "REQUIRE_LOCAL", "SENSITIVE_REQUIRES_LOCAL_SURFACE", effective_mode, eff_hosts, inp
++            )
++        if inp.preview_truncated and actor.channel != "local":
++            return self._result(
++                "REQUIRE_LOCAL",
++                "TRUNCATED_PREVIEW_REQUIRES_LOCAL",
++                effective_mode,
++                eff_hosts,
++                inp,
++            )
++
++        # 8. ALLOW vs ASK
++        if (
++            act.effect == "READ"
++            and inp.data_class in {"PUBLIC", "WORKSPACE"}
++            and dest.kind in {"LOCAL_ONLY", "MODEL_ENDPOINT"}
++        ):
++            if snap.allow_workspace_read:
++                return self._result(
++                    "ALLOW", "WORKSPACE_READ_ALLOWED", effective_mode, eff_hosts, inp
++                )
++            return self._result("ASK", "READ_REQUIRES_APPROVAL", effective_mode, eff_hosts, inp)
++
++        grant = inp.grant
++        if (
++            grant is not None
++            and grant.not_expired
++            and grant.principal_id == actor.principal_id
++            and grant.workspace_id == res.workspace_id
++            and act.tool_name in grant.allowed_tools
++            and act.effect in grant.allowed_effects
++            and act.effect == "LOCAL_WRITE"
++            and inp.data_class in {"PUBLIC", "WORKSPACE"}
++            and dest.kind == "LOCAL_ONLY"
++        ):
++            return self._result("ALLOW", "CAPABILITY_GRANT_ALLOWED", effective_mode, eff_hosts, inp)
++
++        return self._result("ASK", "EFFECT_REQUIRES_APPROVAL", effective_mode, eff_hosts, inp)
+--- /dev/null
 +++ b/services/core/src/openbot/providers/__init__.py
 @@ -0,0 +1 @@
 +"""Optional transport adapters; importing this package does not load an SDK."""
@@ -6238,7 +6573,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018 持久资源锁与会话排队、内部提案/决定子集；上游 OB-015/093 与正式策略评估器 OB-031、claim/dispatch/recovery 未闭合
++- [in_progress] OB-016/017/018/031 持久资源锁与会话排队、内部提案/决定子集、确定性六维策略评估器；上游 OB-015/093 与 claim/dispatch/recovery 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -6423,6 +6758,15 @@
 @@ -1257,7 +1257,7 @@
  
  **实现审批决定与一次性授权**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Security · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ04](requirements_traceability.md#rq04)
+ 
+@@ -1487,7 +1487,7 @@
+ 
+ **实现确定性策略评估器**
  
 -阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Security · 规模 M
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
@@ -6974,7 +7318,37 @@
    },
    {
      "id": "OB-019",
-@@ -2851,7 +3049,7 @@
+@@ -1848,7 +2046,7 @@
+     "title": "实现确定性策略评估器",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Security",
+     "size": "M",
+     "req_ids": [
+@@ -1900,7 +2098,19 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第3、8页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第3、8页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 deterministic 6D policy evaluator, PolicySnapshot SQLite digest verification, ALLOW/ASK/DENY/REQUIRE_LOCAL precedence, and network/origin intersection",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_policy_evaluator.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-018（完整审批生命周期、持久 challenge store 与安全预览）仍为 IN_PROGRESS；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs/reuse_type/reuse_notes; control_owned pure code evaluator without OPA/Casbin; pathspec/MCP hints/model scores ignored for authorization; 20 positive and negative cases verified."
++    }
+   },
+   {
+     "id": "OB-032",
+@@ -2851,7 +3061,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -6983,7 +7357,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3106,19 @@
+@@ -2908,7 +3118,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -7004,7 +7378,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4489,7 @@
+@@ -4279,7 +4501,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -7013,7 +7387,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4547,26 @@
+@@ -4337,14 +4559,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -7042,7 +7416,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4623,19 @@
+@@ -4401,7 +4635,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -7063,7 +7437,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5757,7 @@
+@@ -5523,7 +5769,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -7072,7 +7446,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5810,26 @@
+@@ -5576,14 +5822,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -7101,7 +7475,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +5888,26 @@
+@@ -5642,14 +5900,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -7130,7 +7504,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +5962,26 @@
+@@ -5704,14 +5974,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -7159,7 +7533,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6048,25 @@
+@@ -5778,14 +6060,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -7187,7 +7561,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6134,19 @@
+@@ -5853,7 +6146,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -11174,6 +11548,368 @@
 +def test_effect_does_not_imply_retry_class():
 +    assert Effect.EXTERNAL_WRITE.value == "EXTERNAL_WRITE"
 +    assert RetryClass.RECONCILE_ONLY.value == "RECONCILE_ONLY"
+--- /dev/null
++++ b/tests/unit/test_policy_evaluator.py
+@@ -0,0 +1,359 @@
++import pytest
++from openbot.policy.evaluator import (
++    ActionContext,
++    ActorContext,
++    CapabilityGrant,
++    DestinationContext,
++    EvaluationInput,
++    PolicyDecision,
++    PolicyEvaluator,
++    PolicySnapshot,
++    ResourceContext,
++)
++
++
++def _base_input(**overrides) -> EvaluationInput:
++    defaults = dict(
++        actor=ActorContext(
++            principal_id="pri_owner1",
++            role="OWNER",
++            status="ACTIVE",
++            identity_epoch=1,
++            expected_identity_epoch=1,
++            channel="local",
++        ),
++        resource=ResourceContext(
++            workspace_id="wsp_1",
++            workspace_status="ACTIVE",
++            path_in_workspace=True,
++            is_sensitive_path=False,
++            is_control_setting=False,
++        ),
++        action=ActionContext(
++            tool_name="fs.read",
++            tool_reviewed_active=True,
++            effect="READ",
++            retry_class="SAFE_READ",
++        ),
++        data_class="WORKSPACE",
++        destination=DestinationContext(
++            kind="LOCAL_ONLY",
++            host=None,
++            task_network_mode="OFFLINE",
++            verified_local_model=False,
++        ),
++        execution_backend="NONE",
++        backend_qualified=False,
++        preview_truncated=False,
++        request_allowed_hosts=frozenset(),
++        grant=None,
++        untrusted_hints={},
++    )
++    defaults.update(overrides)
++    return EvaluationInput(**defaults)
++
++
++def _snapshot(**overrides) -> PolicySnapshot:
++    defaults = dict(
++        version=1,
++        privacy_mode="OFFLINE",
++        allow_workspace_read=True,
++        reviewed_tools=frozenset({"fs.read", "fs.patch", "sandbox.exec", "message.send"}),
++        profile_allowed_hosts=frozenset({"api.example.com", "docs.example.com"}),
++        workspace_allowed_hosts=frozenset({"docs.example.com"}),
++    )
++    defaults.update(overrides)
++    return PolicySnapshot(**defaults)
++
++
++def test_deterministic_evaluation_and_workspace_read_allow():
++    evaluator = PolicyEvaluator(_snapshot())
++    inp = _base_input()
++    first: PolicyDecision = evaluator.evaluate(inp)
++    for _ in range(20):
++        assert evaluator.evaluate(inp) == first
++    assert first.decision == "ALLOW"
++    assert first.reason_code == "WORKSPACE_READ_ALLOWED"
++    assert first.policy_version == "policy-1"
++
++
++@pytest.mark.parametrize(
++    ("override", "expected_decision", "expected_reason"),
++    [
++        (
++            {"actor": ActorContext("pri_viewer", "VIEWER", "ACTIVE", 1, 1, "local")},
++            "DENY",
++            "ACTOR_UNTRUSTED_OR_STALE_EPOCH",
++        ),
++        (
++            {"actor": ActorContext("pri_owner1", "OWNER", "ACTIVE", 1, 2, "local")},
++            "DENY",
++            "ACTOR_UNTRUSTED_OR_STALE_EPOCH",
++        ),
++        (
++            {"resource": ResourceContext("wsp_1", "ACTIVE", False, False, False)},
++            "DENY",
++            "RESOURCE_OUTSIDE_OR_SENSITIVE_PATH",
++        ),
++        (
++            {"resource": ResourceContext("wsp_1", "ACTIVE", True, True, False)},
++            "DENY",
++            "RESOURCE_OUTSIDE_OR_SENSITIVE_PATH",
++        ),
++        (
++            {
++                "resource": ResourceContext("wsp_1", "ACTIVE", True, False, True),
++                "actor": ActorContext("pri_owner1", "OWNER", "ACTIVE", 1, 1, "feishu"),
++            },
++            "REQUIRE_LOCAL",
++            "CONTROL_SETTING_REQUIRES_LOCAL",
++        ),
++        (
++            {"action": ActionContext("unknown.tool", True, "READ", "SAFE_READ")},
++            "DENY",
++            "UNKNOWN_OR_UNREVIEWED_TOOL",
++        ),
++        (
++            {"action": ActionContext("fs.read", False, "READ", "SAFE_READ")},
++            "DENY",
++            "UNKNOWN_OR_UNREVIEWED_TOOL",
++        ),
++        (
++            {"action": ActionContext("fs.patch", True, "LOCAL_WRITE", "NON_RETRYABLE")},
++            "DENY",
++            "NON_RETRYABLE_DISABLED_IN_MVP",
++        ),
++        (
++            {"data_class": "SECRET"},
++            "DENY",
++            "SECRET_DATA_ACCESS_DENIED",
++        ),
++        (
++            {
++                "data_class": "SENSITIVE",
++                "actor": ActorContext("pri_owner1", "OWNER", "ACTIVE", 1, 1, "feishu"),
++            },
++            "REQUIRE_LOCAL",
++            "SENSITIVE_REQUIRES_LOCAL_SURFACE",
++        ),
++        (
++            {
++                "data_class": "WORKSPACE",
++                "action": ActionContext("fs.patch", True, "LOCAL_WRITE", "IDEMPOTENT_WRITE"),
++                "preview_truncated": True,
++                "actor": ActorContext("pri_owner1", "OWNER", "ACTIVE", 1, 1, "feishu"),
++            },
++            "REQUIRE_LOCAL",
++            "TRUNCATED_PREVIEW_REQUIRES_LOCAL",
++        ),
++        (
++            {"execution_backend": "TRUSTED_HOST_EXECUTION"},
++            "DENY",
++            "TRUSTED_HOST_EXECUTION_FORBIDDEN",
++        ),
++        (
++            {
++                "action": ActionContext("sandbox.exec", True, "CODE_EXECUTION", "SAFE_READ"),
++                "execution_backend": "NONE",
++                "backend_qualified": False,
++            },
++            "DENY",
++            "ISOLATION_BACKEND_UNAVAILABLE",
++        ),
++        (
++            {
++                "action": ActionContext("sandbox.exec", True, "CODE_EXECUTION", "SAFE_READ"),
++                "execution_backend": "ISOLATED_CONTAINER",
++                "backend_qualified": False,
++            },
++            "DENY",
++            "ISOLATION_BACKEND_UNAVAILABLE",
++        ),
++        (
++            {
++                "action": ActionContext("sandbox.exec", True, "CODE_EXECUTION", "SAFE_READ"),
++                "execution_backend": "ISOLATED_CONTAINER",
++                "backend_qualified": True,
++            },
++            "ASK",
++            "EFFECT_REQUIRES_APPROVAL",
++        ),
++        (
++            {
++                "action": ActionContext("fs.patch", True, "LOCAL_WRITE", "IDEMPOTENT_WRITE"),
++            },
++            "ASK",
++            "EFFECT_REQUIRES_APPROVAL",
++        ),
++    ],
++)
++def test_table_driven_six_dimensional_policy_decisions(
++    override, expected_decision, expected_reason
++):
++    evaluator = PolicyEvaluator(_snapshot())
++    result = evaluator.evaluate(_base_input(**override))
++    assert result.decision == expected_decision
++    assert result.reason_code == expected_reason
++
++
++def test_untrusted_hints_and_remote_grants_never_override_deny_or_require_local():
++    evaluator = PolicyEvaluator(_snapshot())
++    hints = {
++        "model_risk_score": "SAFE_L0",
++        "mcp_read_only_hint": True,
++        "mcp_idempotent_hint": True,
++        "pathspec_matched": True,
++        "official_sdk_helper": True,
++        "remote_approved": True,
++    }
++    grant = CapabilityGrant(
++        grant_id="grt_1",
++        principal_id="pri_owner1",
++        workspace_id="wsp_1",
++        allowed_tools=frozenset({"fs.read", "sandbox.exec", "fs.patch"}),
++        allowed_effects=frozenset({"READ", "LOCAL_WRITE", "CODE_EXECUTION"}),
++        not_expired=True,
++    )
++
++    # Hard DENY on sensitive path cannot be overridden by pathspec, MCP hint, or grant
++    deny_res = evaluator.evaluate(
++        _base_input(
++            resource=ResourceContext("wsp_1", "ACTIVE", True, True, False),
++            grant=grant,
++            untrusted_hints=hints,
++        )
++    )
++    assert deny_res.decision == "DENY"
++    assert deny_res.reason_code == "RESOURCE_OUTSIDE_OR_SENSITIVE_PATH"
++
++    # REQUIRE_LOCAL on truncated preview cannot be overridden by remote approval or hints
++    local_res = evaluator.evaluate(
++        _base_input(
++            actor=ActorContext("pri_owner1", "OWNER", "ACTIVE", 1, 1, "feishu"),
++            action=ActionContext("fs.patch", True, "LOCAL_WRITE", "IDEMPOTENT_WRITE"),
++            preview_truncated=True,
++            grant=grant,
++            untrusted_hints=hints,
++        )
++    )
++    assert local_res.decision == "REQUIRE_LOCAL"
++    assert local_res.reason_code == "TRUNCATED_PREVIEW_REQUIRES_LOCAL"
++
++    # CODE_EXECUTION always requires per-operation ASK in MVP even with a grant
++    exec_res = evaluator.evaluate(
++        _base_input(
++            action=ActionContext("sandbox.exec", True, "CODE_EXECUTION", "SAFE_READ"),
++            execution_backend="ISOLATED_CONTAINER",
++            backend_qualified=True,
++            grant=grant,
++            untrusted_hints=hints,
++        )
++    )
++    assert exec_res.decision == "ASK"
++    assert exec_res.reason_code == "EFFECT_REQUIRES_APPROVAL"
++
++
++def test_network_mode_and_origin_intersection_prevent_scope_expansion():
++    # 1. LOCAL_MODEL profile: CONNECTED request or unverified localhost endpoint is denied
++    local_model_eval = PolicyEvaluator(_snapshot(privacy_mode="LOCAL_MODEL"))
++    assert (
++        local_model_eval.evaluate(
++            _base_input(
++                destination=DestinationContext(
++                    "MODEL_ENDPOINT", "localhost", "CONNECTED", verified_local_model=True
++                )
++            )
++        ).decision
++        == "DENY"
++    )
++    unverified_localhost = local_model_eval.evaluate(
++        _base_input(
++            destination=DestinationContext(
++                "MODEL_ENDPOINT", "127.0.0.1", "LOCAL_MODEL", verified_local_model=False
++            )
++        )
++    )
++    assert unverified_localhost.decision == "DENY"
++    assert unverified_localhost.reason_code == "UNVERIFIED_LOCAL_MODEL_ENDPOINT"
++
++    verified_local = local_model_eval.evaluate(
++        _base_input(
++            destination=DestinationContext(
++                "MODEL_ENDPOINT", "127.0.0.1", "LOCAL_MODEL", verified_local_model=True
++            )
++        )
++    )
++    assert verified_local.decision == "ALLOW"
++
++    # 2. Connected profile: effective allowed hosts = profile & workspace & request
++    connected_eval = PolicyEvaluator(_snapshot(privacy_mode="CONNECTED"))
++    # Host outside workspace_allowed_hosts ("api.example.com") is denied
++    expansion = connected_eval.evaluate(
++        _base_input(
++            destination=DestinationContext("EXTERNAL_HOST", "api.example.com", "CONNECTED"),
++            request_allowed_hosts=frozenset({"api.example.com", "docs.example.com"}),
++        )
++    )
++    assert expansion.decision == "DENY"
++    assert expansion.reason_code == "ORIGIN_SCOPE_EXPANSION_DENIED"
++
++    # Host in profile AND workspace AND request ("docs.example.com") passes origin gate
++    narrowed = connected_eval.evaluate(
++        _base_input(
++            action=ActionContext("message.send", True, "EXTERNAL_WRITE", "RECONCILE_ONLY"),
++            destination=DestinationContext("EXTERNAL_HOST", "docs.example.com", "CONNECTED"),
++            request_allowed_hosts=frozenset({"docs.example.com"}),
++        )
++    )
++    assert narrowed.decision == "ASK"
++    assert narrowed.reason_code == "EFFECT_REQUIRES_APPROVAL"
++
++
++def test_policy_snapshot_loads_from_sqlite_and_rejects_digest_mismatch(tmp_path):
++    import hashlib
++
++    from openbot.contracts import canonicalize
++    from openbot.storage.migrate import connect, load_migrations, migrate
++
++    from tests.integration.storage.test_migrations import ROOT
++
++    path = tmp_path / "policy.sqlite"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    rules = {
++        "allow_workspace_read": True,
++        "profile_allowed_hosts": ["docs.example.com"],
++        "workspace_allowed_hosts": ["docs.example.com"],
++    }
++    digest = hashlib.sha256(canonicalize(rules)).hexdigest()
++    db = connect(path)
++    try:
++        db.execute(
++            "INSERT INTO policy_revisions VALUES(1,?,?,1000,1000)",
++            (digest, canonicalize(rules).decode()),
++        )
++        db.execute(
++            "INSERT INTO profile_config(singleton,profile_id,schema_version,policy_version,"
++            "identity_epoch,privacy_mode,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO tool_registry VALUES("
++            "'fs.read','1.0.0',?,NULL,'builtin','{\"name\":\"fs.read\"}','ACTIVE',1000)",
++            ("c" * 64,),
++        )
++        snap = PolicySnapshot.from_db(db)
++        assert snap.version == 1
++        assert snap.privacy_mode == "OFFLINE"
++        assert "fs.read" in snap.reviewed_tools
++
++        # Corrupt digest in memory/clone to verify digest check
++        with pytest.raises(PermissionError):
++            PolicySnapshot.from_raw_revision(
++                version=1,
++                privacy_mode="OFFLINE",
++                expected_digest="0" * 64,
++                rules_json=canonicalize(rules).decode(),
++                reviewed_tools=frozenset({"fs.read"}),
++            )
++    finally:
++        db.close()
 --- /dev/null
 +++ b/uv.lock
 @@ -0,0 +1,541 @@
