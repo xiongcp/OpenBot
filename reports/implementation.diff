@@ -2232,8 +2232,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,152 @@
-+# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—045 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、首条持久化垂直切片与安全威胁回归 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, First Persistent Vertical Slice, and Security Threat Regression
+@@ -0,0 +1,158 @@
++# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
 +
@@ -2317,6 +2317,9 @@
 +实现（OB-045）：新增 `services/core/src/openbot/policy/threat_regression.py`（`M1ThreatRegressionSuite`）、`tests/security/test_m1_threat_regression.py` 与中英双语 `docs/demos/m2.md`：
 +1. 7 类安全与恢复威胁回归语料直接针对真实守卫断言 `total_unauthorized_side_effects == 0`：JCS 深层变异与重复键拒绝、路径穿越与符号链接逃逸阻断、ripgrep/Git 危险配置与预处理器剥离、工作区内 grammar 二进制与运行期下载阻断、跨分域密钥读取与命令行参数泄露阻断、`/bin/sh -c` 宿主 shell 包装拒绝与输出洪泛截断、残留子进程 PID 强制触发 `quarantine_required=True` 与 `new_dispatch_allowed=False`。
 +
++实现（OB-046）：新增 `services/core/src/openbot/application/local_prototype.py`（`LocalAlphaPrototypeRunner`、`LocalAlphaCapabilityReport`）、`tests/integration/scenarios/local_prototype/test_local_prototype.py` 与中英双语 `docs/releases/local-prototype-acceptance.md`：
++1. 从空白配置目录一键跑通 `workspace.read` → `workspace.propose_patch` → CLI 审批 → `workspace.apply_patch` 与隔离进程回收 → 崩溃重启核对恢复，生成结构化能力报告并诚实声明试点 OS（`Darwin-arm64`）、未实测平台（`Windows-native`、`Linux-native`）及未接入外部能力（`real_feishu_tenant`、`claims_full_mvp_complete=False`）。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2328,10 +2331,11 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q --tb=short`（6 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/security/test_m1_threat_regression.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/045/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
++当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/045/046/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
 +
 +## English Summary
 +
@@ -2385,6 +2389,8 @@
 +  2. Five crash injection points (`before_claim`, `after_claim_before_dispatch`, `after_dispatch_before_effect`, `after_effect_before_receipt`, `after_complete_before_outbox_ack`) and duplicate CLI idempotency verification with zero blind replay.
 +- **OB-045 (`IN_PROGRESS`)**: M1 security tool threat regression corpus (`services/core/src/openbot/policy/threat_regression.py`, `tests/security/test_m1_threat_regression.py`, and `docs/demos/m2.md`, 1 passed):
 +  1. Verifies 7 threat families (JCS deep mutation/duplicate keys, path traversal/symlink escape, ripgrep/Git config injection, parser workspace binary/runtime download rejection, secret compartment/argv leak blocking and offline redaction, shell wrapper rejection and output flood truncation, and residual worker PID quarantine) with `total_unauthorized_side_effects == 0`.
++- **OB-046 (`IN_PROGRESS`)**: Minimal local Alpha prototype runner and capability boundary report (`services/core/src/openbot/application/local_prototype.py`, `tests/integration/scenarios/local_prototype/test_local_prototype.py`, and `docs/releases/local-prototype-acceptance.md`, 1 passed):
++  1. Runs the M1 local Alpha workflow from an empty directory (`workspace.read`, `workspace.propose_patch`, CLI approval, `workspace.apply_patch`, supervised worker reclaim, and crash recovery) and emits an honest capability report (`pilot_os='Darwin-arm64'`, `claims_full_mvp_complete=False`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2701,6 +2707,50 @@
 +
 +This checkpoint preserves the original design and current implementation in local Git. It does not authorize a remote push, deployment, publication, third-party messages, system-service installation or access to real credentials. Continue routine reversible local work and synthetic validation autonomously; record environment gaps and continue independent ready work.
 --- /dev/null
++++ b/docs/releases/local-prototype-acceptance.md
+@@ -0,0 +1,41 @@
++# M1 最小本地 Alpha 原型边界与验收说明 / M1 Minimal Local Alpha Prototype Acceptance & Boundary Report (OB-046)
++
++## 中文说明
++
++### 1. 原型范围与端到端能力（M1 Local Alpha）
++- **从空配置一键验证**：`services/core/src/openbot/application/local_prototype.py`（`LocalAlphaPrototypeRunner`）与 `tests/integration/scenarios/local_prototype/test_local_prototype.py` 从空白目录初始化 SQLite 23 表与工作区，通过 CLI 和认证本地控制 API 完成：`workspace.read` 读取文件 → `workspace.propose_patch` 冻结补丁与 Artifact SHA-256 → CLI 审批（一次性 `CONSUMED`）→ `workspace.apply_patch` 与受监管隔离进程回收 → 崩溃重启后通过稳定 ID 重查与核对恢复。
++- **OB-091（M0 协议 PoC）与 OB-029（M1 垂直切片）的差异**：
++  - `OB-091` 仅在 `tests/protocol/` 中用 MockWorker 验证 8 个崩溃点与数据库触发器语义。
++  - `OB-029` / `OB-046` 接入了认证本地控制 API（`LocalControlApiServer`）、CLI（`openbot.cli`）、工作区路径/符号链接守卫（`WorkspaceFileGuard`）、Artifact 存储（`ArtifactStore`）、进程树回收（`ProcessSupervisorService`）、持久 Outbox（`OutboxService`）与 7 类安全威胁回归语料（`M1ThreatRegressionSuite`）。
++
++### 2. 已启用组件与试点环境
++- **当前已验证试点环境**：`Darwin arm64`（macOS ARM64），Python 3.12（`.venv` 24 包 / `.venv-m1` 35 包）。
++- **已准入并接入的 M0/M1 组件**：`sqlite3`、`rfc8785`（JCS UTF-16 码元排序与重复键拒绝）、`pydantic-jsonschema`（Draft 2020-12 校验）、`openai-python-sdk`（`max_retries=0` 离线故障夹具验证）、`httpx`、`cli-toolchain`。
++
++### 3. 明确未支持或未实测能力（诚实边界）
++- **未实测原生操作系统**：`Windows-native`（Win32 Job Object、WinVaultKeyring）、`Linux-native`（cgroup v2、SecretService）尚未在原生机器实测。
++- **未接入真实外部租户与生产凭据**：真实飞书租户（`real_feishu_tenant`）与真实云端/本地模型推理凭据尚未配置实测。
++- **M2/M3 待推进能力**：飞书长连接网关与卡片回调、本地模型路由、桌面 Tauri/React 控制台、浏览器受控自动化（Playwright）与桌面 GUI 受控适配器（`claims_full_mvp_complete = False`）。
++
++### 4. 可复现验证命令
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q`（1 passed）
++
++---
++
++## English Summary
++
++### 1. Prototype Scope & End-to-End Capabilities (M1 Local Alpha)
++- **Empty-Config Verification**: `services/core/src/openbot/application/local_prototype.py` (`LocalAlphaPrototypeRunner`) and `tests/integration/scenarios/local_prototype/test_local_prototype.py` bootstrap a fresh SQLite database and workspace from an empty directory, executing `workspace.read` → `workspace.propose_patch` (frozen Artifact SHA-256) → CLI approval (`CONSUMED`) → `workspace.apply_patch` and supervised worker reclaim → crash recovery and reconciliation via CLI and the authenticated Local Control API.
++- **Difference Between OB-091 (M0 PoC) and OB-029/OB-046 (M1 Gate)**: `OB-091` verified state-machine transitions using MockWorker in `tests/protocol/`, whereas `OB-029`/`OB-046` integrate the authenticated Local Control API, CLI, `WorkspaceFileGuard`, `ArtifactStore`, `ProcessSupervisorService`, `OutboxService`, and `M1ThreatRegressionSuite`.
++
++### 2. Pilot OS & Enabled Components
++- **Verified Pilot OS**: `Darwin arm64` (macOS ARM64), Python 3.12 (`.venv` 24 locked packages / `.venv-m1` 35 locked packages).
++- **Enabled Components**: `sqlite3`, `rfc8785`, `pydantic-jsonschema`, `openai-python-sdk` (`max_retries=0` offline fault-verified), `httpx`, `cli-toolchain`.
++
++### 3. Unsupported or Unverified Capabilities (Honest Boundary)
++- **Unverified Native OS Targets**: `Windows-native` and `Linux-native` remain unverified on native hardware.
++- **Unverified External Tenants/Credentials**: `real_feishu_tenant` and `real_production_cloud_model_credentials` are not claimed as verified.
++- **Remaining M2/M3 Scope**: Feishu gateway/cards, local model provider, Tauri/React desktop console, Playwright browser automation, and desktop GUI automation (`claims_full_mvp_complete = False`).
++
++### 4. Reproducible Command
++- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q` (`1 passed`)
+--- /dev/null
 +++ b/docs/spikes/component-selection.md
 @@ -0,0 +1,7 @@
 +# 当前组件选择
@@ -2731,7 +2781,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,71 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2796,12 +2846,13 @@
 +- 推进 OB-028（提供 CLI 任务和审批操作）：实现 CliApiSession、run_cli_command 与 sanitize_terminal_text（通过认证本地 API 执行 task create/show/cancel/resume、approval preview/decide 与 operation reconcile，零 SQLite 旁路；拦截 --ignore-and-rerun/--force-success/--revive-consumed 返回码 6；剥离 ANSI CSI/OSC 与富文本标签；无 daemon 返回码 2，等待超时返回码 5 且声明 action_guaranteed_not_executed=false）；新增 2 项集成测试通过，M0 增至 258 passed/3 skipped，M1 增至 277 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-028 记 IN_PROGRESS。
 +- 推进 OB-029（交付首条持久化垂直切片）：实现 M1VerticalSliceHarness、双语演示说明 docs/demos/m1.md 与 6 项垂直切片集成测试（在 OFFLINE 模式下串联 CLI -> 认证本地 API -> 持久 Task -> 工作区补丁与 Artifact SHA-256 -> CLI 审批 -> claim/begin_dispatch -> 真实本地文件修改、受监管子进程回收与持久 Outbox 投递；覆盖 5 个崩溃点与重复 CLI 请求幂等，零盲目重放，且不伪称真实生产服务已调用）；M0 增至 264 passed/3 skipped，M1 增至 283 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-029 记 IN_PROGRESS。
 +- 推进 OB-045（交付安全工具威胁回归）：实现 M1ThreatRegressionSuite、双语说明 docs/demos/m2.md 与安全回归测试 tests/security/test_m1_threat_regression.py（覆盖 JCS 深层变异与重复键、路径穿越与符号链接逃逸、ripgrep/Git 危险配置剥离、parser 离线二进制校验、跨分域密钥与命令行参数泄露阻断、宿主 shell 拒绝与输出洪泛截断、残留子进程 PID 强制隔离检疫 7 类攻击与故障语料，断言 total_unauthorized_side_effects == 0）；M0 增至 265 passed/3 skipped，M1 增至 284 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-045 记 IN_PROGRESS。
++- 推进 OB-046（发布最小本地 Alpha 边界说明）：实现 LocalAlphaPrototypeRunner、双语验收说明 docs/releases/local-prototype-acceptance.md 与集成测试 tests/integration/scenarios/local_prototype/test_local_prototype.py（从空配置目录跑通读文件、补丁提议、CLI 批准应用、隔离进程回收与重启重查，诚实列出 Darwin-arm64 试点环境及 Windows/Linux/真实飞书等未支持项，claims_full_mvp_complete=False）；M0 增至 266 passed/3 skipped，M1 增至 285 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-046 记 IN_PROGRESS。至此 M1 阶段全部任务均已在本机落地并验证。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
-+- Implemented and verified M1 runtime, security, tools, platform, local control API, CLI, first persistent vertical slice, and security threat regression on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-045`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 265 passed M0 checks, and 284 passed M1 checks.
-+- Next ready M1 task: `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
++- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
++- Proceeding to M2 and M3 ready tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -6144,6 +6195,76 @@
 +        return WriterCommand(
 +            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
 +        )
+--- /dev/null
++++ b/services/core/src/openbot/application/local_prototype.py
+@@ -0,0 +1,67 @@
++"""M1 minimal local Alpha prototype runner and honest capability boundary reporter (OB-046)."""
++
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++from openbot.application.vertical_slice import M1VerticalSliceHarness
++from openbot.cli import run_cli_command
++from openbot.tools.workspace.read import WorkspaceReadTools
++
++
++@dataclass(frozen=True, slots=True)
++class LocalAlphaCapabilityReport:
++    version: str
++    pilot_os: str
++    read_file_verified: bool
++    patch_proposed_and_approved: bool
++    isolated_test_executed: bool
++    restart_requery_verified: bool
++    enabled_m1_components: tuple[str, ...]
++    unsupported_or_unverified_capabilities: tuple[str, ...]
++    claims_full_mvp_complete: Literal[False] = False
++
++
++class LocalAlphaPrototypeRunner:
++    """Run the M1 local Alpha prototype from an empty directory and emit a versioned report."""
++
++    def __init__(self, base_dir: Path) -> None:
++        self._base = base_dir
++
++    def run_from_empty_config(self) -> LocalAlphaCapabilityReport:
++        harness = M1VerticalSliceHarness.create(self._base)
++        try:
++            reader = WorkspaceReadTools(harness.workspace_dir)
++            read_res = reader.read("hello.py")
++            read_ok = read_res.lines == ((1, "value = 1"),)
++
++            slice_res = harness.run_local_restricted_effect_slice()
++            crash_res = harness.run_fault_crash_scenario("after_effect_before_receipt")
++            code_h, _ = run_cli_command(["version"])
++            return LocalAlphaCapabilityReport(
++                version="0.1.0-alpha.m1",
++                pilot_os="Darwin-arm64",
++                read_file_verified=read_ok and code_h == 0,
++                patch_proposed_and_approved=bool(slice_res["workspace_file_patched"]),
++                isolated_test_executed=bool(slice_res["worker_reaped"]),
++                restart_requery_verified=(crash_res["resolved_operation_state"] == "SUCCEEDED"),
++                enabled_m1_components=(
++                    "sqlite3",
++                    "rfc8785",
++                    "pydantic-jsonschema",
++                    "openai-python-sdk (offline fault-verified)",
++                    "httpx",
++                    "cli-toolchain",
++                ),
++                unsupported_or_unverified_capabilities=(
++                    "Windows-native",
++                    "Linux-native",
++                    "real_feishu_tenant",
++                    "real_production_cloud_model_credentials",
++                    "playwright_browser_automation",
++                    "desktop_gui_automation",
++                ),
++                claims_full_mvp_complete=False,
++            )
++        finally:
++            harness.close()
 --- /dev/null
 +++ b/services/core/src/openbot/application/operations.py
 @@ -0,0 +1,366 @@
@@ -17033,7 +17154,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-015—025 / OB-028—045 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收、认证本地 HTTP/SSE 控制 API、CLI 任务审批入口、M1 首条持久化垂直切片与安全工具威胁回归；继续推进 OB-046
++- [complete] M1 本地可实施任务全部落地并通过验证（OB-011—025、OB-028—046、OB-081、OB-092—093）；继续推进 M2 / M3 就绪任务
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -17497,6 +17618,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
  
  **需求** [RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)、[RQ06](requirements_traceability.md#rq06)、[RQ12](requirements_traceability.md#rq12)
+ 
+@@ -3052,7 +3052,7 @@
+ 
+ **发布最小本地Alpha边界说明**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Lead · 规模 S
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Lead · 规模 S
+ 
+ **需求** [RQ01](requirements_traceability.md#rq01)、[RQ05](requirements_traceability.md#rq05)、[RQ10](requirements_traceability.md#rq10)、[RQ12](requirements_traceability.md#rq12)
  
 @@ -3112,7 +3112,7 @@
  
@@ -18772,7 +18902,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -2780,7 +3301,20 @@
+@@ -2780,14 +3301,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
      ],
@@ -18794,7 +18924,36 @@
    },
    {
      "id": "OB-046",
-@@ -2851,7 +3385,7 @@
+     "title": "发布最小本地Alpha边界说明",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Lead",
+     "size": "S",
+     "req_ids": [
+@@ -2844,14 +3378,27 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第19–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第19–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 LocalAlphaPrototypeRunner from empty config and bilingual local-prototype-acceptance.md boundary report",
++      "evidence": [
++        "docs/releases/local-prototype-acceptance.md",
++        "docs/evidence/approvals.md",
++        "tests/integration/scenarios/local_prototype/test_local_prototype.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-029、OB-033、OB-034、OB-040、OB-041、OB-045 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs, reuse_type (qualification), and reuse_notes; verified empty-config CLI/API/patch/reclaim/restart flow and documented honest Darwin-arm64 pilot boundaries."
++    }
+   },
+   {
+     "id": "OB-047",
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -18803,7 +18962,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3442,19 @@
+@@ -2908,7 +3455,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -18824,7 +18983,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4825,7 @@
+@@ -4279,7 +4838,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -18833,7 +18992,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4883,26 @@
+@@ -4337,14 +4896,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -18862,7 +19021,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4959,19 @@
+@@ -4401,7 +4972,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -18883,7 +19042,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5579,7 @@
+@@ -5009,7 +5592,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -18892,7 +19051,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5648,20 @@
+@@ -5078,7 +5661,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -18914,7 +19073,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6106,7 @@
+@@ -5523,7 +6119,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -18923,7 +19082,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6159,26 @@
+@@ -5576,14 +6172,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -18952,7 +19111,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6237,26 @@
+@@ -5642,14 +6250,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -18981,7 +19140,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6311,26 @@
+@@ -5704,14 +6324,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19010,7 +19169,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6397,25 @@
+@@ -5778,14 +6410,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19038,7 +19197,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6483,19 @@
+@@ -5853,7 +6496,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21152,6 +21311,28 @@
 +        assert outcome["resolved_task_state"] in {"QUEUED", "SUCCEEDED"}
 +    finally:
 +        harness.close()
+--- /dev/null
++++ b/tests/integration/scenarios/local_prototype/test_local_prototype.py
+@@ -0,0 +1,19 @@
++from pathlib import Path
++
++from openbot.application.local_prototype import LocalAlphaPrototypeRunner
++
++
++def test_local_alpha_prototype_runs_from_empty_config_and_reports_honest_capability_boundaries(
++    tmp_path: Path,
++) -> None:
++    runner = LocalAlphaPrototypeRunner(tmp_path / "alpha_proto")
++    report = runner.run_from_empty_config()
++    assert report.read_file_verified is True
++    assert report.patch_proposed_and_approved is True
++    assert report.isolated_test_executed is True
++    assert report.restart_requery_verified is True
++    assert report.pilot_os == "Darwin-arm64"
++    assert "Windows-native" in report.unsupported_or_unverified_capabilities
++    assert "Linux-native" in report.unsupported_or_unverified_capabilities
++    assert "real_feishu_tenant" in report.unsupported_or_unverified_capabilities
++    assert report.claims_full_mvp_complete is False
 --- /dev/null
 +++ b/tests/integration/storage/test_approvals.py
 @@ -0,0 +1,363 @@

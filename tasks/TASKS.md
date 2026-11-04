@@ -3052,7 +3052,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **发布最小本地Alpha边界说明**
 
-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Lead · 规模 S
+阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Lead · 规模 S
 
 **需求** [RQ01](requirements_traceability.md#rq01)、[RQ05](requirements_traceability.md#rq05)、[RQ10](requirements_traceability.md#rq10)、[RQ12](requirements_traceability.md#rq12)
 

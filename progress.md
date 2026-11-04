@@ -62,9 +62,10 @@
 - 推进 OB-028（提供 CLI 任务和审批操作）：实现 CliApiSession、run_cli_command 与 sanitize_terminal_text（通过认证本地 API 执行 task create/show/cancel/resume、approval preview/decide 与 operation reconcile，零 SQLite 旁路；拦截 --ignore-and-rerun/--force-success/--revive-consumed 返回码 6；剥离 ANSI CSI/OSC 与富文本标签；无 daemon 返回码 2，等待超时返回码 5 且声明 action_guaranteed_not_executed=false）；新增 2 项集成测试通过，M0 增至 258 passed/3 skipped，M1 增至 277 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-028 记 IN_PROGRESS。
 - 推进 OB-029（交付首条持久化垂直切片）：实现 M1VerticalSliceHarness、双语演示说明 docs/demos/m1.md 与 6 项垂直切片集成测试（在 OFFLINE 模式下串联 CLI -> 认证本地 API -> 持久 Task -> 工作区补丁与 Artifact SHA-256 -> CLI 审批 -> claim/begin_dispatch -> 真实本地文件修改、受监管子进程回收与持久 Outbox 投递；覆盖 5 个崩溃点与重复 CLI 请求幂等，零盲目重放，且不伪称真实生产服务已调用）；M0 增至 264 passed/3 skipped，M1 增至 283 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-029 记 IN_PROGRESS。
 - 推进 OB-045（交付安全工具威胁回归）：实现 M1ThreatRegressionSuite、双语说明 docs/demos/m2.md 与安全回归测试 tests/security/test_m1_threat_regression.py（覆盖 JCS 深层变异与重复键、路径穿越与符号链接逃逸、ripgrep/Git 危险配置剥离、parser 离线二进制校验、跨分域密钥与命令行参数泄露阻断、宿主 shell 拒绝与输出洪泛截断、残留子进程 PID 强制隔离检疫 7 类攻击与故障语料，断言 total_unauthorized_side_effects == 0）；M0 增至 265 passed/3 skipped，M1 增至 284 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-045 记 IN_PROGRESS。
+- 推进 OB-046（发布最小本地 Alpha 边界说明）：实现 LocalAlphaPrototypeRunner、双语验收说明 docs/releases/local-prototype-acceptance.md 与集成测试 tests/integration/scenarios/local_prototype/test_local_prototype.py（从空配置目录跑通读文件、补丁提议、CLI 批准应用、隔离进程回收与重启重查，诚实列出 Darwin-arm64 试点环境及 Windows/Linux/真实飞书等未支持项，claims_full_mvp_complete=False）；M0 增至 266 passed/3 skipped，M1 增至 285 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-046 记 IN_PROGRESS。至此 M1 阶段全部任务均已在本机落地并验证。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
-- Implemented and verified M1 runtime, security, tools, platform, local control API, CLI, first persistent vertical slice, and security threat regression on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-045`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 265 passed M0 checks, and 284 passed M1 checks.
-- Next ready M1 task: `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
+- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
+- Proceeding to M2 and M3 ready tasks.

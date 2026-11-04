@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—045 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、首条持久化垂直切片与安全威胁回归 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, CLI, First Persistent Vertical Slice, and Security Threat Regression
+# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 
 ## 中文说明
 
@@ -82,6 +82,9 @@
 实现（OB-045）：新增 `services/core/src/openbot/policy/threat_regression.py`（`M1ThreatRegressionSuite`）、`tests/security/test_m1_threat_regression.py` 与中英双语 `docs/demos/m2.md`：
 1. 7 类安全与恢复威胁回归语料直接针对真实守卫断言 `total_unauthorized_side_effects == 0`：JCS 深层变异与重复键拒绝、路径穿越与符号链接逃逸阻断、ripgrep/Git 危险配置与预处理器剥离、工作区内 grammar 二进制与运行期下载阻断、跨分域密钥读取与命令行参数泄露阻断、`/bin/sh -c` 宿主 shell 包装拒绝与输出洪泛截断、残留子进程 PID 强制触发 `quarantine_required=True` 与 `new_dispatch_allowed=False`。
 
+实现（OB-046）：新增 `services/core/src/openbot/application/local_prototype.py`（`LocalAlphaPrototypeRunner`、`LocalAlphaCapabilityReport`）、`tests/integration/scenarios/local_prototype/test_local_prototype.py` 与中英双语 `docs/releases/local-prototype-acceptance.md`：
+1. 从空白配置目录一键跑通 `workspace.read` → `workspace.propose_patch` → CLI 审批 → `workspace.apply_patch` 与隔离进程回收 → 崩溃重启核对恢复，生成结构化能力报告并诚实声明试点 OS（`Darwin-arm64`）、未实测平台（`Windows-native`、`Linux-native`）及未接入外部能力（`real_feishu_tenant`、`claims_full_mvp_complete=False`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -93,10 +96,11 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/first_vertical_slice/test_first_vertical_slice.py -q --tb=short`（6 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/security/test_m1_threat_regression.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/scenarios/local_prototype/test_local_prototype.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/045/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
+当前限制：上游三平台原生隔离/Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/029/031/032/033/034/035/037/038/039/043/044/045/046/081 均保持 IN_PROGRESS，不伪称跨平台或真实云/飞书服务已验证。
 
 ## English Summary
 
@@ -150,3 +154,5 @@
   2. Five crash injection points (`before_claim`, `after_claim_before_dispatch`, `after_dispatch_before_effect`, `after_effect_before_receipt`, `after_complete_before_outbox_ack`) and duplicate CLI idempotency verification with zero blind replay.
 - **OB-045 (`IN_PROGRESS`)**: M1 security tool threat regression corpus (`services/core/src/openbot/policy/threat_regression.py`, `tests/security/test_m1_threat_regression.py`, and `docs/demos/m2.md`, 1 passed):
   1. Verifies 7 threat families (JCS deep mutation/duplicate keys, path traversal/symlink escape, ripgrep/Git config injection, parser workspace binary/runtime download rejection, secret compartment/argv leak blocking and offline redaction, shell wrapper rejection and output flood truncation, and residual worker PID quarantine) with `total_unauthorized_side_effects == 0`.
+- **OB-046 (`IN_PROGRESS`)**: Minimal local Alpha prototype runner and capability boundary report (`services/core/src/openbot/application/local_prototype.py`, `tests/integration/scenarios/local_prototype/test_local_prototype.py`, and `docs/releases/local-prototype-acceptance.md`, 1 passed):
+  1. Runs the M1 local Alpha workflow from an empty directory (`workspace.read`, `workspace.propose_patch`, CLI approval, `workspace.apply_patch`, supervised worker reclaim, and crash recovery) and emits an honest capability report (`pilot_os='Darwin-arm64'`, `claims_full_mvp_complete=False`).
