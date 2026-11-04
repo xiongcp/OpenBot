@@ -4,7 +4,7 @@
 
 版本 1.2 · 2026年11月4日 · 根据《OpenBot 开源组件复用评估.pdf》修订
 
-实施进度：已加入 M0 最小 Python 包/标准合同/协议 PoC，以及 M1 SQLite writer/inbox、内部不可变提案/审批决定、SDK 故障合同与 macOS Docker 原语验证；真实门禁与任务状态见 tasks/backlog.json 及 docs/evidence。当前尚未通过 OB-029，也未形成 M3 产品。原始设计 catalog 保持 NOT_RUN；本机开发环境的精确锁与限定证据另存 components/admissions，不能据此启用产品能力。
+实施进度：已在 macOS ARM64（Darwin arm64）完成 M0—M3 全部可本地实施任务的落地与验证（含 OB-029 首条持久化垂直切片、OB-045 安全威胁回归、OB-046 本地 Alpha 边界、M2 飞书受控网关与卡片套件、M3 本地 Ollama/浏览器/MCP/技能/可观测性/基准/供应链与浸泡套件）；真实门禁与任务状态见 tasks/backlog.json、docs/getting-started.md、docs/troubleshooting.md、SECURITY.md 及 docs/evidence。缺少真实飞书测试租户（OB-047/056）及 Windows/Linux 原生实机（OB-005/070/071）的验收项保持诚实阻塞标记；M4 桌面签名与自动升级尚未实施。
 
 本地验证：`uv sync --locked`，然后 `.venv/bin/python scripts/verify.py`。本机若继承 macOS 隐藏文件标记导致 editable `.pth` 被 Python 忽略，可用 `PYTHONPATH=services/core/src .venv/bin/python -m openbot version`；验证脚本显式设置源码路径，不修改系统 Python。
 

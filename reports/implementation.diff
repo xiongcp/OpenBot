@@ -84,6 +84,24 @@
 +      - name: Verify SPDX SBOM, notices, and checksums
 +        run: python3 scripts/check_release_components.py
 --- /dev/null
++++ b/SECURITY.md
+@@ -0,0 +1,15 @@
++# 安全策略与架构不变量声明 / Security Policy & Architectural Invariants (OB-079)
++
++## 中文说明
++
++1. **统一 Broker 与零模型赋权**：所有工具副作用必须经 Broker、六维策略与一次性 `CONSUMED` 审批授权；模型输出、网页文本（`TAINTED_EXTERNAL`）、只读技能与第三方 MCP 注释（`readOnlyHint`）绝不能直接赋权。
++2. **本地控制 API 防护**：仅监听 `127.0.0.1`/`::1`，强制校验本地 `Host`、`Origin`、`X-OpenBot-Profile` 与分域 Token（`owner_cli`、`feishu_gateway`、`webview_readonly`），并拒绝一切 `X-Forwarded-For` 代理伪造头。
++3. **机密零落盘与离线脱敏**：凭据仅通过受批准的 OS Keychain 后端与单次 IPC 句柄按需注入，绝不写入源码、模型提示词、普通日志、Artifact 或诊断包。
++4. **未知结果零盲目重放**：`DISPATCHING` 后结果不明一律进入 `UNKNOWN`/`RECONCILING` 并冻结资源，必须先提供核对证据完成 reconcile。
++
++## English Summary
++
++1. **Unified Broker & Zero Model Authority**: Every side effect is gated by the Broker, 6D policy evaluator, and one-time `CONSUMED` approval grants; model outputs, web pages (`TAINTED_EXTERNAL`), skills, and third-party MCP hints never grant authority.
++2. **Loopback Control API Hardening**: Enforces loopback IP, `Host`/`Origin` validation, proxy-header rejection, profile binding, and scoped tokens.
++3. **Secret Isolation & Offline Redaction**: Secrets reside only in approved OS keychains and single-use worker IPC handles, scrubbed from all logs, artifacts, and diagnostics via `RedactionPipeline`.
++4. **No Blind Replay on `UNKNOWN`**: Unconfirmed post-dispatch outcomes transition to `UNKNOWN`/`RECONCILING` with resource quarantine until evidence-backed reconciliation completes.
+--- /dev/null
 +++ b/THIRD_PARTY_NOTICES.md
 @@ -0,0 +1,5 @@
 +# 当前本地开发依赖
@@ -3194,6 +3212,34 @@
 +  1. `create_backup`: Pins referenced `AVAILABLE` artifacts against concurrent GC via `pin_for_backup`, runs SQLite `backup()` with `integrity_check` and `foreign_key_check`, verifies on-disk artifact sizes and SHA-256 digests, and records only opaque `secret_ref` identifiers (`contains_secret_values=False`).
 +  2. `restore_backup`: Verifies `manifest.json` and all artifact digests before restoring; stops old `runtime_instances`, revokes unconsumed `PENDING`/`APPROVED` grants (`CONSUMED` untouched), transitions `DISPATCHING` operations to `UNKNOWN` (`RECONCILING` task state) to prevent replaying ambiguous side effects, and disables `channel_accounts` with missing `secret_ref` (`reconfiguration_required=True`).
 --- /dev/null
++++ b/docs/getting-started.md
+@@ -0,0 +1,25 @@
++# OpenBot 快速上手指南 / Getting Started Guide (OB-079)
++
++## 中文说明
++
++### 1. 环境准备与本地验证（macOS ARM64 试点）
++1. 同步锁定依赖并运行完整验证：`uv sync --locked` 后执行 `.venv/bin/python scripts/verify.py`。
++2. 任务创建、审批预览与决定均通过本地认证 CLI：`openbot task create|show|cancel|resume` 与 `openbot approval preview|decide`。
++3. 飞书安全配对（M2）：先在本地发起一次性短 TTL 挑战，远端回传后在本地确认 `tenant_key`/`app_id`/`open_id` 才可激活 owner。
++
++### 2. 已验证能力与 M4 边界说明
++- **当前已验证（M0—M3 本地）**：`Darwin arm64` 下 SQLite 23 表持久化、两次短事务派发、工作区 ACI 文件与补丁工具、受控进程与容器沙箱、结构化浏览器与 MCP 守卫、飞书受控契约与可观测性脱敏。
++- **尚未启用或属于 M4 范围**：Windows/Linux 原生实机验收、真实飞书企业租户联调、以及 **M4 桌面 Tauri UI、代码签名公证安装包与自动升级（`OB-073`/`OB-074`/`OB-082`/`OB-083`）尚未实现**。
++
++---
++
++## English Summary
++
++### 1. Setup & Local Workflow (macOS ARM64 Pilot)
++1. Sync locked dependencies and run verification: `uv sync --locked && .venv/bin/python scripts/verify.py`.
++2. Manage tasks and approvals via the authenticated CLI: `openbot task create|show|cancel|resume` and `openbot approval preview|decide`.
++3. Feishu Pairing (M2): Generate a short-TTL local challenge and confirm the remote candidate (`tenant_key`/`app_id`/`open_id`) locally before activating owner authority.
++
++### 2. Verified Capabilities & M4 Boundaries
++- **Verified Locally (M0–M3 on Darwin arm64)**: 23-table SQLite persistence, two-transaction dispatch, workspace ACI tools, process/container isolation, browser/MCP guards, Feishu contract harness, and redacted observability.
++- **Unverified or M4 Scope**: Native Windows/Linux hardware verification, live Feishu tenant credentials, and **M4 desktop Tauri UI, code-signed installers, and auto-upgrade (`OB-073`/`OB-074`/`OB-082`/`OB-083`) are not yet implemented**.
+--- /dev/null
 +++ b/docs/handoff/2026-11-04-checkpoint.md
 @@ -0,0 +1,66 @@
 +# 实施检查点与分工 / Implementation checkpoint and work split
@@ -3417,6 +3463,36 @@
 +
 +未安装 command-group、service-manager、PyInstaller、AstrBot 或任何候选自治框架；没有源码摘取。路径守卫、隔离和供应链仍由各自任务真实验收。
 --- /dev/null
++++ b/docs/troubleshooting.md
+@@ -0,0 +1,27 @@
++# 常见故障处置与恢复手册 / Troubleshooting & Recovery Runbook (OB-079)
++
++## 中文说明
++
++### 1. 操作进入 `UNKNOWN` / 任务进入 `RECONCILING` 的标准核对流程
++- 当外部操作在 `DISPATCHING` 阶段发生断连、进程崩溃或超时，系统会将 Operation 置为 `UNKNOWN`、Task 置为 `RECONCILING` 并冻结资源租约（quarantine）。
++- **严禁忽略 `UNKNOWN` 直接重跑（CLI 明确拒绝 `--ignore-and-rerun`、`--force-success`、`--revive-consumed`）**。
++- **正确恢复步骤**：
++  1. 人工或通过外部回执核实该外部动作是否已实际生效。
++  2. 执行 `openbot operation reconcile --operation-id <op_id> --expected-version <v> --outcome CONFIRMED_SUCCEEDED|CONFIRMED_NOT_EXECUTED --evidence-content "<核对证据>" --json`。
++  3. 执行 `openbot task resume --task-id <task_id> --expected-version <v> --json` 恢复任务。
++
++### 2. 停止任务、密钥轮换、备份恢复与脱敏诊断包
++- **停止/取消任务**：执行 `openbot task cancel --task-id <task_id> --expected-version <v>`；取消会阻止新派发，但不会声称已发生的外部副作用已回滚。
++- **密钥轮换与撤销**：通过 `SecretBroker.rotate` / `revoke` 更新或吊销 OS Keychain 凭据，使旧 worker 单次句柄立即失效；撤销飞书 owner 会递增 `identity_epoch`。
++- **数据库备份恢复与诊断导出**：使用 `DatabaseMaintenanceService` 执行在线一致性备份与恢复校验；通过 `ObservabilityHub.export_explicit_diagnostic_bundle()` 显式导出经 `RedactionPipeline` 脱敏的诊断包。
++
++---
++
++## English Summary
++
++### 1. Reconciling `UNKNOWN` Operations & `RECONCILING` Tasks
++- Never ignore an `UNKNOWN` operation and blindly re-run it (`--ignore-and-rerun`, `--force-success`, and `--revive-consumed` are strictly forbidden).
++- Verify whether the external action took effect, run `openbot operation reconcile --operation-id <id> --expected-version <v> --outcome CONFIRMED_SUCCEEDED|CONFIRMED_NOT_EXECUTED --evidence-content "<evidence>" --json`, and then run `openbot task resume`.
++
++### 2. Cancellation, Secret Rotation, Backup/Restore, and Redacted Diagnostics
++- Use `openbot task cancel` to stop future dispatches (never claiming already-executed external actions were rolled back), `SecretBroker.rotate`/`revoke` for credential rotation, `DatabaseMaintenanceService` for verified SQLite backups, and `ObservabilityHub.export_explicit_diagnostic_bundle()` for redacted diagnostics.
+--- /dev/null
 +++ b/evals/rubrics/outcome_rubric.md
 @@ -0,0 +1,10 @@
 +# 任务质量基准评分规则 / Task Quality Benchmark Rubric (OB-076)
@@ -3552,7 +3628,7 @@
 +}
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,103 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3649,12 +3725,13 @@
 +- 推进 OB-096（验收全量交付资产来源与供应链）：实现 ReleaseSupplyChainVerifier、scripts/check_release_components.py、release/SBOM/spdx-pilot.spdx.json、release/THIRD_PARTY_NOTICES.md、release/checksums.json 与双语说明 docs/releases/component-supply-chain.md（校验 SPDX-2.3 标准与非 Python 资产覆盖，逐项校验 SHA-256 防篡改，明确声明 pinned_versions_guarantee_zero_vulnerabilities=False）；新增单元测试通过，M0 增至 295 passed/3 skipped，M1 增至 314 passed/1 skipped。因上游 OB-067/072/094/095 仍为 IN_PROGRESS，OB-096 记 IN_PROGRESS。
 +- 推进 OB-077（建立分层 CI 门禁）：实现 TieredCiGateEvaluator 及 .github/workflows/pull_request/gate.yml、.github/workflows/nightly/soak.yml、.github/workflows/release/supply_chain.yml（PR 层即包含契约与安全威胁回归，严禁跳过失败测试 CI_SKIP_FAILED_TESTS_FORBIDDEN，故障注入可可靠阻断门禁，且不在 PR 层全局安装全目录组件）；新增单元测试通过，M0 增至 296 passed/3 skipped，M1 增至 315 passed/1 skipped。因上游 OB-070/071 缺少 Windows/Linux 原生机器，OB-077 记 IN_PROGRESS。
 +- 推进 OB-078（建立断网休眠与崩溃浸泡）：实现 ChaosSoakHarness、ChaosSoakReport、双语模板 docs/soak-report-template.md 与测试 tests/chaos/soak/test_chaos_soak.py（覆盖 DNS 停滞/半开、系统休眠时钟跳变、SIGKILL 崩溃恢复零盲重试与备份异常 4 类故障，明确声明 physical_power_loss_tested=False 与 claims_100_percent_lossless_guarantee=False）；M0 增至 297 passed/3 skipped，M1 增至 316 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-078 记 IN_PROGRESS。
++- 推进 OB-079（完成上手与故障处置文档）：新增中英双语 docs/getting-started.md、docs/troubleshooting.md、SECURITY.md 并更新 README.md（完整说明 CLI/飞书配对、停止任务、UNKNOWN 核对恢复、密钥轮换、备份恢复与脱敏诊断导出；明确禁止 --ignore-and-rerun，且诚实标明 M4 桌面签名与自动升级尚未实现）；新增单元测试通过，M0 增至 298 passed/3 skipped，M1 增至 317 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-079 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`–`OB-078`, `OB-095`, and `OB-096`, reaching 297 passed M0 checks and 316 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`–`OB-079`, `OB-095`, and `OB-096`, reaching 298 passed M0 checks and 317 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3946,7 +4023,7 @@
 +    raise SystemExit(main())
 --- /dev/null
 +++ b/scripts/record_changes.py
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,134 @@
 +"""Create review artifacts without staging the user's untracked design package."""
 +
 +import difflib
@@ -4015,6 +4092,7 @@
 +        ROOT / name
 +        for name in [
 +            "README.md",
++            "SECURITY.md",
 +            "tasks/backlog.json",
 +            "tasks/TASKS.md",
 +            "validation/verify_design.py",
@@ -21896,6 +21974,15 @@
  
  **需求** [RQ07](requirements_traceability.md#rq07)、[RQ12](requirements_traceability.md#rq12)
  
+@@ -4954,7 +4954,7 @@
+ 
+ **完成上手与故障处置文档**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Docs · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Docs · 规模 M
+ 
+ **需求** [RQ10](requirements_traceability.md#rq10)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
+ 
 @@ -5013,7 +5013,7 @@
  
  **验收全量交付资产来源与供应链**
@@ -24102,7 +24189,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -4870,7 +5787,19 @@
+@@ -4870,14 +5787,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
      ],
@@ -24123,7 +24210,39 @@
    },
    {
      "id": "OB-079",
-@@ -5009,7 +5938,7 @@
+     "title": "完成上手与故障处置文档",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Docs",
+     "size": "M",
+     "req_ids": [
+@@ -4936,7 +5865,22 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第19–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第19–26页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "Bilingual README.md, docs/getting-started.md, docs/troubleshooting.md, and SECURITY.md covering CLI/Feishu pairing, UNKNOWN reconciliation, secret rotation, backup/restore, and honest M4 boundaries",
++      "evidence": [
++        "README.md",
++        "docs/getting-started.md",
++        "docs/troubleshooting.md",
++        "SECURITY.md",
++        "tests/unit/test_user_docs_and_security_policy.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-056、OB-067、OB-068、OB-072、OB-075 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs, reuse_type (qualification), and reuse_notes; documented complete recovery steps without recommending ignore-and-rerun on UNKNOWN."
++    }
+   },
+   {
+     "id": "OB-080",
+@@ -5009,7 +5953,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -24132,7 +24251,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +6007,20 @@
+@@ -5078,7 +6022,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -24154,7 +24273,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6465,7 @@
+@@ -5523,7 +6480,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -24163,7 +24282,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6518,26 @@
+@@ -5576,14 +6533,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24192,7 +24311,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6596,26 @@
+@@ -5642,14 +6611,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -24221,7 +24340,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6670,26 @@
+@@ -5704,14 +6685,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24250,7 +24369,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6756,25 @@
+@@ -5778,14 +6771,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24278,7 +24397,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6842,26 @@
+@@ -5853,14 +6857,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24307,7 +24426,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6915,27 @@
+@@ -5914,14 +6930,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -24337,7 +24456,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,14 +6991,27 @@
+@@ -5977,14 +7006,27 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -24367,7 +24486,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -6050,6 +7077,22 @@
+@@ -6050,6 +7092,22 @@
        "三OS包/资源清单、选定格式SBOM及校验、NOTICE、构建输入hash、禁网首用记录、篡改反例和有限期风险例外。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -36921,6 +37040,32 @@
 +    assert uninst["manifest_removed"] is True
 +    assert uninst["workspace_preserved"] is True
 +    assert (workspace_dir / "important.py").is_file()
+--- /dev/null
++++ b/tests/unit/test_user_docs_and_security_policy.py
+@@ -0,0 +1,23 @@
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[2]
++
++
++def test_getting_started_troubleshooting_and_security_docs_cover_boundaries() -> None:
++    gs = ROOT / "docs/getting-started.md"
++    ts = ROOT / "docs/troubleshooting.md"
++    sec = ROOT / "SECURITY.md"
++    assert gs.is_file()
++    assert ts.is_file()
++    assert sec.is_file()
++
++    gs_text = gs.read_text(encoding="utf-8")
++    ts_text = ts.read_text(encoding="utf-8")
++    sec_text = sec.read_text(encoding="utf-8")
++
++    assert "operation reconcile" in ts_text
++    assert "--ignore-and-rerun" in ts_text
++    assert "M4" in gs_text
++    assert "English Summary" in gs_text
++    assert "English Summary" in ts_text
++    assert "English Summary" in sec_text
 --- /dev/null
 +++ b/tests/unit/test_workspace_read_tools.py
 @@ -0,0 +1,95 @@

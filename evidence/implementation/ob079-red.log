@@ -1,0 +1,17 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_getting_started_troubleshooting_and_security_docs_cover_unknown_reconcile_and_m4_boundaries _
+
+    def test_getting_started_troubleshooting_and_security_docs_cover_unknown_reconcile_and_m4_boundaries() -> None:
+        gs = ROOT / "docs/getting-started.md"
+        ts = ROOT / "docs/troubleshooting.md"
+        sec = ROOT / "SECURITY.md"
+>       assert gs.is_file()
+E       AssertionError: assert False
+E        +  where False = is_file()
+E        +    where is_file = PosixPath('/Users/admin-1234/work/OpenBot/docs/getting-started.md').is_file
+
+tests/unit/test_user_docs_and_security_policy.py:10: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_user_docs_and_security_policy.py::test_getting_started_troubleshooting_and_security_docs_cover_unknown_reconcile_and_m4_boundaries
+1 failed in 0.03s

@@ -47,9 +47,15 @@
     {
       "path": "README.md",
       "before_sha256": "3720522366a1ba42ec93c9b4842a7d550a6db0822235d35afd251133ef091bf0",
-      "after_sha256": "69a7e7e58b3e12003b1d0f075d42d24b0f3c88996a601783765372fc151712d0",
+      "after_sha256": "04a14679e9e11f4ea2de7311b6fc521bba2c8717edce24b6478914199731add0",
       "included_in_patch": false,
       "omission_reason": "Original bytes not retained; review current file and hash"
+    },
+    {
+      "path": "SECURITY.md",
+      "before_sha256": null,
+      "after_sha256": "75b7511042d954d9095432d4b0d8c8fc171109498648ca340ee81539e847aade",
+      "included_in_patch": true
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -274,6 +280,12 @@
       "included_in_patch": true
     },
     {
+      "path": "docs/getting-started.md",
+      "before_sha256": null,
+      "after_sha256": "372ff320fb9de9482ec7f81500cd107a1f50cc3b2a2c5dcca65531a62e0e46a5",
+      "included_in_patch": true
+    },
+    {
       "path": "docs/handoff/2026-11-04-checkpoint.md",
       "before_sha256": null,
       "after_sha256": "55b65af70cefd8441c17233f6e0894a0515e65fdee10b9f379e558a45619f1ab",
@@ -325,6 +337,12 @@
       "path": "docs/spikes/component-selection.md",
       "before_sha256": null,
       "after_sha256": "790d79bd4aba011113e0332ccc32be7fd9b9492b46289943c967d491984d3644",
+      "included_in_patch": true
+    },
+    {
+      "path": "docs/troubleshooting.md",
+      "before_sha256": null,
+      "after_sha256": "598f5fda5cdd8699f45f74a7304d3bee2ed0d74b7d9c9e285b0d00a42e8dc549",
       "included_in_patch": true
     },
     {
@@ -384,7 +402,7 @@
     {
       "path": "evidence/implementation/database-design.log",
       "before_sha256": null,
-      "after_sha256": "94c9a79b7ce6b1a6b6f639ef3b20e0adf551c9a4a15fcced6ea9a8c5c864e036",
+      "after_sha256": "3954596760408006d7a9c90f96d06f2c986d440ad6ed27e84da7aa10579c1f78",
       "included_in_patch": false
     },
     {
@@ -408,7 +426,7 @@
     {
       "path": "evidence/implementation/format.log",
       "before_sha256": null,
-      "after_sha256": "a8974443d12f9736423157c869f658ab1b4fc18c2ff99f12bf2cb579052f9e5b",
+      "after_sha256": "3c448ff64c39d91f9364166de72351b444adc30471c8a6a84034efdecadb4740",
       "included_in_patch": false
     },
     {
@@ -1102,6 +1120,12 @@
       "included_in_patch": false
     },
     {
+      "path": "evidence/implementation/ob079-red.log",
+      "before_sha256": null,
+      "after_sha256": "d71dfcabbb2b645e3c290d06002cd50028d9afd9ba9160638d838bffd154e40d",
+      "included_in_patch": false
+    },
+    {
       "path": "evidence/implementation/ob081-red.log",
       "before_sha256": null,
       "after_sha256": "c23201d2bcdba609185dd7af5df6674259dff1dc014b944e2388dad7f9ba231d",
@@ -1152,13 +1176,13 @@
     {
       "path": "evidence/implementation/unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "baa27b7227959656e4d04336c759ff46e52b731384ae4f71ba3fca71e6d6ed92",
+      "after_sha256": "788091b10f8c830dc45ba697f2b4462542720c096f0666ef7e89af264674faee",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/verification.json",
       "before_sha256": null,
-      "after_sha256": "d3b558329f0c0993633017f6c148a184d70a16ca088c05e01c7b1e2a8fc4b631",
+      "after_sha256": "2d7cf83b9be80e114a8c794a6534ab70d21215906218d506bc54c223b33790f1",
       "included_in_patch": false
     },
     {
@@ -1206,7 +1230,7 @@
     {
       "path": "progress.md",
       "before_sha256": null,
-      "after_sha256": "61c1b002b6c0d6b078b63da38bd346fa8a9f1fb1842e2578c43cd1592c330810",
+      "after_sha256": "2196b1fa9e3df60f8ac3023082769a7650d7cd62c7548c5fe30df3c791dc35d2",
       "included_in_patch": true
     },
     {
@@ -1254,7 +1278,7 @@
     {
       "path": "scripts/record_changes.py",
       "before_sha256": null,
-      "after_sha256": "8a41626bac179c22aaf92e68e5137e1c66f081bd9445cf5f8a81f5cb9024bba9",
+      "after_sha256": "d1f739dbb57dd36e574618a1c0ca2b28d0e4635939c6fe0ec69276fac2723af1",
       "included_in_patch": true
     },
     {
@@ -1872,13 +1896,13 @@
     {
       "path": "tasks/TASKS.md",
       "before_sha256": "62011244f45e5fc158ac1528b2bf737a2bd80c937751744c1059e6899a7c43ae",
-      "after_sha256": "87a82de6d634dd0559946a6d5a484313d2ec3d2b1defe56ec1209bf87811f476",
+      "after_sha256": "db87ecde04723c1a0952c0c69111d267701cf2d8203e5b10a522c37c2f326b10",
       "included_in_patch": true
     },
     {
       "path": "tasks/backlog.json",
       "before_sha256": "343bc2c906a0f19539db16609498bf63f796069c75995944833089a6ae550e20",
-      "after_sha256": "d425c76147f600455bb4d1650d3c002a03e975bff4a1417dc923be92b12f7921",
+      "after_sha256": "eed4f82e303918d93c4603d08a7c6199d5add7d9bf77f19db3b035975d2c304c",
       "included_in_patch": true
     },
     {
@@ -2377,6 +2401,12 @@
       "path": "tests/unit/test_user_daemon_installer.py",
       "before_sha256": null,
       "after_sha256": "f99a37f8e6fa80175eb437d5827736a32e87086f0b0f1738039800499f52cbf5",
+      "included_in_patch": true
+    },
+    {
+      "path": "tests/unit/test_user_docs_and_security_policy.py",
+      "before_sha256": null,
+      "after_sha256": "02365f55e19734099e07533cc4a6699eafe388487df68784422103ce0384e34d",
       "included_in_patch": true
     },
     {

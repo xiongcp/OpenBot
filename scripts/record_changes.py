@@ -66,6 +66,7 @@ def run():
         ROOT / name
         for name in [
             "README.md",
+            "SECURITY.md",
             "tasks/backlog.json",
             "tasks/TASKS.md",
             "validation/verify_design.py",
