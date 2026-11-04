@@ -97,6 +97,10 @@
 1. 真实 operator 校验与拒绝伪造载荷：从飞书卡片回调顶层 `event.operator.open_id` 提取操作人并经 `PairingService.is_active_owner` 校验，完全忽略 `action.value` 中伪造的 `is_owner` 或 `principal_id`。
 2. 旧卡拦截与未确认提交诚实响应：已取消/已终结 Task 的旧审批卡直接返回 `APPROVAL_REJECTED_OR_STALE`；数据库超时或提交未确认时返回 `COMMIT_UNCONFIRMED`（`approved=False`），绝不谎称已批准或阻塞等待模型/worker。
 
+实现（OB-051）：新增 `services/feishu_gateway/src/openbot_feishu/cards.py`（`FeishuPlainCardBuilder`、`RenderedApprovalCard`、`RenderedResultCard`）与 `tests/unit/test_feishu_cards.py`：
+1. 零 CardKit 依赖的纯函数普通卡片：支持任务审批卡与结果回执卡离线构造，无隐式发送或 owner 赋权副作用。
+2. 敏感或截断影响强制 `REQUIRE_LOCAL`：当 `data_class` 为 `SENSITIVE`/`SECRET` 或预览被截断（`truncated=True`）时，自动隐藏敏感摘要并禁用远端一键批准按钮（`mode='REQUIRE_LOCAL'`，`remote_approve_enabled=False`）；结果卡对 `UNKNOWN` 明确标记 `RECONCILIATION_REQUIRED`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -112,6 +116,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_pairing.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_inbound.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_approval_callback.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cards.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -177,3 +182,5 @@
   1. Enforces persist-before-ACK via the daemon's `/v1/tasks` endpoint (`ws_ack=False` on persistence failure), rejects group chats (`GROUP_CHAT_DISABLED`), unpaired senders (`UNPAIRED_SENDER`), cross-tenant events, and oversized attachments (`ATTACHMENT_TOO_LARGE`), and never waits on LLMs inside callbacks.
 - **OB-050 (`IN_PROGRESS`)**: Feishu approval callback handler and daemon use case (`services/feishu_gateway/src/openbot_feishu/approval_callback.py`, `services/core/src/openbot/application/approval_use_case.py`, and `tests/integration/feishu/test_approval_callback.py`, 1 passed):
   1. Extracts the real `event.operator.open_id` and verifies active owner pairing while ignoring forged `action.value.is_owner` fields; rejects stale cards on cancelled tasks (`APPROVAL_REJECTED_OR_STALE`) and never claims approval on unconfirmed database commits (`COMMIT_UNCONFIRMED`).
+- **OB-051 (`IN_PROGRESS`)**: Pure Feishu plain card builders (`services/feishu_gateway/src/openbot_feishu/cards.py` and `tests/unit/test_feishu_cards.py`, 1 passed):
+  1. Builds plain approval and result cards without CardKit; enforces `REQUIRE_LOCAL` (disabling remote approve and omitting sensitive text) when `data_class` is `SENSITIVE`/`SECRET` or `truncated=True`, and flags `UNKNOWN` outcomes with `RECONCILIATION_REQUIRED`.

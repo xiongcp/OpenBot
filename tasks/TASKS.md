@@ -3512,7 +3512,7 @@ U3《OpenBot 开源组件复用评估》PDF物理第10、17、23页提出复用�
 
 **实现普通卡片与结果回执**
 
-阶段 M2 · 优先级 P0 · 状态 TODO · 能力域 Integration · 规模 M
+阶段 M2 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
 
 **需求** [RQ06](requirements_traceability.md#rq06)、[RQ08](requirements_traceability.md#rq08)
 
