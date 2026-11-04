@@ -131,6 +131,9 @@
 实现（OB-060）：新增 `services/core/src/openbot/tools/browser/actions.py`（`BrowserActionCoordinator`、`BrowserActionProposal`、`BrowserActionExecutionResult`）与 `tests/unit/test_browser_actions.py`：
 1. 派发前复验与超时转 `UNKNOWN`：绑定 `element_ref`、`expected_label` 与 `expected_amount`，若执行前页面发生跨站跳转、按钮文本变化或金额篡改，立即拒绝旧批准（`BROWSER_PRECONDITION_DRIFT`）；点击后超时统一转入 `UNKNOWN`/`RECONCILING`，严禁盲目二次点击或仅凭页面内“已成功”文字自动解除隔离（`second_click_permitted=False`，`page_text_can_clear_unknown=False`）。
 
+实现（OB-061）：新增 `services/core/src/openbot/tools/browser/verifier.py`（`BrowserOutcomeRegressionHarness`、`BrowserRegressionReport`）与 `tests/integration/browser/test_browser_outcome_regression.py`：
+1. 浏览器结果验证回归：覆盖结账金额篡改拦截、表单提交回执丢失转 `UNKNOWN`、下载路径检疫净化、重定向至云元数据拦截、以及登录会话过期跳转拒绝 5 类夹具场景，绝不凭模型自称完成或驱动无异常代替业务效果验证。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -156,6 +159,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_network_policy.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_read.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_actions.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/browser/test_browser_outcome_regression.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -241,3 +245,5 @@
   1. Extracts bounded snapshots tagged `TAINTED_EXTERNAL` (`grants_policy_or_owner_authority=False`) bound to `(page_id, frame_id, snapshot_revision, final_origin)`, invalidating stale element references across navigations (`STALE_BROWSER_ELEMENT_REF`).
 - **OB-060 (`IN_PROGRESS`)**: Browser write action proposal and re-verification (`services/core/src/openbot/tools/browser/actions.py` and `tests/unit/test_browser_actions.py`, 1 passed):
   1. Re-verifies `BoundElementRef`, button label, and amount before execution (`BROWSER_PRECONDITION_DRIFT`), transitions post-click timeouts to `UNKNOWN`/`RECONCILING`, and forbids automatic second clicks or trusting in-page text to clear `UNKNOWN`.
+- **OB-061 (`IN_PROGRESS`)**: Browser outcome verification regression (`services/core/src/openbot/tools/browser/verifier.py` and `tests/integration/browser/test_browser_outcome_regression.py`, 1 passed):
+  1. Verifies 5 fixture scenarios (checkout amount drift, form submit lost receipt -> `UNKNOWN`, download quarantine, metadata redirect blocking, and expired login session rejection) without accepting model self-claims or driver no-error returns as proof.

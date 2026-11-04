@@ -79,9 +79,10 @@
 - 推进 OB-095（审查 DOM 提取脚本的最小源码复用）：完成 browser-use DOM 脚本边界审查，正式记录 NO_COPY 决策至 components/source-reuse/browser-dom.json 与双语证据 docs/evidence/source-reuse-browser-dom.md（禁止引入自治 Agent.run 循环与页面高亮篡改，采用自有有界只读快照提取器并强制标记 TAINTED_EXTERNAL）；新增单元测试通过，M0 增至 280 passed/3 skipped，M1 增至 299 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-095 记 IN_PROGRESS。
 - 推进 OB-059（实现结构化浏览器读工具）：实现 BrowserReadTool、BrowserPageSnapshot 与 BoundElementRef（有界提取只读 DOM 快照，强制标记 TAINTED_EXTERNAL 与 grants_policy_or_owner_authority=False，绑定 page_id/frame_id/snapshot_revision/final_origin，跨页面或导航后旧元素引用立即抛出 STALE_BROWSER_ELEMENT_REF）；新增单元测试通过，M0 增至 281 passed/3 skipped，M1 增至 300 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-059 记 IN_PROGRESS。
 - 推进 OB-060（实现浏览器写动作提案与确认）：实现 BrowserActionCoordinator、BrowserActionProposal 与 BrowserActionExecutionResult（执行前复验 BoundElementRef、按钮文本与金额，任何漂移立即抛出 BROWSER_PRECONDITION_DRIFT 使旧批准失效；点击后超时转入 UNKNOWN/RECONCILING，禁止盲点第二次提交或凭页面内文本解除隔离）；新增单元测试通过，M0 增至 282 passed/3 skipped，M1 增至 301 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-060 记 IN_PROGRESS。
+- 推进 OB-061（建立浏览器结果验证回归）：实现 BrowserOutcomeRegressionHarness 与 BrowserRegressionReport（覆盖购物金额漂移阻断、表单回执丢失转 UNKNOWN、下载检疫净化、重定向至元数据阻断、登录过期跳转拒绝 5 类夹具场景，绝不将模型文字或驱动无异常当作业务成功证明）；新增集成测试通过，M0 增至 283 passed/3 skipped，M1 增至 302 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-061 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-060`, and `OB-095`, reaching 282 passed M0 checks and 301 passed M1 checks.
+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-061`, and `OB-095`, reaching 283 passed M0 checks and 302 passed M1 checks.
