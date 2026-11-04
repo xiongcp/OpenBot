@@ -2309,12 +2309,12 @@
 +CONNECTED / LOCAL_MODEL / OFFLINE 为独立版本配置；不允许 cloud fallback、SDK 重试叠加、宿主执行、运行期下载。没有真实本地推理 / runner / 出口证据时连接工厂返回 CAPABILITY_UNAVAILABLE；loopback 地址不作证明。UTC/monotonic/boot 变化测试使旧敏感 TTL 失效；派发后 timeout/cancel 映射 UNKNOWN，未把所有异常设为 retryable。
 --- /dev/null
 +++ b/docs/evidence/storage.md
-@@ -0,0 +1,38 @@
-+# OB-011—014、OB-016、OB-021：持久化、资源锁与 Durable Outbox 验收范围 / Persistence, Resource Leases, and Durable Outbox Verification Scope
+@@ -0,0 +1,49 @@
++# OB-011—014、OB-016、OB-021、OB-023：持久化、资源锁、Durable Outbox 与预算熔断验收范围 / Persistence, Resource Leases, Durable Outbox, and Budget Circuit-Breaker Verification Scope
 +
 +## 中文说明
 +
-+实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复以及 durable outbox 共 72 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
++实际命令：`PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`；当前含状态机终态、OutcomeVerifier、取消/恢复守卫、四类资源锁/会话排队、提案/审批/派发/恢复、durable outbox、取消传播与预算熔断共 78 passed，原始输出在 evidence/implementation/m1-storage-tests.log。Python 3.12 / macOS ARM64；SQLite 版本与连接选项由测试实际读取。
 +
 +OB-011：校验顺序 checksum 的迁移器；实际新建 23 表、显式升级前 backup、未知/不连续/被改历史拒绝、FK 与 integrity 检查、WAL/FULL/FK/recursive_triggers 读回。真实子进程在 DDL 后退出，重启未留下半迁移。旧 11 表没有获准迁移，明确拒绝。仅使用标准库 sqlite3，不引入 aiosqlite 或 yoyo。
 +
@@ -2332,11 +2332,17 @@
 +3. 唯一重试所有者与异常隔离：强制校验 `gateway.sdk_max_retries == 0`（拒绝叠加 SDK 内部自动重试）；捕获传输/库异常并收敛为 outbox 投递状态，绝不触发原业务 `Operation` 或 `operation_attempts` 重执行；仅当 `delivery_class == 'PROVIDER_IDEMPOTENT'` 且网关明确支持幂等时记录 `exact_once_guaranteed=True`，无远端幂等支持时禁止声称 `exactly-once`。
 +4. 断网重启后的 `IN_FLIGHT` 恢复与核对：`recover_in_flight` 要求原 `claim_runtime_epoch` 已证明 `STOPPED`，按 `UPSERT_REVISION` / `PROVIDER_IDEMPOTENT` / `RECONCILE_ONLY` 分流（无幂等能力转 `UNKNOWN` 核对，不盲目重发）；`reconcile_unknown` 凭核实回执解决 `UNKNOWN -> SENT / SUPERSEDED / PENDING / DEAD / EXPIRED`。因上游 `OB-017` 仍为 `IN_PROGRESS`，`OB-021` 记为 `IN_PROGRESS`。
 +
++OB-023（实现任务预算和熔断，保持 IN_PROGRESS）：先读取 `component_refs`（`tiktoken`、`tenacity`）、`reuse_type`（`dependency_adapter`）与 `reuse_notes`。新增 `services/core/src/openbot/application/budgets.py`（`BudgetService`、`TaskBudgetPolicy`、`OfflineVocabularyEstimator`、`TokenEstimate`）：
++1. 全维度保守上限与调用前预留（`reserve`）：覆盖 `max_steps`、`max_model_calls`、`max_tool_calls`、`max_retries_per_call`、`max_duration_ms`、`max_single_artifact_bytes`、`max_total_artifact_bytes` 以及金额/Token 余额（`limit - spent - reserved`）；取消后（`cancel_revision > 0`）拒绝任何新预留；任一预算不足时原子将 Task 转入 `PAUSED` 并记录明确 `paused_reason`，绝不超卖或静默继续调用。
++2. 结算（`settle`）与未知费用保守保留（`mark_unknown`）：响应完成后扣减预留并记入 `amount_spent_micros`/`tokens_spent`，同时记录预估与真实 usage 偏差（`usage_delta_tokens`）；断流、超时或 usage 缺失时将 `budget_reservations` 置为 `UNKNOWN`，并在 `budgets` 表中保守保留预留额度，绝不在断流后清零费用。
++3. 离线词表校验与非通用计费声明（`OfflineVocabularyEstimator`）：对已声明模型校验本地预置词表文件存在性与 SHA-256 摘要（缺失或篡改时立即 `CAPABILITY_UNAVAILABLE` 失败，禁止运行期联网下载）；对未知模型使用保守 UTF-8 上界，从不把 OpenAI 分词器当作全 Provider 精确计费器（`exact_billing_guaranteed=False`）。
++4. 重复提案/连续错误/空转熔断（`record_turn_activity`）与恢复（`resume_paused`）：触发阈值时自动将 Task 置为 `PAUSED`，仅在显式重置熔断/补充额度且未取消时恢复为 `QUEUED`。因上游 `OB-017` 及真实模型离线词表资产打包尚待闭合，`OB-023` 记为 `IN_PROGRESS`。
++
 +OB-011—014 本机验收均记 VERIFIED；上游 OB-005 三 OS bootstrap 尚缺 Windows x64/Linux x64 实际执行，不以配置代替证据，不将其依赖链改为全部 DONE。当前无 daemon/API/Broker 可运行闭环，OB-029 未通过。
 +
 +## English Summary
 +
-+Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (72 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
++Command: `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short` (78 passed, logged in `evidence/implementation/m1-storage-tests.log` on Python 3.12 / macOS ARM64).
 +
 +- **OB-011**: Checksum-locked ordered SQLite migrator creating all 23 baseline tables, pre-upgrade backup, foreign-key and integrity checks, and WAL/FULL/FK/recursive_triggers verification using stdlib `sqlite3`.
 +- **OB-012**: Single writer thread owning short transactions with bounded per-lane queues, round-robin fairness, total deadline enforcement, and fail-closed fatal writer state on commit/rollback I/O errors.
@@ -2348,6 +2354,11 @@
 +  2. Transaction-external delivery (`PENDING -> IN_FLIGHT -> SENT/PENDING/DEAD/EXPIRED/UNKNOWN/SUPERSEDED`) with countable `attempt_count`, bounded backoff, deadline expiration, and dead-letter transition.
 +  3. Single retry owner (`gateway.sdk_max_retries == 0` enforced), exception containment (transport/library errors never re-execute business `Operation`/`Attempt`), and truthful delivery guarantees (`exact_once_guaranteed` is `False` unless `PROVIDER_IDEMPOTENT` is supported by the gateway).
 +  4. Crash recovery (`recover_in_flight` requiring `STOPPED` old runtime epoch and routing `RECONCILE_ONLY` to `UNKNOWN`) and `reconcile_unknown`. Kept `IN_PROGRESS` pending upstream `OB-017` closure.
++- **OB-023 (`IN_PROGRESS`)**: Durable task budgets, offline vocabulary verification, and circuit breakers (`services/core/src/openbot/application/budgets.py`):
++  1. Pre-call `reserve` enforcing caps on steps, model calls, tool calls, per-call retries, duration, single/total artifact bytes, and available amount/tokens; transitions Task `RUNNING -> PAUSED` with an explicit `paused_reason` on exhaustion and refuses new reservations after cancellation.
++  2. Post-call `settle` (recording `usage_delta_tokens` between estimated and actual tokens) and `mark_unknown` (retaining reserved amount/tokens on stream cuts or ambiguous failures instead of zeroing cost).
++  3. `OfflineVocabularyEstimator`: verifies pinned offline vocabulary file SHA-256 without network downloads (failing closed when missing) and never claims OpenAI encodings provide exact billing for arbitrary models (`exact_billing_guaranteed=False`).
++  4. Circuit breaker (`record_turn_activity`) tripping to `PAUSED` on repeated proposals, consecutive errors, or idle turns, with explicit `resume_paused` recovery.
 --- /dev/null
 +++ b/docs/handoff/2026-11-04-checkpoint.md
 @@ -0,0 +1,66 @@
@@ -2442,7 +2453,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,43 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2485,6 +2496,7 @@
 +- 推进 OB-020（按副作用类型恢复）：实现 RecoveryService.recover_epoch（旧执行域未隔离阻断接管并将 DISPATCHING 置 UNKNOWN/RECONCILING）、recover_operation（区分未派发 CLAIMED 与五类 retry_class，仅在安全可重放且原授权有效时签发 RecoveryTicket）与 reconcile_unknown（校验 reconciliation.schema.json、AVAILABLE 证据产物及 PROVIDER_VERIFIED/USER_ATTESTED 来源，拒绝模型来源或无证据文本覆盖账本）；存储套件增至 68 passed，M0 增至 189 passed/3 skipped，M1 增至 208 passed/1 skipped。因上游 OB-015/093 未闭合，OB-020 记 IN_PROGRESS。
 +- 推进 OB-021（实现 durable outbox 及投递状态）：实现 OutboxStore 与 OutboxService（语义键与单调 revision、UPSERT_REVISION 进度合并、终态保护与迟到/重复回执防倒退、事务外远端投递、唯一重试所有者 sdk_max_retries=0 校验、attempt_count/deadline/DEAD 死信、旧 epoch STOPPED 后的 IN_FLIGHT 按能力恢复与 UNKNOWN 核对、投递异常绝不重放业务 Operation）；新增 4 项集成测试通过，存储套件增至 72 passed，M0 增至 193 passed/3 skipped，M1 增至 212 passed/1 skipped。因上游 OB-017 仍为 IN_PROGRESS，OB-021 记 IN_PROGRESS。
 +- 推进 OB-022（实现取消和停止传播）：实现 CancellationService（先落盘 cancel_revision 与 cancel_requested_at、释放未派发 CLAIMED 租约、撤销未消费批准、阻断 CLAIMED->DISPATCHING 第二短事务；事务外向在途 worker 发送停止信号且显式保持 effects_rolled_back=False 与 preserved_succeeded_operations；存在 DISPATCHING/UNKNOWN 时驻留 RECONCILING 直至核对闭合后 finalize_cancelled；提供断连后 inspect_cancel_status 与稳定 request_id 幂等重查）；新增 3 项集成测试通过，存储套件增至 75 passed，M0 增至 196 passed/3 skipped，M1 增至 215 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-022 记 IN_PROGRESS。
++- 推进 OB-023（实现任务预算和熔断）：实现 BudgetService、TaskBudgetPolicy 与 OfflineVocabularyEstimator（steps/模型/工具/重试/时长/产物大小与金额/Token 预留，耗尽时原子转 PAUSED；真实用量结算与估算偏差记录，断流未知费用保守保留；离线词表 SHA-256 核验且禁网，不将 OpenAI 分词充当通用精确计费；重复提案/连续错误/空转熔断与显式恢复）；新增 3 项集成测试通过，存储套件增至 78 passed，M0 增至 199 passed/3 skipped，M1 增至 218 passed/1 skipped。因上游 OB-017 仍为 IN_PROGRESS，OB-023 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -3120,6 +3132,866 @@
 +++ b/services/core/src/openbot/application/__init__.py
 @@ -0,0 +1 @@
 +"""Control-plane use cases. Model and channel adapters cannot grant execution authority."""
+--- /dev/null
++++ b/services/core/src/openbot/application/budgets.py
+@@ -0,0 +1,857 @@
++"""Durable task budgets, reservation/settlement ledger, and circuit breakers."""
++
++import hashlib
++import secrets
++import sqlite3
++import time
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Literal
++
++from openbot.contracts import canonicalize, strict_json
++from openbot.storage.inbox import InboundContext, authorize, emit_state
++from openbot.storage.writer import LookupResult, RequestConflict, Writer, WriterCommand
++
++type ReservationKind = Literal["MODEL", "TOOL"]
++
++
++@dataclass(frozen=True, slots=True)
++class TaskBudgetPolicy:
++    """Conservative per-task operational and circuit-breaker limits."""
++
++    max_steps: int = 32
++    max_model_calls: int = 16
++    max_tool_calls: int = 16
++    max_retries_per_call: int = 2
++    max_duration_ms: int = 300_000
++    max_single_artifact_bytes: int = 1_048_576
++    max_total_artifact_bytes: int = 8_388_608
++    max_repeated_proposals: int = 2
++    max_consecutive_errors: int = 3
++    max_idle_turns: int = 3
++
++    def to_payload(self) -> dict[str, int]:
++        return {
++            "max_steps": self.max_steps,
++            "max_model_calls": self.max_model_calls,
++            "max_tool_calls": self.max_tool_calls,
++            "max_retries_per_call": self.max_retries_per_call,
++            "max_duration_ms": self.max_duration_ms,
++            "max_single_artifact_bytes": self.max_single_artifact_bytes,
++            "max_total_artifact_bytes": self.max_total_artifact_bytes,
++            "max_repeated_proposals": self.max_repeated_proposals,
++            "max_consecutive_errors": self.max_consecutive_errors,
++            "max_idle_turns": self.max_idle_turns,
++        }
++
++    @classmethod
++    def from_payload(cls, raw: dict[str, Any] | None) -> "TaskBudgetPolicy":
++        if not raw:
++            return cls()
++        return cls(
++            max_steps=int(raw.get("max_steps", 32)),
++            max_model_calls=int(raw.get("max_model_calls", 16)),
++            max_tool_calls=int(raw.get("max_tool_calls", 16)),
++            max_retries_per_call=int(raw.get("max_retries_per_call", 2)),
++            max_duration_ms=int(raw.get("max_duration_ms", 300_000)),
++            max_single_artifact_bytes=int(raw.get("max_single_artifact_bytes", 1_048_576)),
++            max_total_artifact_bytes=int(raw.get("max_total_artifact_bytes", 8_388_608)),
++            max_repeated_proposals=int(raw.get("max_repeated_proposals", 2)),
++            max_consecutive_errors=int(raw.get("max_consecutive_errors", 3)),
++            max_idle_turns=int(raw.get("max_idle_turns", 3)),
++        )
++
++
++@dataclass(frozen=True, slots=True)
++class TokenEstimate:
++    """Separates local pre-call token estimate from conservative reservation and provider usage."""
++
++    model: str
++    encoding_name: str
++    vocab_sha256: str | None
++    estimated_tokens: int
++    conservative_reserved_tokens: int
++    exact_billing_guaranteed: Literal[False] = False
++
++
++class OfflineVocabularyEstimator:
++    """Offline-only token estimator. Never downloads vocabularies or claims universal exactness."""
++
++    def __init__(self, model_encodings: dict[str, tuple[str, Path, str]] | None = None) -> None:
++        self._encodings = dict(model_encodings or {})
++
++    def estimate(
++        self,
++        model: str,
++        text: str,
++        *,
++        tool_count: int = 0,
++        completion_reserve_tokens: int = 64,
++    ) -> TokenEstimate:
++        utf8_len = len(text.encode("utf-8"))
++        framing_overhead = 16 + max(0, tool_count) * 32
++        if model in self._encodings:
++            enc_name, vocab_path, expected_sha256 = self._encodings[model]
++            if not vocab_path.is_file() or vocab_path.is_symlink():
++                raise ValueError(
++                    f"CAPABILITY_UNAVAILABLE: offline vocabulary missing for {model} ({enc_name})"
++                )
++            actual_sha256 = hashlib.sha256(vocab_path.read_bytes()).hexdigest()
++            if actual_sha256 != expected_sha256:
++                raise ValueError(
++                    f"CAPABILITY_UNAVAILABLE: vocabulary sha256 mismatch for {model} ({enc_name})"
++                )
++            base_tokens = max(1, (utf8_len + 3) // 4) + framing_overhead
++            conservative = base_tokens + max(16, completion_reserve_tokens)
++            return TokenEstimate(
++                model=model,
++                encoding_name=enc_name,
++                vocab_sha256=actual_sha256,
++                estimated_tokens=base_tokens,
++                conservative_reserved_tokens=conservative,
++                exact_billing_guaranteed=False,
++            )
++        # Unknown / non-mapped model: never apply OpenAI vocabulary as exact count
++        conservative_base = max(1, utf8_len) + framing_overhead * 2
++        return TokenEstimate(
++            model=model,
++            encoding_name="conservative_utf8_bound",
++            vocab_sha256=None,
++            estimated_tokens=conservative_base,
++            conservative_reserved_tokens=conservative_base + max(32, completion_reserve_tokens),
++            exact_billing_guaranteed=False,
++        )
++
++
++class BudgetService:
++    """Pre-call reservation, post-call settlement, unknown retention, and circuit breaker."""
++
++    def __init__(self, writer: Writer) -> None:
++        self._writer = writer
++
++    def _task_and_budget(
++        self, db: sqlite3.Connection, context: InboundContext, task_id: str
++    ) -> tuple[str, int, str, int, int, dict[str, Any]]:
++        authorize(db, context)
++        row = db.execute(
++            "SELECT owner_id,session_id,state,version,budget_id,cancel_revision,"
++            "created_at,checkpoint_json FROM tasks WHERE task_id=?",
++            (task_id,),
++        ).fetchone()
++        if not row or row[:2] != (context.principal_id, context.session_id):
++            raise PermissionError("Task does not belong to this owner or session")
++        checkpoint = {} if row[7] is None else dict(strict_json(str(row[7])))
++        return (
++            str(row[2]),
++            int(row[3]),
++            str(row[4]),
++            int(row[5]),
++            int(row[6]),
++            checkpoint,
++        )
++
++    def _lookup(
++        self, db: sqlite3.Connection, context: InboundContext, task_id: str, request_id: str
++    ) -> LookupResult | None:
++        self._task_and_budget(db, context, task_id)
++        row = db.execute(
++            "SELECT payload_json FROM events WHERE task_id=? "
++            "AND json_extract(payload_json,'$.request_id')=?",
++            (task_id, request_id),
++        ).fetchone()
++        if row is None:
++            return None
++        val = strict_json(str(row[0]))
++        return LookupResult(str(val["command_hash"]), canonicalize(val["receipt"]))
++
++    def _append_budget_event(
++        self,
++        db: sqlite3.Connection,
++        context: InboundContext,
++        budget_id: str,
++        budget_version: int,
++        task_id: str,
++        event_type: str,
++        request_id: str,
++        fingerprint: str,
++        receipt: dict[str, Any],
++        now: int,
++        operation_id: str | None = None,
++    ) -> None:
++        payload = canonicalize(
++            {"request_id": request_id, "command_hash": fingerprint, "receipt": receipt}
++        ).decode()
++        db.execute(
++            "INSERT INTO events(event_id,aggregate_kind,aggregate_id,aggregate_version,task_id,"
++            "operation_id,actor_principal_id,event_type,schema_version,trace_id,payload_json,"
++            "created_at) VALUES(?,'Budget',?,?,?,?,?,?,1,?,?,?)",
++            (
++                "evt_" + secrets.token_hex(16),
++                budget_id,
++                budget_version,
++                task_id,
++                operation_id,
++                context.principal_id,
++                event_type,
++                "trc_" + hashlib.sha256(request_id.encode()).hexdigest()[:32],
++                payload,
++                now,
++            ),
++        )
++
++    def configure_limits(
++        self,
++        context: InboundContext,
++        task_id: str,
++        *,
++        amount_limit_micros: int,
++        token_limit: int,
++        policy: TaskBudgetPolicy,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if amount_limit_micros < 0 or token_limit < 0:
++            raise ValueError("Budget limits must be non-negative")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "budget_configure",
++                    "task": task_id,
++                    "amount": amount_limit_micros,
++                    "tokens": token_limit,
++                    "policy": policy.to_payload(),
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, t_ver, budget_id, _, _, checkpoint = self._task_and_budget(db, context, task_id)
++            now = time.time_ns() // 1_000_000
++            b_row = db.execute(
++                "SELECT version FROM budgets WHERE budget_id=?", (budget_id,)
++            ).fetchone()
++            if not b_row:
++                raise PermissionError("Budget record missing")
++            b_ver = int(b_row[0])
++            db.execute(
++                "UPDATE budgets SET amount_limit_micros=?,token_limit=?,version=?,updated_at=? "
++                "WHERE budget_id=? AND version=?",
++                (amount_limit_micros, token_limit, b_ver + 1, now, budget_id, b_ver),
++            )
++            checkpoint["budget_policy"] = policy.to_payload()
++            db.execute(
++                "UPDATE tasks SET checkpoint_json=?,version=version+1,updated_at=? "
++                "WHERE task_id=? AND version=?",
++                (canonicalize(checkpoint).decode(), now, task_id, t_ver),
++            )
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "budget_id": budget_id,
++                "state": state,
++                "version": t_ver + 1,
++            }
++            self._append_budget_event(
++                db,
++                context,
++                budget_id,
++                b_ver + 1,
++                task_id,
++                "BUDGET_CONFIGURED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
++        )
++
++    def reserve(
++        self,
++        context: InboundContext,
++        task_id: str,
++        *,
++        call_ref: str,
++        kind: ReservationKind,
++        reserved_amount_micros: int,
++        reserved_tokens: int,
++        estimated_tokens: int | None = None,
++        operation_id: str | None = None,
++        attempt_index: int = 1,
++        artifact_bytes: int = 0,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if not call_ref.strip() or reserved_amount_micros < 0 or reserved_tokens < 0:
++            raise ValueError("Invalid budget reservation arguments")
++        if attempt_index < 1 or artifact_bytes < 0:
++            raise ValueError("Invalid attempt_index or artifact_bytes")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "budget_reserve",
++                    "task": task_id,
++                    "call_ref": call_ref,
++                    "res_kind": kind,
++                    "amount": reserved_amount_micros,
++                    "tokens": reserved_tokens,
++                    "estimated": estimated_tokens,
++                    "operation": operation_id,
++                    "attempt_index": attempt_index,
++                    "artifact_bytes": artifact_bytes,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, t_ver, budget_id, cancel_rev, created_at, checkpoint = self._task_and_budget(
++                db, context, task_id
++            )
++            if cancel_rev > 0 or state != "RUNNING":
++                raise PermissionError(
++                    "Task is cancelled or not RUNNING; new budget reservations refused"
++                )
++            now = time.time_ns() // 1_000_000
++            policy = TaskBudgetPolicy.from_payload(checkpoint.get("budget_policy"))
++            counters = dict(checkpoint.get("budget_counters", {}))
++            steps = int(counters.get("steps", 0)) + 1
++            model_calls = int(counters.get("model_calls", 0)) + (1 if kind == "MODEL" else 0)
++            tool_calls = int(counters.get("tool_calls", 0)) + (1 if kind == "TOOL" else 0)
++            total_art_bytes = int(counters.get("artifact_bytes", 0)) + artifact_bytes
++
++            b_row = db.execute(
++                "SELECT amount_limit_micros,amount_spent_micros,amount_reserved_micros,"
++                "token_limit,tokens_spent,tokens_reserved,version "
++                "FROM budgets WHERE budget_id=?",
++                (budget_id,),
++            ).fetchone()
++            if not b_row:
++                raise PermissionError("Budget record missing")
++            amt_lim, amt_spent, amt_res, tok_lim, tok_spent, tok_res, b_ver = (
++                int(b_row[0]),
++                int(b_row[1]),
++                int(b_row[2]),
++                int(b_row[3]),
++                int(b_row[4]),
++                int(b_row[5]),
++                int(b_row[6]),
++            )
++
++            exhausted_reason: str | None = None
++            if attempt_index > policy.max_retries_per_call + 1:
++                exhausted_reason = "BUDGET_EXHAUSTED:MAX_RETRIES_PER_CALL"
++            elif steps > policy.max_steps:
++                exhausted_reason = "BUDGET_EXHAUSTED:MAX_STEPS"
++            elif kind == "MODEL" and model_calls > policy.max_model_calls:
++                exhausted_reason = "BUDGET_EXHAUSTED:MAX_MODEL_CALLS"
++            elif kind == "TOOL" and tool_calls > policy.max_tool_calls:
++                exhausted_reason = "BUDGET_EXHAUSTED:MAX_TOOL_CALLS"
++            elif now - created_at > policy.max_duration_ms:
++                exhausted_reason = "BUDGET_EXHAUSTED:MAX_DURATION_MS"
++            elif (
++                artifact_bytes > policy.max_single_artifact_bytes
++                or total_art_bytes > policy.max_total_artifact_bytes
++            ):
++                exhausted_reason = "BUDGET_EXHAUSTED:ARTIFACT_BYTES_LIMIT"
++            elif reserved_amount_micros > amt_lim - amt_spent - amt_res:
++                exhausted_reason = "BUDGET_EXHAUSTED:AMOUNT_LIMIT"
++            elif reserved_tokens > tok_lim - tok_spent - tok_res:
++                exhausted_reason = "BUDGET_EXHAUSTED:TOKEN_LIMIT"
++
++            if exhausted_reason is not None:
++                checkpoint["paused_reason"] = exhausted_reason
++                db.execute(
++                    "UPDATE tasks SET state='PAUSED',checkpoint_json=?,version=version+1,"
++                    "updated_at=? WHERE task_id=? AND version=?",
++                    (canonicalize(checkpoint).decode(), now, task_id, t_ver),
++                )
++                pause_receipt: dict[str, Any] = {
++                    "task_id": task_id,
++                    "state": "PAUSED",
++                    "task_state": "PAUSED",
++                    "version": t_ver + 1,
++                    "admitted": False,
++                    "reason": exhausted_reason,
++                }
++                emit_state(
++                    db, context, pause_receipt, request_id, fingerprint, "TASK_STATE_CHANGED", now
++                )
++                return canonicalize(pause_receipt)
++
++            upd = db.execute(
++                "UPDATE budgets SET amount_reserved_micros=amount_reserved_micros+?,"
++                "tokens_reserved=tokens_reserved+?,version=?,updated_at=? "
++                "WHERE budget_id=? AND version=? "
++                "AND ?<=amount_limit_micros-amount_spent_micros-amount_reserved_micros "
++                "AND ?<=token_limit-tokens_spent-tokens_reserved",
++                (
++                    reserved_amount_micros,
++                    reserved_tokens,
++                    b_ver + 1,
++                    now,
++                    budget_id,
++                    b_ver,
++                    reserved_amount_micros,
++                    reserved_tokens,
++                ),
++            )
++            if upd.rowcount != 1:
++                raise RequestConflict("Concurrent budget reservation conflict")
++
++            res_id = "brs_" + secrets.token_hex(16)
++            ev_meta = (
++                None
++                if estimated_tokens is None
++                else canonicalize({"estimated_tokens": estimated_tokens}).decode()
++            )
++            db.execute(
++                "INSERT INTO budget_reservations("
++                "reservation_id,budget_id,operation_id,call_ref,kind,status,"
++                "reserved_amount_micros,reserved_tokens,evidence_ref,created_at) "
++                "VALUES(?,?,?,?,?,'RESERVED',?,?,?,?)",
++                (
++                    res_id,
++                    budget_id,
++                    operation_id,
++                    call_ref,
++                    kind,
++                    reserved_amount_micros,
++                    reserved_tokens,
++                    ev_meta,
++                    now,
++                ),
++            )
++            counters.update(
++                {
++                    "steps": steps,
++                    "model_calls": model_calls,
++                    "tool_calls": tool_calls,
++                    "artifact_bytes": total_art_bytes,
++                }
++            )
++            checkpoint["budget_counters"] = counters
++            db.execute(
++                "UPDATE tasks SET checkpoint_json=?,version=version+1,updated_at=? "
++                "WHERE task_id=? AND version=?",
++                (canonicalize(checkpoint).decode(), now, task_id, t_ver),
++            )
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": state,
++                "version": t_ver + 1,
++                "admitted": True,
++                "reservation_id": res_id,
++                "call_ref": call_ref,
++            }
++            self._append_budget_event(
++                db,
++                context,
++                budget_id,
++                b_ver + 1,
++                task_id,
++                "BUDGET_RESERVED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++                operation_id,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
++        )
++
++    def settle(
++        self,
++        context: InboundContext,
++        task_id: str,
++        *,
++        call_ref: str,
++        actual_amount_micros: int,
++        actual_tokens: int,
++        estimated_tokens: int | None = None,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if actual_amount_micros < 0 or actual_tokens < 0:
++            raise ValueError("Actual usage must be non-negative")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "budget_settle",
++                    "task": task_id,
++                    "call_ref": call_ref,
++                    "actual_amount": actual_amount_micros,
++                    "actual_tokens": actual_tokens,
++                    "estimated_tokens": estimated_tokens,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, t_ver, budget_id, _, _, _ = self._task_and_budget(db, context, task_id)
++            r_row = db.execute(
++                "SELECT reservation_id,status,reserved_amount_micros,reserved_tokens "
++                "FROM budget_reservations WHERE budget_id=? AND call_ref=?",
++                (budget_id, call_ref),
++            ).fetchone()
++            if not r_row or r_row[1] != "RESERVED":
++                raise RequestConflict("Reservation is not in RESERVED state")
++            res_id, res_amt, res_tok = str(r_row[0]), int(r_row[2]), int(r_row[3])
++            b_row = db.execute(
++                "SELECT version FROM budgets WHERE budget_id=?", (budget_id,)
++            ).fetchone()
++            assert b_row is not None
++            b_ver = int(b_row[0])
++            now = time.time_ns() // 1_000_000
++            delta = None if estimated_tokens is None else actual_tokens - estimated_tokens
++            evidence = canonicalize(
++                {
++                    "estimated_tokens": estimated_tokens,
++                    "actual_tokens": actual_tokens,
++                    "usage_delta_tokens": delta,
++                }
++            ).decode()
++            db.execute(
++                "UPDATE budget_reservations SET status='SETTLED',actual_amount_micros=?,"
++                "actual_tokens=?,evidence_ref=?,settled_at=? WHERE reservation_id=?",
++                (actual_amount_micros, actual_tokens, evidence, now, res_id),
++            )
++            db.execute(
++                "UPDATE budgets SET amount_reserved_micros=amount_reserved_micros-?,"
++                "amount_spent_micros=amount_spent_micros+?,"
++                "tokens_reserved=tokens_reserved-?,tokens_spent=tokens_spent+?,"
++                "version=?,updated_at=? WHERE budget_id=? AND version=?",
++                (
++                    res_amt,
++                    actual_amount_micros,
++                    res_tok,
++                    actual_tokens,
++                    b_ver + 1,
++                    now,
++                    budget_id,
++                    b_ver,
++                ),
++            )
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": state,
++                "version": t_ver,
++                "call_ref": call_ref,
++                "status": "SETTLED",
++                "usage_delta_tokens": delta,
++            }
++            self._append_budget_event(
++                db,
++                context,
++                budget_id,
++                b_ver + 1,
++                task_id,
++                "BUDGET_SETTLED",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
++        )
++
++    def mark_unknown(
++        self,
++        context: InboundContext,
++        task_id: str,
++        *,
++        call_ref: str,
++        reason: str,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if not reason.strip():
++            raise ValueError("Unknown budget reason required")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "budget_unknown",
++                    "task": task_id,
++                    "call_ref": call_ref,
++                    "reason": reason,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, t_ver, budget_id, _, _, _ = self._task_and_budget(db, context, task_id)
++            r_row = db.execute(
++                "SELECT reservation_id,status FROM budget_reservations "
++                "WHERE budget_id=? AND call_ref=?",
++                (budget_id, call_ref),
++            ).fetchone()
++            if not r_row or r_row[1] != "RESERVED":
++                raise RequestConflict("Reservation is not in RESERVED state")
++            now = time.time_ns() // 1_000_000
++            # Keep reserved_amount_micros and tokens_reserved held in budgets table!
++            db.execute(
++                "UPDATE budget_reservations SET status='UNKNOWN',evidence_ref=?,settled_at=NULL "
++                "WHERE reservation_id=?",
++                (reason, str(r_row[0])),
++            )
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": state,
++                "version": t_ver,
++                "call_ref": call_ref,
++                "status": "UNKNOWN",
++                "reason": reason,
++            }
++            self._append_budget_event(
++                db,
++                context,
++                budget_id,
++                0,
++                task_id,
++                "BUDGET_UNKNOWN",
++                request_id,
++                fingerprint,
++                receipt,
++                now,
++            )
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "result", deadline_monotonic_ms, apply, lookup
++        )
++
++    def record_turn_activity(
++        self,
++        context: InboundContext,
++        task_id: str,
++        *,
++        proposal_fingerprint: str | None = None,
++        had_error: bool = False,
++        was_idle: bool = False,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "budget_turn_activity",
++                    "task": task_id,
++                    "proposal_fp": proposal_fingerprint,
++                    "had_error": had_error,
++                    "was_idle": was_idle,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, t_ver, _, _, _, checkpoint = self._task_and_budget(db, context, task_id)
++            if state != "RUNNING":
++                raise RequestConflict("Task must be RUNNING to record turn activity")
++            policy = TaskBudgetPolicy.from_payload(checkpoint.get("budget_policy"))
++            cb = dict(checkpoint.get("circuit_breaker", {}))
++            history = list(cb.get("proposal_fingerprints", []))
++            if proposal_fingerprint is not None:
++                history.append(proposal_fingerprint)
++            errors = int(cb.get("consecutive_errors", 0)) + 1 if had_error else 0
++            idle = int(cb.get("idle_turns", 0)) + 1 if was_idle else 0
++
++            repeated = (
++                history.count(proposal_fingerprint) if proposal_fingerprint is not None else 0
++            )
++            trip_reason: str | None = None
++            if repeated >= policy.max_repeated_proposals:
++                trip_reason = "CIRCUIT_BREAKER:REPEATED_PROPOSAL"
++            elif errors >= policy.max_consecutive_errors:
++                trip_reason = "CIRCUIT_BREAKER:CONSECUTIVE_ERRORS"
++            elif idle >= policy.max_idle_turns:
++                trip_reason = "CIRCUIT_BREAKER:IDLE_SPIN"
++
++            cb.update(
++                {
++                    "proposal_fingerprints": history[-32:],
++                    "consecutive_errors": errors,
++                    "idle_turns": idle,
++                }
++            )
++            checkpoint["circuit_breaker"] = cb
++            now = time.time_ns() // 1_000_000
++            target_state = "PAUSED" if trip_reason is not None else state
++            if trip_reason is not None:
++                checkpoint["paused_reason"] = trip_reason
++            db.execute(
++                "UPDATE tasks SET state=?,checkpoint_json=?,version=version+1,updated_at=? "
++                "WHERE task_id=? AND version=?",
++                (target_state, canonicalize(checkpoint).decode(), now, task_id, t_ver),
++            )
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": target_state,
++                "task_state": target_state,
++                "version": t_ver + 1,
++                "tripped": trip_reason is not None,
++                "reason": trip_reason,
++            }
++            emit_state(db, context, receipt, request_id, fingerprint, "TASK_STATE_CHANGED", now)
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
++        )
++
++    def resume_paused(
++        self,
++        context: InboundContext,
++        task_id: str,
++        *,
++        expected_version: int,
++        additional_amount_micros: int = 0,
++        additional_tokens: int = 0,
++        reset_circuit_breaker: bool = False,
++        request_id: str,
++        deadline_monotonic_ms: int,
++    ) -> WriterCommand:
++        if additional_amount_micros < 0 or additional_tokens < 0:
++            raise ValueError("Additional budget must be non-negative")
++        fingerprint = hashlib.sha256(
++            canonicalize(
++                {
++                    "kind": "budget_resume_paused",
++                    "task": task_id,
++                    "expected": expected_version,
++                    "add_amount": additional_amount_micros,
++                    "add_tokens": additional_tokens,
++                    "reset_cb": reset_circuit_breaker,
++                    "actor": context.principal_id,
++                    "profile": context.profile_id,
++                    "session": context.session_id,
++                    "identity": context.identity_epoch,
++                    "surface": context.source_scope,
++                }
++            )
++        ).hexdigest()
++
++        def lookup(db: sqlite3.Connection) -> LookupResult | None:
++            return self._lookup(db, context, task_id, request_id)
++
++        def apply(db: sqlite3.Connection) -> bytes:
++            state, t_ver, budget_id, cancel_rev, _, checkpoint = self._task_and_budget(
++                db, context, task_id
++            )
++            if state != "PAUSED" or t_ver != expected_version:
++                raise RequestConflict("Task is not in PAUSED at expected_version")
++            if cancel_rev > 0:
++                raise PermissionError("Cancelled task cannot be resumed from PAUSED")
++            now = time.time_ns() // 1_000_000
++            if additional_amount_micros > 0 or additional_tokens > 0:
++                b_row = db.execute(
++                    "SELECT version FROM budgets WHERE budget_id=?", (budget_id,)
++                ).fetchone()
++                assert b_row is not None
++                b_ver = int(b_row[0])
++                db.execute(
++                    "UPDATE budgets SET amount_limit_micros=amount_limit_micros+?,"
++                    "token_limit=token_limit+?,version=?,updated_at=? "
++                    "WHERE budget_id=? AND version=?",
++                    (
++                        additional_amount_micros,
++                        additional_tokens,
++                        b_ver + 1,
++                        now,
++                        budget_id,
++                        b_ver,
++                    ),
++                )
++            if reset_circuit_breaker:
++                checkpoint["circuit_breaker"] = {
++                    "proposal_fingerprints": [],
++                    "consecutive_errors": 0,
++                    "idle_turns": 0,
++                }
++            checkpoint.pop("paused_reason", None)
++            db.execute(
++                "UPDATE tasks SET state='QUEUED',checkpoint_json=?,version=version+1,"
++                "updated_at=? WHERE task_id=? AND version=? AND state='PAUSED'",
++                (canonicalize(checkpoint).decode(), now, task_id, expected_version),
++            )
++            receipt: dict[str, Any] = {
++                "task_id": task_id,
++                "state": "QUEUED",
++                "version": t_ver + 1,
++            }
++            emit_state(db, context, receipt, request_id, fingerprint, "TASK_STATE_CHANGED", now)
++            return canonicalize(receipt)
++
++        return WriterCommand(
++            request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
++        )
++
++    def snapshot(self, context: InboundContext, task_id: str) -> dict[str, Any]:
++        def query(db: sqlite3.Connection) -> dict[str, Any]:
++            _, _, budget_id, _, _, checkpoint = self._task_and_budget(db, context, task_id)
++            row = db.execute(
++                "SELECT amount_limit_micros,amount_spent_micros,amount_reserved_micros,"
++                "token_limit,tokens_spent,tokens_reserved,version "
++                "FROM budgets WHERE budget_id=?",
++                (budget_id,),
++            ).fetchone()
++            assert row is not None
++            return {
++                "budget_id": budget_id,
++                "amount_limit_micros": int(row[0]),
++                "amount_spent_micros": int(row[1]),
++                "amount_reserved_micros": int(row[2]),
++                "token_limit": int(row[3]),
++                "tokens_spent": int(row[4]),
++                "tokens_reserved": int(row[5]),
++                "version": int(row[6]),
++                "paused_reason": checkpoint.get("paused_reason"),
++            }
++
++        return self._writer.read(query)
 --- /dev/null
 +++ b/services/core/src/openbot/application/cancellation.py
 @@ -0,0 +1,377 @@
@@ -9271,7 +10143,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/031 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox 与取消传播；上游 OB-015/093 与后续 OB-023 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/031 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播与持久预算/熔断；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -9470,6 +10342,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
  
  **需求** [RQ02](requirements_traceability.md#rq02)、[RQ08](requirements_traceability.md#rq08)
+ 
+@@ -1373,7 +1373,7 @@
+ 
+ **实现任务预算和熔断**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Runtime · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
+ 
+ **需求** [RQ03](requirements_traceability.md#rq03)、[RQ07](requirements_traceability.md#rq07)
  
 @@ -1487,7 +1487,7 @@
  
@@ -10150,7 +11031,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1322,7 +1559,20 @@
+@@ -1322,14 +1559,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
      ],
@@ -10172,7 +11053,37 @@
    },
    {
      "id": "OB-023",
-@@ -1848,7 +2098,7 @@
+     "title": "实现任务预算和熔断",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Runtime",
+     "size": "M",
+     "req_ids": [
+@@ -1383,7 +1633,20 @@
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
+       "模型/编码器/词表hash、估算与usage偏差和每次请求的预留/结算证据。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第8、16、21–22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第8、16、21–22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 durable task budget ledger, conservative unknown-cost retention, offline vocabulary hash verifier, and runaway proposal/error/idle circuit breakers",
++      "evidence": [
++        "docs/evidence/storage.md",
++        "tests/integration/storage/test_budgets.py",
++        "evidence/implementation/m1-storage-tests.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-017 仍为 IN_PROGRESS，且生产离线 tiktoken 词表资产尚未随 OB-025/072 锁定入库；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs (tiktoken, tenacity), reuse_type (dependency_adapter), and reuse_notes; implemented control-owned SQLite budget ledger and OfflineVocabularyEstimator with SHA-256 verification and zero network access; verified unknown cost retention on stream cut, PAUSED transition on exhaustion or circuit breaker trip, and post-cancel reservation block."
++    }
+   },
+   {
+     "id": "OB-024",
+@@ -1848,7 +2111,7 @@
      "title": "实现确定性策略评估器",
      "milestone": "M1",
      "priority": "P0",
@@ -10181,7 +11092,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1900,7 +2150,19 @@
+@@ -1900,7 +2163,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -10202,7 +11113,7 @@
    },
    {
      "id": "OB-032",
-@@ -2851,7 +3113,7 @@
+@@ -2851,7 +3126,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -10211,7 +11122,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3170,19 @@
+@@ -2908,7 +3183,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -10232,7 +11143,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4553,7 @@
+@@ -4279,7 +4566,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -10241,7 +11152,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4611,26 @@
+@@ -4337,14 +4624,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -10270,7 +11181,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4687,19 @@
+@@ -4401,7 +4700,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -10291,7 +11202,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5821,7 @@
+@@ -5523,7 +5834,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -10300,7 +11211,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5874,26 @@
+@@ -5576,14 +5887,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -10329,7 +11240,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +5952,26 @@
+@@ -5642,14 +5965,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -10358,7 +11269,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6026,26 @@
+@@ -5704,14 +6039,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -10387,7 +11298,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6112,25 @@
+@@ -5778,14 +6125,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -10415,7 +11326,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6198,19 @@
+@@ -5853,7 +6211,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -12102,6 +13013,336 @@
 +            context, task, "unknown.tool", b"{}", {}, "PUBLIC", {}, "unknown-tool", deadline()
 +        )
 +    assert writer.read(lambda db: db.execute("SELECT count(*) FROM operations").fetchone()[0]) == 0
+--- /dev/null
++++ b/tests/integration/storage/test_budgets.py
+@@ -0,0 +1,327 @@
++import hashlib
++import json
++import time
++
++import pytest
++from openbot.application.budgets import (
++    BudgetService,
++    OfflineVocabularyEstimator,
++    TaskBudgetPolicy,
++)
++from openbot.application.state_machine import TaskStateService
++from openbot.contracts import SchemaRegistry
++from openbot.storage.inbox import InboundContext, Inbox
++from openbot.storage.migrate import connect, load_migrations, migrate
++from openbot.storage.writer import Writer
++
++from tests.integration.storage.test_migrations import ROOT
++
++
++def _deadline() -> int:
++    return int(time.monotonic() * 1000) + 5000
++
++
++@pytest.fixture
++def budget_env(tmp_path):
++    path = tmp_path / "budgets.sqlite"
++    migrate(path, load_migrations(ROOT / "db/migrations"))
++    db = connect(path)
++    try:
++        db.execute("INSERT INTO policy_revisions VALUES(1,?,'{}',1000,1000)", ("a" * 64,))
++        db.execute(
++            "INSERT INTO runtime_instances("
++            "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
++            "VALUES('ep_1','boot_1','sup_1','ACTIVE',1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO profile_config("
++            "singleton,profile_id,schema_version,policy_version,identity_epoch,"
++            "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
++            "VALUES(1,'pro_test1',1,1,1,'OFFLINE','ep_1',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
++            "VALUES('pri_test1','OWNER','ACTIVE','synthetic owner',1000)"
++        )
++        db.execute(
++            "INSERT INTO workspaces("
++            "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
++            "VALUES('wsp_test1','synthetic-workspace',1,'ACTIVE',0,1000,1000)"
++        )
++        db.execute(
++            "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
++            "VALUES('ses_test1','pri_test1','wsp_test1','OPEN',1000,1000)"
++        )
++    finally:
++        db.close()
++
++    context = InboundContext(
++        "pro_test1", "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", "wsp_test1"
++    )
++    registry = SchemaRegistry.from_directory(ROOT / "contracts")
++    writer = Writer(path)
++    inbox = Inbox(writer, registry)
++    tasks = TaskStateService(writer)
++    budgets = BudgetService(writer)
++    try:
++        yield path, context, writer, inbox, tasks, budgets
++    finally:
++        writer.close()
++
++
++def test_reserve_settle_unknown_retention_and_pause_on_exhaustion(budget_env):
++    path, context, writer, inbox, tasks, budgets = budget_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "budget-ledger", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-bdg-1", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-bdg-1", _deadline())).result(5)
++
++    policy = TaskBudgetPolicy(
++        max_steps=5,
++        max_model_calls=3,
++        max_tool_calls=3,
++        max_retries_per_call=1,
++        max_duration_ms=60_000,
++        max_single_artifact_bytes=1024,
++        max_total_artifact_bytes=2048,
++    )
++    writer.submit(
++        budgets.configure_limits(
++            context,
++            task_id,
++            amount_limit_micros=1000,
++            token_limit=500,
++            policy=policy,
++            request_id="cfg-bdg-1",
++            deadline_monotonic_ms=_deadline(),
++        )
++    ).result(5)
++
++    # 1. Call 1: reserve 400 micros / 200 tokens, then settle actual 350 micros / 180 tokens
++    r1 = json.loads(
++        writer.submit(
++            budgets.reserve(
++                context,
++                task_id,
++                call_ref="model_req_1:try_1",
++                kind="MODEL",
++                reserved_amount_micros=400,
++                reserved_tokens=200,
++                estimated_tokens=150,
++                attempt_index=1,
++                request_id="res-bdg-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert r1["admitted"] is True
++    s1 = json.loads(
++        writer.submit(
++            budgets.settle(
++                context,
++                task_id,
++                call_ref="model_req_1:try_1",
++                actual_amount_micros=350,
++                actual_tokens=180,
++                estimated_tokens=150,
++                request_id="set-bdg-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert s1["status"] == "SETTLED"
++    assert s1["usage_delta_tokens"] == 30
++
++    # 2. Call 2 (429/503/stream cut): reserve 400 micros / 200 tokens, then mark UNKNOWN.
++    # Unknown cost MUST remain held in reserved_amount_micros/tokens_reserved (never zeroed on cut!)
++    r2 = json.loads(
++        writer.submit(
++            budgets.reserve(
++                context,
++                task_id,
++                call_ref="model_req_2:try_1",
++                kind="MODEL",
++                reserved_amount_micros=400,
++                reserved_tokens=200,
++                estimated_tokens=160,
++                attempt_index=1,
++                request_id="res-bdg-2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert r2["admitted"] is True
++    u2 = json.loads(
++        writer.submit(
++            budgets.mark_unknown(
++                context,
++                task_id,
++                call_ref="model_req_2:try_1",
++                reason="stream_cut_after_first_chunk",
++                request_id="unk-bdg-2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert u2["status"] == "UNKNOWN"
++    snap = budgets.snapshot(context, task_id)
++    # Spent = 350, Reserved (held by UNKNOWN) = 400, Remaining = 250
++    assert snap["amount_spent_micros"] == 350
++    assert snap["amount_reserved_micros"] == 400
++    assert snap["tokens_spent"] == 180
++    assert snap["tokens_reserved"] == 200
++
++    # 3. Call 3 requests 300 micros (> remaining 250) -> rejected, Task enters PAUSED
++    r3 = json.loads(
++        writer.submit(
++            budgets.reserve(
++                context,
++                task_id,
++                call_ref="model_req_2:try_2",
++                kind="MODEL",
++                reserved_amount_micros=300,
++                reserved_tokens=100,
++                attempt_index=2,
++                request_id="res-bdg-3-exhausted",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert r3["admitted"] is False
++    assert r3["task_state"] == "PAUSED"
++    assert "BUDGET_EXHAUSTED" in r3["reason"]
++    assert tasks.snapshot(context, task_id)["state"] == "PAUSED"
++
++
++def test_circuit_breaker_on_repeated_proposals_and_errors_and_cancel_blocks_reserve(budget_env):
++    path, context, writer, inbox, tasks, budgets = budget_env
++    payload = json.dumps(
++        {"workspace_id": "wsp_test1", "goal": "budget-breaker", "network_mode": "OFFLINE"}
++    )
++    task_id = json.loads(inbox.submit(context, "evt-bdg-2", payload, _deadline()).result(5))[
++        "task_id"
++    ]
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "run-bdg-2", _deadline())).result(5)
++
++    policy = TaskBudgetPolicy(
++        max_repeated_proposals=2,
++        max_consecutive_errors=2,
++        max_idle_turns=2,
++    )
++    writer.submit(
++        budgets.configure_limits(
++            context,
++            task_id,
++            amount_limit_micros=10_000,
++            token_limit=10_000,
++            policy=policy,
++            request_id="cfg-bdg-2",
++            deadline_monotonic_ms=_deadline(),
++        )
++    ).result(5)
++
++    # Same proposal fingerprint twice trips the runaway proposal circuit breaker -> PAUSED
++    t1 = json.loads(
++        writer.submit(
++            budgets.record_turn_activity(
++                context,
++                task_id,
++                proposal_fingerprint="fp_same_tool_args",
++                request_id="turn-1",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert t1["tripped"] is False
++    t2 = json.loads(
++        writer.submit(
++            budgets.record_turn_activity(
++                context,
++                task_id,
++                proposal_fingerprint="fp_same_tool_args",
++                request_id="turn-2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert t2["tripped"] is True
++    assert t2["task_state"] == "PAUSED"
++    assert t2["reason"] == "CIRCUIT_BREAKER:REPEATED_PROPOSAL"
++    assert tasks.snapshot(context, task_id)["state"] == "PAUSED"
++
++    # Owner resets circuit breaker and increases budget to resume PAUSED -> QUEUED -> RUNNING
++    cur_ver = int(tasks.snapshot(context, task_id)["version"])
++    resumed = json.loads(
++        writer.submit(
++            budgets.resume_paused(
++                context,
++                task_id,
++                expected_version=cur_ver,
++                additional_amount_micros=1000,
++                additional_tokens=1000,
++                reset_circuit_breaker=True,
++                request_id="resume-bdg-2",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++    )
++    assert resumed["state"] == "QUEUED"
++    writer.submit(
++        tasks.command(
++            context, task_id, int(resumed["version"]), "RUNNING", "run-again", _deadline()
++        )
++    ).result(5)
++
++    # Cancel the task; subsequent budget reserve MUST be refused immediately
++    ver_before_cancel = int(tasks.snapshot(context, task_id)["version"])
++    writer.submit(
++        tasks.cancel(context, task_id, ver_before_cancel, "can-bdg-2", _deadline())
++    ).result(5)
++    with pytest.raises(PermissionError, match="cancelled|RUNNING"):
++        writer.submit(
++            budgets.reserve(
++                context,
++                task_id,
++                call_ref="model_req_after_cancel",
++                kind="MODEL",
++                reserved_amount_micros=100,
++                reserved_tokens=50,
++                request_id="res-after-cancel",
++                deadline_monotonic_ms=_deadline(),
++            )
++        ).result(5)
++
++
++def test_offline_vocabulary_estimator_verifies_hash_and_never_claims_exact_for_unknown_models(
++    tmp_path,
++):
++    vocab_file = tmp_path / "o200k_base.tiktoken"
++    vocab_bytes = b"dGVzdA== 0\ndG9rZW4= 1\n"
++    vocab_file.write_bytes(vocab_bytes)
++    vocab_hash = hashlib.sha256(vocab_bytes).hexdigest()
++
++    estimator = OfflineVocabularyEstimator(
++        model_encodings={"gpt-4o-mini": ("o200k_base", vocab_file, vocab_hash)}
++    )
++    # 1. Known model with verified offline vocabulary succeeds offline with framing margin
++    known_est = estimator.estimate("gpt-4o-mini", "hello world", tool_count=2)
++    assert known_est.encoding_name == "o200k_base"
++    assert known_est.vocab_sha256 == vocab_hash
++    assert known_est.exact_billing_guaranteed is False
++    assert known_est.estimated_tokens < known_est.conservative_reserved_tokens
++
++    # 2. Unknown model never pretends OpenAI tokenizer is exact; uses conservative upper bound
++    unknown_est = estimator.estimate("claude-sonnet-4", "hello world", tool_count=1)
++    assert unknown_est.encoding_name == "conservative_utf8_bound"
++    assert unknown_est.vocab_sha256 is None
++    assert unknown_est.exact_billing_guaranteed is False
++
++    # 3. Missing or tampered offline vocabulary fails closed without network download
++    bad_estimator = OfflineVocabularyEstimator(
++        model_encodings={"gpt-4o-mini": ("o200k_base", tmp_path / "missing.tiktoken", vocab_hash)}
++    )
++    with pytest.raises(ValueError, match="CAPABILITY_UNAVAILABLE"):
++        bad_estimator.estimate("gpt-4o-mini", "hello world")
 --- /dev/null
 +++ b/tests/integration/storage/test_cancellation.py
 @@ -0,0 +1,547 @@

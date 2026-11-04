@@ -37,6 +37,6 @@ test_32_expired_lease_is_not_automatic_takeover_permission (__main__.DatabaseDes
 test_33_unknown_quarantine_blocks_new_task_or_operation_ids (__main__.DatabaseDesignTests.test_33_unknown_quarantine_blocks_new_task_or_operation_ids) ... ok
 
 ----------------------------------------------------------------------
-Ran 33 tests in 0.220s
+Ran 33 tests in 0.214s
 
 OK
