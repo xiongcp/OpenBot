@@ -146,6 +146,9 @@
 实现（OB-065）：新增 `services/core/src/openbot/tools/mcp/fault_harness.py`（`McpFaultAndMaliciousHarness`、`McpFaultReport`）与 `tests/integration/mcp/test_mcp_fault_and_malicious_server.py`：
 1. 恶意与故障 MCP 服务器回归：验证 `list_changed` 元数据篡改隔离、超长输出截断与秘密脱敏、深层嵌套 Schema 洪泛拦截、重复 JSON-RPC 请求 ID 拒绝、内建工具名称碰撞拦截、以及派发后 server 崩溃退出转入 `UNKNOWN` 且重试次数为 `0`（`post_dispatch_disconnect_retried_count=0`）。
 
+实现（OB-066）：新增 `contracts/schemas/skill_manifest.schema.json`、`services/core/src/openbot/application/skills.py`（`ReadOnlySkillLoader`、`SkillManifestSpec`、`LoadedReadOnlySkill`、`GeneratedSkillDraft`）与 `tests/unit/test_skills_loader.py`：
+1. 只读技能指令加载与草稿隔离：校验来源、版本、许可证、SHA-256 与允许能力白名单（拒绝内部管理或越权能力 `FORBIDDEN_SKILL_CAPABILITY`）；加载后的技能明确标记 `can_mutate_policy=False`、`can_expand_workspace=False`、`can_promote_reference_only_components=False`；自动生成的技能仅保存为 `DRAFT_NOT_INSTALLED`（`auto_installed=False`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -176,6 +179,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_registry.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_mcp_executor.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/mcp/test_mcp_fault_and_malicious_server.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_skills_loader.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -271,3 +275,5 @@
   1. Requires a qualified isolation backend (`CAPABILITY_UNAVAILABLE` otherwise), strips parent environment variables outside `allowed_env_keys`, ignores third-party `readOnlyHint`/`idempotentHint` annotations in favor of `ReviewedLocalMcpManifest`, and forbids MCP sampling (`MCP_SAMPLING_FORBIDDEN_IN_MVP`).
 - **OB-065 (`IN_PROGRESS`)**: Malicious and fault MCP server test suite (`services/core/src/openbot/tools/mcp/fault_harness.py` and `tests/integration/mcp/test_mcp_fault_and_malicious_server.py`, 1 passed):
   1. Covers `list_changed` metadata drift quarantine, oversized output truncation and secret redaction, schema depth flood rejection, duplicate JSON-RPC ID rejection, builtin name collision rejection, and post-dispatch crash `UNKNOWN` handling with `post_dispatch_disconnect_retried_count == 0`.
+- **OB-066 (`IN_PROGRESS`)**: Read-only skill instruction loader (`contracts/schemas/skill_manifest.schema.json`, `services/core/src/openbot/application/skills.py`, and `tests/unit/test_skills_loader.py`, 1 passed):
+  1. Validates skill provenance, version, license, SHA-256, and capability allowlist (`FORBIDDEN_SKILL_CAPABILITY` on admin/privileged tools); enforces `can_mutate_policy=False`, `can_expand_workspace=False`, `can_promote_reference_only_components=False`, and keeps generated skills in `DRAFT_NOT_INSTALLED` (`auto_installed=False`).
