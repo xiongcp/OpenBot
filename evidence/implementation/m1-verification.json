@@ -16,7 +16,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/m1-unit-contract-protocol.log",
-      "log_sha256": "cef2d5a154716e1702133db6ca29502f5306a49f1bd94ded90f3bf682edfbfb3"
+      "log_sha256": "61a596347e286c6b440a3ed630f32c4ecbcea16e31c03cb425ba23440ca0bbc6"
     },
     {
       "name": "lint",
@@ -41,7 +41,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/m1-format.log",
-      "log_sha256": "291d91fd4256e9a8b5d743c5c5fcb04dfee353294a3741d1ec385150e1711bf6"
+      "log_sha256": "7ea26dcf24cd7c1f9e57df608af570fd7294996eaab13186f23c19d7b566ea0b"
     },
     {
       "name": "types",
@@ -93,7 +93,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/m1-database-design.log",
-      "log_sha256": "94c9a79b7ce6b1a6b6f639ef3b20e0adf551c9a4a15fcced6ea9a8c5c864e036"
+      "log_sha256": "dbf3060faa30e40665ced79fa34a427afd403c4771239295ae2b755a6a20f88b"
     }
   ],
   "passed": true

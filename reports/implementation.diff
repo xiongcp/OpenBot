@@ -2160,8 +2160,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,130 @@
-+# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤与认证本地控制 API / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, and Authenticated Local Control API
+@@ -0,0 +1,138 @@
++# OB-017—020 / OB-022 / OB-028 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API 与 CLI / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, and CLI
 +
 +## 中文说明
 +
@@ -2234,6 +2234,10 @@
 +2. 完整控制端点与安全预览/核对规则：提供 `/v1/health`、`/v1/tasks`（含 `Idempotency-Key` 冲突 `409`）、`/v1/tasks/{id}/cancel`、`/v1/tasks/{id}/resume`、`/v1/approvals/{id}/preview`（永不暴露 `SECRET` 或原始 `nonce`）、`/v1/approvals/{id}/challenge`（仅限有效 `PENDING` 且 `owner_cli`）、`/v1/approvals/{id}/decide`、`/v1/operations/{id}`（含 `Operation.version`）、`/v1/operations/{id}/evidence`（只接收内联受限字节，拒绝 `host_path`）与 `/v1/operations/{id}/reconcile`（拒绝客户端指定 `target_state` 或 `revive_consumed_grant`）。
 +3. SSE 事件流游标与保留期校验（`/v1/tasks/{id}/events`）：当 `after_seq` 与 `Last-Event-ID` 同时存在且冲突时返回 `400 SSE_CURSOR_CONFLICT`；当游标早于保留期下界（`after_seq < min_retained_event_seq`）时返回 `410 CURSOR_EXPIRED_FETCH_SNAPSHOT`。
 +
++实现（OB-028）：更新 `services/core/src/openbot/cli.py`（`CliApiSession`、`run_cli_command`、`sanitize_terminal_text`）并新增 `tests/integration/cli/test_cli_workflow.py`：
++1. 纯本地认证 API 会话与零 SQLite 旁路：`task create|show|cancel|resume`、`approval preview|decide`（`APPROVE` 自动通过 `owner_cli` token 申请一次性 challenge nonce，`feishu_gateway` 调用返回码 `3`）、`operation reconcile`（上传内联证据生成 `OPERATION` artifact 后提交核对）全经 `/v1/*` 完成。
++2. 反旁路、ANSI 转义与超时未知语义：拦截 `--ignore-and-rerun`、`--force-success`、`--revive-consumed`（返回码 `6`）；`sanitize_terminal_text` 剥离 ANSI CSI/OSC 控制字符与富文本标签；无 daemon 返回码 `2`，等待超时返回码 `5` 且强制声明 `action_guaranteed_not_executed=false`、`requery_required=true`。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2242,10 +2246,11 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-028/029 垂直切片完整闭合。
++当前限制：上游 OB-093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-029 垂直切片完整闭合。
 +
 +## English Summary
 +
@@ -2291,6 +2296,9 @@
 +- **OB-081 (`IN_PROGRESS`)**: Authenticated loopback HTTP and SSE control API (`services/core/src/openbot/adapters/local_api/server.py`, `tests/contracts/local_api/`, and `tests/security/local_api/`, 2 passed):
 +  1. Loopback, Host/Origin, proxy header, profile, and scoped token enforcement: Rejects non-loopback IPs, `X-Forwarded-For` proxy headers, external `Origin`/`Host` headers, wrong `X-OpenBot-Profile`, `feishu_gateway` access to `/challenge`, and `webview_readonly` mutations.
 +  2. Control endpoints & SSE cursors: Implements `/v1/health`, `/v1/tasks`, `/v1/tasks/{id}/cancel`, `/v1/tasks/{id}/resume`, `/v1/approvals/{id}/preview` (never exposing `SECRET` or `nonce`), `/v1/approvals/{id}/challenge`, `/v1/approvals/{id}/decide`, `/v1/operations/{id}` (with `version`), `/v1/operations/{id}/evidence` (inline content only, rejecting `host_path`), `/v1/operations/{id}/reconcile` (rejecting client-supplied `target_state` or `revive_consumed_grant`), and `/v1/tasks/{id}/events` (`400` on `after_seq`/`Last-Event-ID` conflict, `410` on expired cursor).
++- **OB-028 (`IN_PROGRESS`)**: Authenticated CLI task, approval, and reconciliation commands (`services/core/src/openbot/cli.py` and `tests/integration/cli/test_cli_workflow.py`, 2 passed):
++  1. Loopback API session without SQLite bypass: Supports `task create|show|cancel|resume`, `approval preview|decide` (requesting owner-scoped challenge nonce before `APPROVE`), and `operation reconcile` (uploading inline evidence before reconciliation).
++  2. Anti-bypass, ANSI stripping, and timeout honesty: Rejects `--ignore-and-rerun`, `--force-success`, and `--revive-consumed` (exit code `6`); strips ANSI CSI/OSC and rich-text tags via `sanitize_terminal_text`; returns exit code `2` when daemon is down and exit code `5` on wait timeout with `action_guaranteed_not_executed=false` and `requery_required=true`.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2637,7 +2645,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,68 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2699,12 +2707,13 @@
 +- 推进 OB-044（实现消息发送用例与受控适配端口）：实现 MessageSendService、MessageSendTransportPort、MessageSendEnvelope 与 MessageSendResult（绑定最新不可变草稿哈希、目标账户与稳定 recipient_id，默认 RECONCILE_ONLY；拒绝将普通 owner_progress 通知授权复用为第三方发送授权，未资格化真实平台适配器返回 CAPABILITY_UNAVAILABLE；经 claim->begin_dispatch 后在事务外发送，断连丢回执时转 UNKNOWN/RECONCILING 并保留 quarantine，恢复器绝不自动重发）；新增集成测试通过，存储套件增至 89 passed，M0 增至 252 passed/3 skipped，M1 增至 271 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-044 记 IN_PROGRESS。
 +- 推进 OB-015（实现单实例 daemon 和调度租约）：实现 SingleInstanceSupervisorLock、DaemonHandoffTicket、ProfileSchedulerService 与 native/supervisor/src/instance_lock.rs（supervisor 独占非阻塞 flock 并签发 handoff ticket，子 daemon 校验凭据而不重复加锁避免父子自锁，第二实例立即返回 PROFILE_LOCK_HELD；old_workers_isolated=False 时拒绝开启新执行；单活动 Task 槽位在 WAITING_APPROVAL 释放，陈旧 runtime_epoch/fencing_token 提交拒绝）；新增 2 项集成测试通过，存储套件增至 91 passed，M0 增至 254 passed/3 skipped，M1 增至 273 passed/1 skipped。因上游 OB-093 仍为 IN_PROGRESS，OB-015 记 IN_PROGRESS。
 +- 推进 OB-081（在 M1 实现认证本地 HTTP 与 SSE 控制 API）：实现 LocalControlApiServer 与 ScopedTokenStore（loopback IP、Host/Origin 校验、拦截 X-Forwarded-For 代理伪造、X-OpenBot-Profile 绑定与 owner_cli/feishu_gateway/webview_readonly 分域 token；提供 health/tasks/cancel/resume/approvals preview & challenge & decide/operations snapshot & evidence & reconcile/SSE events；预览隐藏 SECRET，证据上传禁宿主路径，reconcile 禁客户端指定目标状态，SSE 校验游标冲突 400 与过期 410）；新增契约与安全测试通过，M0 增至 256 passed/3 skipped，M1 增至 275 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-081 记 IN_PROGRESS。
++- 推进 OB-028（提供 CLI 任务和审批操作）：实现 CliApiSession、run_cli_command 与 sanitize_terminal_text（通过认证本地 API 执行 task create/show/cancel/resume、approval preview/decide 与 operation reconcile，零 SQLite 旁路；拦截 --ignore-and-rerun/--force-success/--revive-consumed 返回码 6；剥离 ANSI CSI/OSC 与富文本标签；无 daemon 返回码 2，等待超时返回码 5 且声明 action_guaranteed_not_executed=false）；新增 2 项集成测试通过，M0 增至 258 passed/3 skipped，M1 增至 277 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-028 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
-+- Implemented and verified M1 runtime, security, tools, platform, and local control API tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-030`–`OB-044`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 256 passed M0 checks, and 275 passed M1 checks.
-+- Next ready M1 tasks: `OB-028` (CLI task & approval operations), `OB-029` (first persistent vertical slice), `OB-045` (security tool threat regression), and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
++- Implemented and verified M1 runtime, security, tools, platform, local control API, and CLI tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`, `OB-030`–`OB-044`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 258 passed M0 checks, and 277 passed M1 checks.
++- Next ready M1 tasks: `OB-029` (first persistent vertical slice), `OB-045` (security tool threat regression), and `OB-046` (minimal local Alpha boundary documentation), followed by M2/M3 ready tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -9469,34 +9478,321 @@
 +    return ToolCall(call_id, dto.tool_name, args.canonical)
 --- /dev/null
 +++ b/services/core/src/openbot/cli.py
-@@ -0,0 +1,27 @@
-+"""Minimal M0 diagnostics. Task commands belong to OB-028."""
+@@ -0,0 +1,314 @@
++"""Authenticated loopback CLI for OpenBot tasks, approvals, and reconciliation (OB-028)."""
 +
 +import argparse
 +import json
++import re
++import secrets
 +from collections.abc import Sequence
++from dataclasses import dataclass
++from typing import Any, Protocol
 +
 +from openbot import __version__
++from openbot.adapters.local_api.server import ApiRequest, ApiResponse
++
++_ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
++_ANSI_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
++_ANSI_OTHER_RE = re.compile(r"\x1b[@-Z\\-_]")
++_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
++_RICH_TAG_RE = re.compile(r"\[[/a-zA-Z0-9_=#. -]+\]")
++
++_FORBIDDEN_FLAGS = frozenset(
++    {
++        "--ignore-and-rerun",
++        "--force-success",
++        "--revive-consumed",
++    }
++)
++
++
++def sanitize_terminal_text(text: str) -> str:
++    """Strip ANSI escape sequences, control characters, and Rich markup tags from untrusted text."""
++    cleaned = _ANSI_OSC_RE.sub("", text)
++    cleaned = _ANSI_CSI_RE.sub("", cleaned)
++    cleaned = _ANSI_OTHER_RE.sub("", cleaned)
++    cleaned = _CONTROL_CHARS_RE.sub("", cleaned)
++    cleaned = _RICH_TAG_RE.sub("", cleaned)
++    return cleaned
++
++
++class CliTransport(Protocol):
++    def request(self, req: ApiRequest) -> ApiResponse: ...
++
++
++@dataclass(frozen=True, slots=True)
++class CliApiSession:
++    profile_id: str
++    token: str
++    transport: CliTransport
++    host: str = "127.0.0.1:41931"
++
++    def call(
++        self,
++        method: str,
++        path: str,
++        *,
++        body: dict[str, Any] | None = None,
++        idempotency_key: str | None = None,
++    ) -> ApiResponse:
++        headers = {
++            "Host": self.host,
++            "Authorization": f"Bearer {self.token}",
++            "X-OpenBot-Profile": self.profile_id,
++        }
++        if idempotency_key:
++            headers["Idempotency-Key"] = idempotency_key
++        raw_body = (
++            json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
++            if body is not None
++            else b""
++        )
++        return self.transport.request(
++            ApiRequest(method=method, path=path, headers=headers, body=raw_body)
++        )
++
++
++def _format_output(payload: dict[str, Any], *, as_json: bool) -> str:
++    if as_json:
++        return json.dumps(payload, sort_keys=True)
++    lines = [
++        f"{sanitize_terminal_text(str(k))}: {sanitize_terminal_text(str(v))}"
++        for k, v in sorted(payload.items())
++    ]
++    return "\n".join(lines)
++
++
++def _map_http_error(resp: ApiResponse, *, as_json: bool) -> tuple[int, str]:
++    try:
++        doc = resp.json()
++    except Exception:
++        doc = {"code": f"HTTP_{resp.status_code}"}
++    if resp.status_code in {401, 403}:
++        return 3, _format_output(
++            {"code": "AUTH_OR_PERMISSION_ERROR", "detail": doc}, as_json=as_json
++        )
++    if resp.status_code == 409:
++        return 4, _format_output(
++            {"code": "VERSION_OR_STATE_CONFLICT", "detail": doc}, as_json=as_json
++        )
++    return 6, _format_output({"code": "CLI_REQUEST_ERROR", "detail": doc}, as_json=as_json)
++
++
++def run_cli_command(
++    argv: Sequence[str], *, session: CliApiSession | None = None
++) -> tuple[int, str]:
++    """Execute a CLI command via the authenticated local API without touching SQLite directly."""
++    as_json = "--json" in argv
++    for arg in argv:
++        flag_name = arg.split("=", 1)[0]
++        if flag_name in _FORBIDDEN_FLAGS:
++            return 6, _format_output(
++                {
++                    "code": "FORBIDDEN_CLI_FLAG",
++                    "flag": flag_name,
++                    "message": "Client bypass flags are forbidden by OpenBot safety invariants.",
++                },
++                as_json=True,
++            )
++
++    if not argv:
++        return 6, _format_output({"code": "EMPTY_COMMAND"}, as_json=as_json)
++
++    if argv[0] == "version":
++        return 0, __version__
++    if argv[0] == "health" and session is None:
++        return 0, json.dumps(
++            {
++                "version": __version__,
++                "daemon_running": False,
++                "isolation": "CAPABILITY_UNAVAILABLE",
++                "stage": "M0",
++            }
++        )
++
++    if session is None:
++        return 2, _format_output(
++            {"code": "DAEMON_UNAVAILABLE", "message": "No active CLI API session configured."},
++            as_json=as_json,
++        )
++
++    try:
++        return _dispatch_authenticated(argv, session=session, as_json=as_json)
++    except ConnectionRefusedError as exc:
++        return 2, _format_output(
++            {"code": "DAEMON_UNAVAILABLE", "message": sanitize_terminal_text(str(exc))},
++            as_json=as_json,
++        )
++    except TimeoutError as exc:
++        return 5, _format_output(
++            {
++                "code": "WAIT_TIMEOUT_OUTCOME_UNKNOWN",
++                "action_guaranteed_not_executed": False,
++                "requery_required": True,
++                "message": sanitize_terminal_text(
++                    f"Wait timed out ({exc}); action may still execute. Re-query state."
++                ),
++            },
++            as_json=as_json,
++        )
++
++
++def _dispatch_authenticated(
++    argv: Sequence[str], *, session: CliApiSession, as_json: bool
++) -> tuple[int, str]:
++    parser = argparse.ArgumentParser(prog="openbot", add_help=False)
++    sub = parser.add_subparsers(dest="group")
++
++    # task group
++    p_task = sub.add_parser("task", add_help=False)
++    task_sub = p_task.add_subparsers(dest="action")
++
++    p_tc = task_sub.add_parser("create", add_help=False)
++    p_tc.add_argument("--workspace", required=True)
++    p_tc.add_argument("--goal", required=True)
++    p_tc.add_argument("--idempotency-key", default=None)
++    p_tc.add_argument("--json", action="store_true")
++
++    p_ts = task_sub.add_parser("show", add_help=False)
++    p_ts.add_argument("--task-id", required=True)
++    p_ts.add_argument("--json", action="store_true")
++
++    p_tcan = task_sub.add_parser("cancel", add_help=False)
++    p_tcan.add_argument("--task-id", required=True)
++    p_tcan.add_argument("--expected-version", type=int, required=True)
++    p_tcan.add_argument("--idempotency-key", default=None)
++    p_tcan.add_argument("--json", action="store_true")
++
++    p_tres = task_sub.add_parser("resume", add_help=False)
++    p_tres.add_argument("--task-id", required=True)
++    p_tres.add_argument("--expected-version", type=int, required=True)
++    p_tres.add_argument("--idempotency-key", default=None)
++    p_tres.add_argument("--json", action="store_true")
++
++    # approval group
++    p_apr = sub.add_parser("approval", add_help=False)
++    apr_sub = p_apr.add_subparsers(dest="action")
++
++    p_aprev = apr_sub.add_parser("preview", add_help=False)
++    p_aprev.add_argument("--approval-id", required=True)
++    p_aprev.add_argument("--json", action="store_true")
++
++    p_adec = apr_sub.add_parser("decide", add_help=False)
++    p_adec.add_argument("--approval-id", required=True)
++    p_adec.add_argument("--expected-version", type=int, required=True)
++    p_adec.add_argument("--binding-hash", required=True)
++    p_adec.add_argument("--decision", choices=("APPROVE", "DENY"), required=True)
++    p_adec.add_argument("--reason", default="cli_owner_decision")
++    p_adec.add_argument("--idempotency-key", default=None)
++    p_adec.add_argument("--json", action="store_true")
++
++    # operation group
++    p_op = sub.add_parser("operation", add_help=False)
++    op_sub = p_op.add_subparsers(dest="action")
++
++    p_orec = op_sub.add_parser("reconcile", add_help=False)
++    p_orec.add_argument("--operation-id", required=True)
++    p_orec.add_argument("--expected-version", type=int, required=True)
++    p_orec.add_argument(
++        "--outcome",
++        choices=("CONFIRMED_SUCCEEDED", "CONFIRMED_NOT_EXECUTED"),
++        required=True,
++    )
++    p_orec.add_argument("--evidence-content", required=True)
++    p_orec.add_argument("--idempotency-key", default=None)
++    p_orec.add_argument("--json", action="store_true")
++
++    args = parser.parse_args(argv)
++    idem = getattr(args, "idempotency_key", None) or f"cli_{secrets.token_hex(8)}"
++
++    if args.group == "task" and args.action == "create":
++        resp = session.call(
++            "POST",
++            "/v1/tasks",
++            body={
++                "workspace_id": args.workspace,
++                "goal": args.goal,
++                "network_mode": "OFFLINE",
++            },
++            idempotency_key=idem,
++        )
++    elif args.group == "task" and args.action == "show":
++        resp = session.call("GET", f"/v1/tasks/{args.task_id}")
++    elif args.group == "task" and args.action == "cancel":
++        resp = session.call(
++            "POST",
++            f"/v1/tasks/{args.task_id}/cancel",
++            body={"expected_version": args.expected_version},
++            idempotency_key=idem,
++        )
++    elif args.group == "task" and args.action == "resume":
++        resp = session.call(
++            "POST",
++            f"/v1/tasks/{args.task_id}/resume",
++            body={"expected_version": args.expected_version},
++            idempotency_key=idem,
++        )
++    elif args.group == "approval" and args.action == "preview":
++        resp = session.call("GET", f"/v1/approvals/{args.approval_id}/preview")
++    elif args.group == "approval" and args.action == "decide":
++        nonce = ""
++        if args.decision == "APPROVE":
++            chal_resp = session.call(
++                "POST", f"/v1/approvals/{args.approval_id}/challenge", idempotency_key=f"{idem}_ch"
++            )
++            if chal_resp.status_code >= 400:
++                return _map_http_error(chal_resp, as_json=as_json)
++            nonce = str(chal_resp.json()["nonce"])
++        body: dict[str, Any] = {
++            "expected_version": args.expected_version,
++            "expected_binding_hash": args.binding_hash,
++            "decision": args.decision,
++        }
++        if nonce:
++            body["nonce"] = nonce
++        resp = session.call(
++            "POST", f"/v1/approvals/{args.approval_id}/decide", body=body, idempotency_key=idem
++        )
++    elif args.group == "operation" and args.action == "reconcile":
++        ev_resp = session.call(
++            "POST",
++            f"/v1/operations/{args.operation_id}/evidence",
++            body={"content": args.evidence_content, "mime": "text/plain"},
++            idempotency_key=f"{idem}_ev",
++        )
++        if ev_resp.status_code >= 400:
++            return _map_http_error(ev_resp, as_json=as_json)
++        art_id = str(ev_resp.json()["object_id"])
++        resp = session.call(
++            "POST",
++            f"/v1/operations/{args.operation_id}/reconcile",
++            body={
++                "expected_version": args.expected_version,
++                "outcome": args.outcome,
++                "evidence_artifact_ids": [art_id],
++            },
++            idempotency_key=idem,
++        )
++    else:
++        return 6, _format_output({"code": "UNKNOWN_CLI_COMMAND"}, as_json=as_json)
++
++    if resp.status_code >= 400:
++        return _map_http_error(resp, as_json=as_json)
++    return 0, _format_output(resp.json(), as_json=as_json)
 +
 +
 +def main(argv: Sequence[str] | None = None) -> int:
++    if argv is not None and len(argv) == 1 and argv[0] in {"version", "health"}:
++        code, out = run_cli_command(argv)
++        print(out)
++        return code
 +    parser = argparse.ArgumentParser(prog="openbot")
 +    parser.add_argument("command", choices=("version", "health"))
 +    args = parser.parse_args(argv)
-+    if args.command == "version":
-+        print(__version__)
-+    else:
-+        print(
-+            json.dumps(
-+                {
-+                    "version": __version__,
-+                    "daemon_running": False,
-+                    "isolation": "CAPABILITY_UNAVAILABLE",
-+                    "stage": "M0",
-+                }
-+            )
-+        )
-+    return 0
++    code, out = run_cli_command([args.command])
++    print(out)
++    return code
 --- /dev/null
 +++ b/services/core/src/openbot/config.py
 @@ -0,0 +1,72 @@
@@ -15635,7 +15931,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-015—025 / OB-030—044 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收与认证本地 HTTP/SSE 控制 API；继续推进 OB-028/029/045/046
++- [in_progress] OB-015—025 / OB-028 / OB-030—044 / OB-081 单实例调度租约、持久资源锁、提案/审批、六维策略评估器、两次短事务派发、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件守卫、list/read/search/补丁/语言验证/消息草稿与发送工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离、进程树回收、认证本地 HTTP/SSE 控制 API 与 CLI 任务审批入口；继续推进 OB-029/045/046
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -16072,6 +16368,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Desktop · 规模 M
  
  **需求** [RQ04](requirements_traceability.md#rq04)、[RQ06](requirements_traceability.md#rq06)、[RQ10](requirements_traceability.md#rq10)
+ 
+@@ -2877,7 +2877,7 @@
+ 
+ **提供CLI任务和审批操作**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Platform · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
+ 
+ **需求** [RQ10](requirements_traceability.md#rq10)
  
 @@ -3112,7 +3112,7 @@
  
@@ -16830,7 +17135,37 @@
    },
    {
      "id": "OB-026",
-@@ -1786,7 +2088,7 @@
+@@ -1649,7 +1951,7 @@
+     "title": "提供CLI任务和审批操作",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Platform",
+     "size": "M",
+     "req_ids": [
+@@ -1706,7 +2008,19 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、22页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 authenticated CLI task/approval/reconcile commands over loopback API without SQLite bypass, ANSI/Rich terminal injection stripping, forbidden flag rejection, and honest timeout semantics",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/integration/cli/test_cli_workflow.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-018、OB-020、OB-022、OB-081、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (cli-toolchain, httpx), reuse_type (dependency_adapter), and reuse_notes; implemented CLI session over authenticated local API with deterministic JSON/human outputs and ANSI stripping."
++    }
+   },
+   {
+     "id": "OB-029",
+@@ -1786,7 +2100,7 @@
      "title": "实现数据库备份恢复与保留策略",
      "milestone": "M1",
      "priority": "P1",
@@ -16839,7 +17174,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -1841,14 +2143,27 @@
+@@ -1841,14 +2155,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "GC pin生命周期、快照/manifest校验、secret_ref失效与UNKNOWN恢复反例。"
      ],
@@ -16869,7 +17204,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1900,14 +2215,26 @@
+@@ -1900,14 +2227,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -16898,7 +17233,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -1960,14 +2287,27 @@
+@@ -1960,14 +2299,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -16928,7 +17263,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2022,14 +2362,27 @@
+@@ -2022,14 +2374,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "实际argv/最小env、二进制hash、全局限额与preprocessor拒绝证据。"
      ],
@@ -16958,7 +17293,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2090,14 +2443,27 @@
+@@ -2090,14 +2455,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "审批绑定的old/new hash、不可变新字节Artifact、逐文件提交/恢复manifest和具体解析库版本。"
      ],
@@ -16988,7 +17323,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2151,14 +2517,27 @@
+@@ -2151,14 +2529,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "实际加载grammar文件hash、禁网首次parse、worker故障和多文件恢复记录。"
      ],
@@ -17018,7 +17353,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -2207,14 +2586,27 @@
+@@ -2207,14 +2598,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17048,7 +17383,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2269,14 +2661,27 @@
+@@ -2269,14 +2673,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "受管进程/runner/浏览器出口范围、代理配置及绕过反例。"
      ],
@@ -17078,7 +17413,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2330,14 +2735,27 @@
+@@ -2330,14 +2747,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17108,7 +17443,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2392,14 +2810,27 @@
+@@ -2392,14 +2822,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "redactor规则/长度/flush合同、网络验证禁用配置、canary矩阵及明确未覆盖风险。"
      ],
@@ -17138,7 +17473,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2457,14 +2888,27 @@
+@@ -2457,14 +2900,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17168,7 +17503,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2525,14 +2969,27 @@
+@@ -2525,14 +2981,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "backend能力记录、实际容器ID/标签及完整stop→wait→export校验→remove时序、恶意导出拒绝证据。"
      ],
@@ -17198,7 +17533,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2595,14 +3052,27 @@
+@@ -2595,14 +3064,27 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "OS/arch/原语版本，PID身份/Job/容器归属与前后进程树清单及清理失败决定。"
      ],
@@ -17228,7 +17563,7 @@
      "owner_lane": "Runtime",
      "size": "S",
      "req_ids": [
-@@ -2647,14 +3117,27 @@
+@@ -2647,14 +3129,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17258,7 +17593,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2708,7 +3191,20 @@
+@@ -2708,7 +3203,20 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -17280,7 +17615,7 @@
    },
    {
      "id": "OB-045",
-@@ -2851,7 +3347,7 @@
+@@ -2851,7 +3359,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -17289,7 +17624,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3404,19 @@
+@@ -2908,7 +3416,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -17310,7 +17645,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4787,7 @@
+@@ -4279,7 +4799,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -17319,7 +17654,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4845,26 @@
+@@ -4337,14 +4857,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -17348,7 +17683,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4921,19 @@
+@@ -4401,7 +4933,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -17369,7 +17704,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5541,7 @@
+@@ -5009,7 +5553,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -17378,7 +17713,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5610,20 @@
+@@ -5078,7 +5622,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -17400,7 +17735,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6068,7 @@
+@@ -5523,7 +6080,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -17409,7 +17744,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6121,26 @@
+@@ -5576,14 +6133,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17438,7 +17773,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6199,26 @@
+@@ -5642,14 +6211,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -17467,7 +17802,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6273,26 @@
+@@ -5704,14 +6285,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17496,7 +17831,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6359,25 @@
+@@ -5778,14 +6371,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17524,7 +17859,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6445,19 @@
+@@ -5853,7 +6457,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -19171,6 +19506,291 @@
 +def crash_at(actual, requested):
 +    if actual == requested:
 +        raise CrashInjected(actual)
+--- /dev/null
++++ b/tests/integration/cli/test_cli_workflow.py
+@@ -0,0 +1,282 @@
++import json
++
++from openbot.adapters.local_api.server import ApiRequest, ApiResponse
++from openbot.cli import (
++    CliApiSession,
++    run_cli_command,
++    sanitize_terminal_text,
++)
++
++from tests.contracts.local_api.test_local_api_contracts import local_api_env
++
++__all__ = ["local_api_env"]
++
++
++class InProcessApiTransport:
++    def __init__(
++        self, server, *, simulate_timeout: bool = False, daemon_down: bool = False
++    ) -> None:
++        self._server = server
++        self.simulate_timeout = simulate_timeout
++        self.daemon_down = daemon_down
++
++    def request(self, req: ApiRequest) -> ApiResponse:
++        if self.daemon_down:
++            raise ConnectionRefusedError("Daemon is not running")
++        if self.simulate_timeout:
++            raise TimeoutError("Client timed out waiting for response")
++        return self._server.handle(req)
++
++
++def test_cli_full_task_approval_cancel_reconcile_resume_workflow_without_sqlite_bypass(
++    local_api_env,
++):
++    api, context, writer, tasks, ops, dispatcher, recovery, owner_token, gw_token, _ = local_api_env
++    from openbot.application.resources import ResourceRequest
++
++    session = CliApiSession(
++        profile_id="pro_test1",
++        token=owner_token,
++        transport=InProcessApiTransport(api),
++    )
++
++    # 1. Create task via CLI (--json)
++    code, out = run_cli_command(
++        [
++            "task",
++            "create",
++            "--workspace",
++            "wsp_test1",
++            "--goal",
++            "cli-e2e",
++            "--idempotency-key",
++            "cli-k1",
++            "--json",
++        ],
++        session=session,
++    )
++    assert code == 0
++    task_id = json.loads(out)["task_id"]
++
++    # Advance task to RUNNING and propose operation
++    writer.submit(tasks.command(context, task_id, 0, "RUNNING", "cli-run-1", 999999999999)).result(
++        5
++    )
++    proposed = json.loads(
++        ops.propose(
++            context,
++            task_id,
++            "gui.click",
++            '{"arg":"btn"}',
++            {"workspace_generation": 1, "files": []},
++            "WORKSPACE",
++            {"kind": "LOCAL", "resource_ref": context.workspace_id},
++            "cli-prop-1",
++            999999999999,
++        )
++    )
++    op_id, apr_id = proposed["operation_id"], proposed["approval_id"]
++
++    # 2. Preview approval and submit APPROVE decision via CLI
++    code_prev, out_prev = run_cli_command(
++        ["approval", "preview", "--approval-id", apr_id, "--json"],
++        session=session,
++    )
++    assert code_prev == 0
++    prev_doc = json.loads(out_prev)
++    assert prev_doc["approval_id"] == apr_id
++
++    # Gateway token is rejected from CLI approval decide because challenge is owner-only
++    gw_session = CliApiSession(
++        profile_id="pro_test1",
++        token=gw_token,
++        transport=InProcessApiTransport(api),
++    )
++    code_gw, _ = run_cli_command(
++        [
++            "approval",
++            "decide",
++            "--approval-id",
++            apr_id,
++            "--expected-version",
++            "1",
++            "--binding-hash",
++            proposed["binding_hash"],
++            "--decision",
++            "APPROVE",
++            "--json",
++        ],
++        session=gw_session,
++    )
++    assert code_gw == 3
++
++    code_dec, out_dec = run_cli_command(
++        [
++            "approval",
++            "decide",
++            "--approval-id",
++            apr_id,
++            "--expected-version",
++            "1",
++            "--binding-hash",
++            proposed["binding_hash"],
++            "--decision",
++            "APPROVE",
++            "--idempotency-key",
++            "cli-apr-k1",
++            "--json",
++        ],
++        session=session,
++    )
++    assert code_dec == 0
++    assert json.loads(out_dec)["operation_state"] == "READY"
++
++    # 3. Claim, dispatch, crash -> UNKNOWN -> CLI reconcile with inline evidence -> CLI resume
++    writer.submit(tasks.command(context, task_id, 3, "RUNNING", "cli-run-2", 999999999999)).result(
++        5
++    )
++    claimed = json.loads(
++        writer.submit(
++            dispatcher.claim(
++                context,
++                op_id,
++                "ep_1",
++                "exec_1",
++                [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1)],
++                30_000,
++                "cli-claim-1",
++                999999999999,
++            )
++        ).result(5)
++    )
++    writer.submit(
++        dispatcher.begin_dispatch(
++            context, op_id, claimed["attempt_id"], "ep_1", "exec_1", "cli-disp-1", 999999999999
++        )
++    ).result(5)
++    writer.submit(
++        recovery.recover_epoch(
++            context,
++            "ep_2",
++            "boot_2",
++            "sup_2",
++            old_epoch_isolated=True,
++            request_id="cli-rec-ep2",
++            deadline_monotonic_ms=999999999999,
++        )
++    ).result(5)
++
++    code_rec, out_rec = run_cli_command(
++        [
++            "operation",
++            "reconcile",
++            "--operation-id",
++            op_id,
++            "--expected-version",
++            "4",
++            "--outcome",
++            "CONFIRMED_SUCCEEDED",
++            "--evidence-content",
++            "cli verified receipt",
++            "--idempotency-key",
++            "cli-rec-k1",
++            "--json",
++        ],
++        session=session,
++    )
++    assert code_rec == 0
++    assert json.loads(out_rec)["operation_state"] == "SUCCEEDED"
++
++    # Resume task from RECONCILING -> QUEUED via CLI, then cancel via CLI
++    code_show, out_show = run_cli_command(
++        ["task", "show", "--task-id", task_id, "--json"], session=session
++    )
++    assert code_show == 0
++    t_ver = json.loads(out_show)["version"]
++
++    code_res, out_res = run_cli_command(
++        [
++            "task",
++            "resume",
++            "--task-id",
++            task_id,
++            "--expected-version",
++            str(t_ver),
++            "--idempotency-key",
++            "cli-res-k1",
++            "--json",
++        ],
++        session=session,
++    )
++    assert code_res == 0
++    assert json.loads(out_res)["state"] == "QUEUED"
++
++    code_can, out_can = run_cli_command(
++        [
++            "task",
++            "cancel",
++            "--task-id",
++            task_id,
++            "--expected-version",
++            str(t_ver + 1),
++            "--idempotency-key",
++            "cli-can-k1",
++            "--json",
++        ],
++        session=session,
++    )
++    assert code_can == 0
++    assert json.loads(out_can)["state"] == "CANCELLED"
++
++
++def test_cli_rejects_forbidden_flags_escapes_ansi_and_never_claims_unexecuted_on_timeout(
++    local_api_env,
++):
++    api, _, _, _, _, _, _, owner_token, _, _ = local_api_env
++    session = CliApiSession(
++        profile_id="pro_test1",
++        token=owner_token,
++        transport=InProcessApiTransport(api),
++    )
++
++    # 1. Forbidden bypass flags (--ignore-and-rerun, --force-success, --revive-consumed)
++    for bad_flag in ("--ignore-and-rerun", "--force-success", "--revive-consumed"):
++        code_bad, out_bad = run_cli_command(
++            ["operation", "reconcile", "--operation-id", "op_1", bad_flag],
++            session=session,
++        )
++        assert code_bad == 6
++        assert "FORBIDDEN_CLI_FLAG" in out_bad
++
++    # 2. ANSI / terminal control injection in untrusted text is stripped in human view
++    raw_malicious = "Goal \x1b[31m\x1b]0;FAKE APPROVAL PROMPT\x07[bold]click approve[/bold]"
++    sanitized = sanitize_terminal_text(raw_malicious)
++    assert "\x1b" not in sanitized
++    assert "\x07" not in sanitized
++    assert "[bold]" not in sanitized
++
++    # 3. Daemon down returns exit code 2; client wait timeout returns exit code 5 and
++    # NEVER claims the action was not executed!
++    down_session = CliApiSession(
++        profile_id="pro_test1",
++        token=owner_token,
++        transport=InProcessApiTransport(api, daemon_down=True),
++    )
++    c_down, out_down = run_cli_command(
++        ["task", "show", "--task-id", "tsk_1", "--json"], session=down_session
++    )
++    assert c_down == 2
++    assert json.loads(out_down)["code"] == "DAEMON_UNAVAILABLE"
++
++    timeout_session = CliApiSession(
++        profile_id="pro_test1",
++        token=owner_token,
++        transport=InProcessApiTransport(api, simulate_timeout=True),
++    )
++    c_to, out_to = run_cli_command(
++        ["task", "show", "--task-id", "tsk_1", "--json"], session=timeout_session
++    )
++    assert c_to == 5
++    to_doc = json.loads(out_to)
++    assert to_doc["action_guaranteed_not_executed"] is False
++    assert to_doc["requery_required"] is True
 --- /dev/null
 +++ b/tests/integration/platform/test_process_tree_supervision.py
 @@ -0,0 +1,120 @@

@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤与认证本地控制 API / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, and Authenticated Local Control API
+# OB-017—020 / OB-022 / OB-028 / OB-031—035 / OB-037—039 / OB-043—044 / OB-081：提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API 与 CLI / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Authenticated Local Control API, and CLI
 
 ## 中文说明
 
@@ -71,6 +71,10 @@
 2. 完整控制端点与安全预览/核对规则：提供 `/v1/health`、`/v1/tasks`（含 `Idempotency-Key` 冲突 `409`）、`/v1/tasks/{id}/cancel`、`/v1/tasks/{id}/resume`、`/v1/approvals/{id}/preview`（永不暴露 `SECRET` 或原始 `nonce`）、`/v1/approvals/{id}/challenge`（仅限有效 `PENDING` 且 `owner_cli`）、`/v1/approvals/{id}/decide`、`/v1/operations/{id}`（含 `Operation.version`）、`/v1/operations/{id}/evidence`（只接收内联受限字节，拒绝 `host_path`）与 `/v1/operations/{id}/reconcile`（拒绝客户端指定 `target_state` 或 `revive_consumed_grant`）。
 3. SSE 事件流游标与保留期校验（`/v1/tasks/{id}/events`）：当 `after_seq` 与 `Last-Event-ID` 同时存在且冲突时返回 `400 SSE_CURSOR_CONFLICT`；当游标早于保留期下界（`after_seq < min_retained_event_seq`）时返回 `410 CURSOR_EXPIRED_FETCH_SNAPSHOT`。
 
+实现（OB-028）：更新 `services/core/src/openbot/cli.py`（`CliApiSession`、`run_cli_command`、`sanitize_terminal_text`）并新增 `tests/integration/cli/test_cli_workflow.py`：
+1. 纯本地认证 API 会话与零 SQLite 旁路：`task create|show|cancel|resume`、`approval preview|decide`（`APPROVE` 自动通过 `owner_cli` token 申请一次性 challenge nonce，`feishu_gateway` 调用返回码 `3`）、`operation reconcile`（上传内联证据生成 `OPERATION` artifact 后提交核对）全经 `/v1/*` 完成。
+2. 反旁路、ANSI 转义与超时未知语义：拦截 `--ignore-and-rerun`、`--force-success`、`--revive-consumed`（返回码 `6`）；`sanitize_terminal_text` 剥离 ANSI CSI/OSC 控制字符与富文本标签；无 daemon 返回码 `2`，等待超时返回码 `5` 且强制声明 `action_guaranteed_not_executed=false`、`requery_required=true`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -79,10 +83,11 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/contracts/local_api tests/security/local_api -q --tb=short`（2 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/cli/test_cli_workflow.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-028/029 垂直切片完整闭合。
+当前限制：上游 OB-093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/028/031/032/033/034/035/037/038/039/043/044/081 均保持 IN_PROGRESS，待 OB-029 垂直切片完整闭合。
 
 ## English Summary
 
@@ -128,3 +133,6 @@
 - **OB-081 (`IN_PROGRESS`)**: Authenticated loopback HTTP and SSE control API (`services/core/src/openbot/adapters/local_api/server.py`, `tests/contracts/local_api/`, and `tests/security/local_api/`, 2 passed):
   1. Loopback, Host/Origin, proxy header, profile, and scoped token enforcement: Rejects non-loopback IPs, `X-Forwarded-For` proxy headers, external `Origin`/`Host` headers, wrong `X-OpenBot-Profile`, `feishu_gateway` access to `/challenge`, and `webview_readonly` mutations.
   2. Control endpoints & SSE cursors: Implements `/v1/health`, `/v1/tasks`, `/v1/tasks/{id}/cancel`, `/v1/tasks/{id}/resume`, `/v1/approvals/{id}/preview` (never exposing `SECRET` or `nonce`), `/v1/approvals/{id}/challenge`, `/v1/approvals/{id}/decide`, `/v1/operations/{id}` (with `version`), `/v1/operations/{id}/evidence` (inline content only, rejecting `host_path`), `/v1/operations/{id}/reconcile` (rejecting client-supplied `target_state` or `revive_consumed_grant`), and `/v1/tasks/{id}/events` (`400` on `after_seq`/`Last-Event-ID` conflict, `410` on expired cursor).
+- **OB-028 (`IN_PROGRESS`)**: Authenticated CLI task, approval, and reconciliation commands (`services/core/src/openbot/cli.py` and `tests/integration/cli/test_cli_workflow.py`, 2 passed):
+  1. Loopback API session without SQLite bypass: Supports `task create|show|cancel|resume`, `approval preview|decide` (requesting owner-scoped challenge nonce before `APPROVE`), and `operation reconcile` (uploading inline evidence before reconciliation).
+  2. Anti-bypass, ANSI stripping, and timeout honesty: Rejects `--ignore-and-rerun`, `--force-success`, and `--revive-consumed` (exit code `6`); strips ANSI CSI/OSC and rich-text tags via `sanitize_terminal_text`; returns exit code `2` when daemon is down and exit code `5` on wait timeout with `action_guaranteed_not_executed=false` and `requery_required=true`.
