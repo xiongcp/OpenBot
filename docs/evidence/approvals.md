@@ -1,4 +1,4 @@
-# OB-017—020 / OB-022 / OB-031—032 / OB-037—039：提案、审批、六维策略、两次短事务派发、恢复、取消、文件守卫、统一外发、密钥注入与敏感输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard, Egress, Secrets, and Output Redaction
+# OB-017—020 / OB-022 / OB-031—033 / OB-037—039：提案、审批、六维策略、派发、恢复、取消、文件守卫/只读工具、统一外发、密钥与输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard/Read Tools, Egress, Secrets, and Redaction
 
 ## 中文说明
 
@@ -28,6 +28,10 @@
 2. OS 目录句柄与 `O_NOFOLLOW` 逐步核验（`WorkspaceFileGuard`）：从工作区根 `dir_fd` 逐段执行 `os.lstat(..., dir_fd=cur_fd)` 与 `os.open(..., O_DIRECTORY | O_NOFOLLOW, dir_fd=cur_fd)` 校验 `st_dev` 与 `st_ino`，任何中间或末端 symlink、跨设备挂载、非普通文件或多硬链接写覆盖均立即拒绝；`observe` 记录父目录 inode、文件 inode 与 SHA-256，`write_atomic` 在同父目录句柄内复验父目录 inode 与旧文件 SHA-256 后经同目录临时文件 `fsync` + `os.replace(..., src_dir_fd=parent_fd, dst_dir_fd=parent_fd)` 原子替换，阻断观测后父目录被替换为外部符号链接的竞态。
 3. Git worktree 与 ripgrep 安全隔离（`build_safe_git_worktree_env_and_argv`、`build_safe_ripgrep_argv`）：在调用 Git 前审计 `.git/config` 与 `.gitattributes`，拒绝 `fsmonitor`、`hooksPath`、`sshCommand`、`filter.*` 等可执行指令，并强制 `-c core.hooksPath=/dev/null -c core.fsmonitor=false -c protocol.allow=never` 与 `GIT_CONFIG_NOSYSTEM=1`；ripgrep 构建器剥离 `RIPGREP_CONFIG_PATH` 并强制 `--no-config --no-pre --no-follow --`，确保模式串不注入 `--pre` 预处理器。
 
+实现（OB-033）：新增 `services/core/src/openbot/tools/workspace/read.py`（`WorkspaceReadTools`、`WorkspaceReadLimits`、`build_pinned_ripgrep_command`）：
+1. 固定摘要 `rg` 命令构建（`build_pinned_ripgrep_command`）：核验 `rg` 二进制真实文件与 SHA-256 摘要，清理 `RIPGREP_CONFIG_PATH` 与代理环境变量，固定生成 `--json --no-config --no-pre --no-follow -e <pattern> -- <subpath>`（不开放原始 flags，防止以 `--pre=` 开头的查询串注入预处理器），且不引入不必要的 `ripgrepy` 包装。
+2. 有界 `list_entries`、`read` 与 `search`（`WorkspaceReadTools`）：全部路径经 `WorkspaceFileGuard` 逐步句柄核验；MVP 严格以 UTF-8 为文本边界（拒绝含 NUL 字节的二进制文件 `BINARY_FILE_UNSUPPORTED` 与非 UTF-8 文件 `NON_UTF8_TEXT_UNSUPPORTED`，不因候选编码检测库自动扩张编码）；分别施加目录深度（`max_depth`）、扫描文件数（`max_files_scanned`）、单文件字节（`max_single_file_bytes`）、全局命中数（`max_global_matches`）、全局输出总字节（`max_global_output_bytes`）、单行字符（`max_line_chars`）与耗时（`timeout_ms`）上限；所有结果均携带 `sha256`、`provenance_kind='UNTRUSTED_WORKSPACE_FILE'` 与 `executable_instructions=False`。
+
 实现（OB-037）：新增 `services/core/src/openbot/policy/egress.py`（`EgressGuard`、`EgressRequest`、`EgressDecision`、`LocalModelRunnerAttestation`、`ControlledHttpConfig`、`build_controlled_http_config`）：
 1. 全出口统一评估：共享覆盖 `MODEL_GATEWAY`、`LOCAL_MODEL_RUNNER`、`FEISHU_NOTIFICATION`、`BROWSER`、`MCP`、`FILE_UPLOAD` 与 `MESSAGE_TOOL`；`OFFLINE` 模式阻断所有出口的全部远端连接（不只限制 LLM）；`SECRET` 数据在任何出口（含 `redacted=True`）均硬拒绝（`SECRET_EGRESS_FORBIDDEN`）。
 2. 敏感预览/摘要保护与隐式出口阻断：`SENSITIVE` 数据不会因放进通知卡片（返回 `REQUIRE_LOCAL`）、上下文摘要（`from_summary=True`）或 Artifact（`from_artifact=True`）而自动放行，发送到允许域名的模型也必须经过显式一次一审 `ASK`；任何 Provider 托管 `web_search`/`remote_mcp`、价格表/词表/语法包运行期下载或扫描器在线验证均直接 `DENY`。
@@ -46,13 +50,14 @@
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_workspace_read_tools.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/033/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 
 ## English Summary
 
@@ -68,6 +73,9 @@
   1. `validate_relative_workspace_path`: Rejects traversal, absolute paths, UNC/Win32 device prefixes (`\\?\`, `\\.\`), ADS (`:`), reserved Windows device names (`CON`, `NUL`, `COM1`, etc.), trailing dots/spaces, and `.git`/`.env`/private key paths.
   2. `WorkspaceFileGuard`: Walks directory descriptors step-by-step with `O_NOFOLLOW` and `dir_fd`, verifying `st_dev` and `st_ino` at every hop; `observe` and `write_atomic` re-verify parent directory inode and old SHA-256 before writing via `fsync` + `os.replace(..., src_dir_fd=parent_fd, dst_dir_fd=parent_fd)` to defeat symlink swap races.
   3. `build_safe_git_worktree_env_and_argv` & `build_safe_ripgrep_argv`: Rejects `.git/config` hooks/filters/fsmonitor and enforces `-c core.hooksPath=/dev/null`; strips `RIPGREP_CONFIG_PATH` and forces `--no-config --no-pre --no-follow --`.
+- **OB-033 (`IN_PROGRESS`)**: Bounded workspace `list`/`read`/`search` tools (`services/core/src/openbot/tools/workspace/read.py`):
+  1. `build_pinned_ripgrep_command`: Verifies pinned `rg` binary SHA-256, strips `RIPGREP_CONFIG_PATH` and proxy variables, and binds patterns with `-e` and paths after `--` alongside `--json --no-config --no-pre --no-follow`.
+  2. `WorkspaceReadTools`: Enforces `WorkspaceFileGuard` on every path, strict UTF-8 text boundary (rejecting binary NUL bytes and non-UTF-8 encodings), and separate limits on depth, files scanned, single-file size, global match count, global output bytes, line length, and timeout, tagging all outputs with `provenance_kind='UNTRUSTED_WORKSPACE_FILE'` and `executable_instructions=False`.
 - **OB-037 (`IN_PROGRESS`)**: Unified data egress policy (`services/core/src/openbot/policy/egress.py`):
   1. `EgressGuard`: Evaluates `PUBLIC`/`WORKSPACE`/`SENSITIVE`/`SECRET` across `MODEL_GATEWAY`, `LOCAL_MODEL_RUNNER`, `FEISHU_NOTIFICATION`, `BROWSER`, `MCP`, `FILE_UPLOAD`, and `MESSAGE_TOOL`; `OFFLINE` blocks remote egress across all surfaces; `SECRET` is always denied.
   2. Taint & implicit-feature protection: `SENSITIVE` data in notification cards returns `REQUIRE_LOCAL` and in summaries/artifacts to allowed model domains requires `ASK`; provider-hosted `web_search`/`remote_mcp`, asset downloads, and online secret verification are denied.
