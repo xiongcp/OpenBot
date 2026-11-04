@@ -2258,7 +2258,7 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,192 @@
 +# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
@@ -2362,6 +2362,9 @@
 +1. 零 CardKit 依赖的纯函数普通卡片：支持任务审批卡与结果回执卡离线构造，无隐式发送或 owner 赋权副作用。
 +2. 敏感或截断影响强制 `REQUIRE_LOCAL`：当 `data_class` 为 `SENSITIVE`/`SECRET` 或预览被截断（`truncated=True`）时，自动隐藏敏感摘要并禁用远端一键批准按钮（`mode='REQUIRE_LOCAL'`，`remote_approve_enabled=False`）；结果卡对 `UNKNOWN` 明确标记 `RECONCILIATION_REQUIRED`。
 +
++实现（OB-052）：新增 `services/feishu_gateway/src/openbot_feishu/progress.py`（`FeishuProgressCardCoordinator`、`CoalescedProgressUpdate`）与 `tests/unit/test_feishu_progress.py`：
++1. 版本递增与高频进度合并节流：节流窗口内的 100 次中间进度更新自动合并为 1 条待投递快照（`coalesced_count=99`），处理 `retry_after` 限流退避；终态（`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`）锁定后绝不被迟到的 `RUNNING` 进度回写覆盖。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2378,6 +2381,7 @@
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_inbound.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_approval_callback.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cards.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_progress.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
@@ -2445,6 +2449,8 @@
 +  1. Extracts the real `event.operator.open_id` and verifies active owner pairing while ignoring forged `action.value.is_owner` fields; rejects stale cards on cancelled tasks (`APPROVAL_REJECTED_OR_STALE`) and never claims approval on unconfirmed database commits (`COMMIT_UNCONFIRMED`).
 +- **OB-051 (`IN_PROGRESS`)**: Pure Feishu plain card builders (`services/feishu_gateway/src/openbot_feishu/cards.py` and `tests/unit/test_feishu_cards.py`, 1 passed):
 +  1. Builds plain approval and result cards without CardKit; enforces `REQUIRE_LOCAL` (disabling remote approve and omitting sensitive text) when `data_class` is `SENSITIVE`/`SECRET` or `truncated=True`, and flags `UNKNOWN` outcomes with `RECONCILIATION_REQUIRED`.
++- **OB-052 (`IN_PROGRESS`)**: Feishu progress card throttling and terminal ordering (`services/feishu_gateway/src/openbot_feishu/progress.py` and `tests/unit/test_feishu_progress.py`, 1 passed):
++  1. Coalesces rapid intermediate progress updates (100 updates merged into 1 emission), respects `retry_after` rate-limit backoff, and prevents late `RUNNING` updates from overwriting terminal states (`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2890,7 +2896,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,77 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2961,12 +2967,13 @@
 +- 推进 OB-049（实现飞书 WebSocket 入站适配）：实现 FeishuInboundAdapter、FeishuInboundConfig 与 InboundEventOutcome（通过受限本地 API 提交入站消息，仅在 Inbox 持久化成功后才返回 ws_ack=True，持久化失败返回 ws_ack=False；默认拒绝群聊 GROUP_CHAT_DISABLED、陌生发信人 UNPAIRED_SENDER、跨租户与超限附件 ATTACHMENT_TOO_LARGE，重复事件幂等返回同一 task_id，回调线程不等待 LLM）；新增集成测试通过，M0 增至 269 passed/3 skipped，M1 增至 288 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-049 记 IN_PROGRESS。
 +- 推进 OB-050（实现飞书审批 callback 处理）：实现 RemoteApprovalUseCase 与 FeishuApprovalCallbackHandler（校验真实 operator.open_id 配对状态，忽略 action.value 中伪造的 is_owner 字段；拦截已取消 Task 的旧审批卡，数据库忙/未确认提交时返回 COMMIT_UNCONFIRMED 且 approved=False，不等待模型或 worker）；新增集成测试通过，M0 增至 270 passed/3 skipped，M1 增至 289 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-050 记 IN_PROGRESS。
 +- 推进 OB-051（实现普通卡片与结果回执）：实现 FeishuPlainCardBuilder（无 CardKit 依赖的纯函数普通卡片构造，当 data_class 为 SENSITIVE/SECRET 或 truncated=True 时强制 REQUIRE_LOCAL 并禁用远端批准按钮；对 UNKNOWN 结果明确标注 RECONCILIATION_REQUIRED）；新增单元测试通过，M0 增至 271 passed/3 skipped，M1 增至 290 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-051 记 IN_PROGRESS。
++- 推进 OB-052（实现进度卡节流与更新顺序）：实现 FeishuProgressCardCoordinator 与 CoalescedProgressUpdate（单调递增 card_revision，节流窗口内 100 次进度合并为 1 条更新，支持 retry_after 退避，且锁定终态防止迟到 RUNNING 进度覆盖 SUCCEEDED/FAILED/CANCELLED）；新增单元测试通过，M0 增至 272 passed/3 skipped，M1 增至 291 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-052 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed M2 `OB-094`, `OB-048`, `OB-049`, `OB-050`, and `OB-051` (plain Feishu approval/result cards with `REQUIRE_LOCAL` protection); continuing with `OB-052`–`OB-056` and M3 tasks.
++- Completed M2 `OB-094`, `OB-048`, `OB-049`, `OB-050`, `OB-051`, and `OB-052` (progress card coalescing, `retry_after`, and terminal state protection); continuing with `OB-053`–`OB-056` and M3 tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -17951,6 +17958,82 @@
 +            display_name=display_name,
 +        )
 --- /dev/null
++++ b/services/feishu_gateway/src/openbot_feishu/progress.py
+@@ -0,0 +1,73 @@
++"""Monotonic card revision, progress coalescing, retry_after, and terminal guard (OB-052)."""
++
++from dataclasses import dataclass
++
++_TERMINAL_STATES = frozenset({"SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"})
++
++
++@dataclass(frozen=True, slots=True)
++class CoalescedProgressUpdate:
++    task_id: str
++    card_revision: int
++    state: str
++    summary: str
++    coalesced_count: int
++
++
++@dataclass
++class _TaskProgressSlot:
++    card_revision: int = 0
++    state: str = "QUEUED"
++    summary: str = ""
++    coalesced_count: int = 0
++    dirty: bool = False
++    next_allowed_ms: int = 0
++    terminal_locked: bool = False
++
++
++class FeishuProgressCardCoordinator:
++    """Coalesce intermediate progress updates, protect terminal state, and honor retry_after."""
++
++    def __init__(self, *, min_interval_ms: int = 500) -> None:
++        self._min_interval_ms = max(0, min_interval_ms)
++        self._slots: dict[str, _TaskProgressSlot] = {}
++
++    def record_update(self, *, task_id: str, state: str, summary: str, now_ms: int) -> None:
++        slot = self._slots.setdefault(task_id, _TaskProgressSlot())
++        # Late non-terminal updates NEVER overwrite an already-recorded terminal state
++        if slot.terminal_locked and state not in _TERMINAL_STATES:
++            return
++        if slot.dirty:
++            slot.coalesced_count += 1
++        slot.card_revision += 1
++        slot.state = state
++        slot.summary = summary
++        slot.dirty = True
++        if state in _TERMINAL_STATES:
++            slot.terminal_locked = True
++            slot.next_allowed_ms = min(slot.next_allowed_ms, now_ms)
++
++    def on_rate_limited(self, *, task_id: str, retry_after_ms: int, now_ms: int) -> None:
++        slot = self._slots.setdefault(task_id, _TaskProgressSlot())
++        slot.next_allowed_ms = max(slot.next_allowed_ms, now_ms + max(0, retry_after_ms))
++
++    def drain_due(self, *, now_ms: int) -> tuple[CoalescedProgressUpdate, ...]:
++        out: list[CoalescedProgressUpdate] = []
++        for task_id, slot in sorted(self._slots.items()):
++            if not slot.dirty:
++                continue
++            if not slot.terminal_locked and now_ms < slot.next_allowed_ms:
++                continue
++            out.append(
++                CoalescedProgressUpdate(
++                    task_id=task_id,
++                    card_revision=slot.card_revision,
++                    state=slot.state,
++                    summary=slot.summary,
++                    coalesced_count=slot.coalesced_count,
++                )
++            )
++            slot.dirty = False
++            slot.coalesced_count = 0
++            slot.next_allowed_ms = now_ms + self._min_interval_ms
++        return tuple(out)
+--- /dev/null
 +++ b/task_plan.md
 @@ -0,0 +1,40 @@
 +# OpenBot v1.2 实施计划
@@ -18506,6 +18589,15 @@
 +阶段 M2 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
  
  **需求** [RQ06](requirements_traceability.md#rq06)、[RQ08](requirements_traceability.md#rq08)
+ 
+@@ -3569,7 +3569,7 @@
+ 
+ **实现进度卡节流与更新顺序**
+ 
+-阶段 M2 · 优先级 P1 · 状态 TODO · 能力域 Integration · 规模 M
++阶段 M2 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
+ 
+ **需求** [RQ02](requirements_traceability.md#rq02)、[RQ08](requirements_traceability.md#rq08)
  
 @@ -4319,7 +4319,7 @@
  
@@ -19949,7 +20041,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -3160,7 +3756,19 @@
+@@ -3160,14 +3756,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -19970,7 +20062,36 @@
    },
    {
      "id": "OB-052",
-@@ -4279,7 +4887,7 @@
+     "title": "实现进度卡节流与更新顺序",
+     "milestone": "M2",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Integration",
+     "size": "M",
+     "req_ids": [
+@@ -3216,7 +3824,19 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第10、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第10、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 FeishuProgressCardCoordinator coalescing intermediate updates, honoring retry_after, and locking terminal states against late RUNNING updates",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_feishu_progress.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-021、OB-051 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (lark-oapi), reuse_type (control_owned), and reuse_notes; implemented monotonic card_revision, coalescing, retry_after, and terminal state protection."
++    }
+   },
+   {
+     "id": "OB-053",
+@@ -4279,7 +4899,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -19979,7 +20100,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4945,26 @@
+@@ -4337,14 +4957,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -20008,7 +20129,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5021,19 @@
+@@ -4401,7 +5033,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -20029,7 +20150,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5641,7 @@
+@@ -5009,7 +5653,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -20038,7 +20159,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5710,20 @@
+@@ -5078,7 +5722,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -20060,7 +20181,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6168,7 @@
+@@ -5523,7 +6180,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -20069,7 +20190,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6221,26 @@
+@@ -5576,14 +6233,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20098,7 +20219,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6299,26 @@
+@@ -5642,14 +6311,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -20127,7 +20248,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6373,26 @@
+@@ -5704,14 +6385,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20156,7 +20277,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6459,25 @@
+@@ -5778,14 +6471,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20184,7 +20305,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6545,26 @@
+@@ -5853,14 +6557,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20213,7 +20334,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,7 +6618,20 @@
+@@ -5914,7 +6630,20 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -30291,6 +30412,42 @@
 +    )
 +    assert unk_card.reconciliation_required is True
 +    assert "RECONCILIATION_REQUIRED" in str(unk_card.card_json)
+--- /dev/null
++++ b/tests/unit/test_feishu_progress.py
+@@ -0,0 +1,33 @@
++from openbot_feishu.progress import FeishuProgressCardCoordinator
++
++
++def test_feishu_progress_coalesces_100_updates_and_protects_terminal_state() -> None:
++    coord = FeishuProgressCardCoordinator(min_interval_ms=500)
++
++    # 1. Rapid 100 progress updates within throttle window coalesce into 1 pending revision
++    for i in range(1, 101):
++        coord.record_update(
++            task_id="tsk_1",
++            state="RUNNING",
++            summary=f"step {i}",
++            now_ms=1000 + i,
++        )
++    due = coord.drain_due(now_ms=2000)
++    assert len(due) == 1
++    assert due[0].summary == "step 100"
++    assert due[0].coalesced_count == 99
++
++    # 2. retry_after delays next flush until backoff expires
++    coord.on_rate_limited(task_id="tsk_1", retry_after_ms=3000, now_ms=2000)
++    coord.record_update(task_id="tsk_1", state="RUNNING", summary="step 101", now_ms=2500)
++    assert coord.drain_due(now_ms=4000) == ()
++    due_after = coord.drain_due(now_ms=5001)
++    assert len(due_after) == 1
++
++    # 3. Terminal state (SUCCEEDED/FAILED/CANCELLED) is never overwritten by late RUNNING updates
++    coord.record_update(task_id="tsk_1", state="SUCCEEDED", summary="done", now_ms=6000)
++    coord.record_update(task_id="tsk_1", state="RUNNING", summary="late step 50", now_ms=6005)
++    final_due = coord.drain_due(now_ms=6010)
++    assert len(final_due) == 1
++    assert final_due[0].state == "SUCCEEDED"
++    assert final_due[0].summary == "done"
 --- /dev/null
 +++ b/tests/unit/test_filesystem_guard.py
 @@ -0,0 +1,116 @@

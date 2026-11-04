@@ -101,6 +101,9 @@
 1. 零 CardKit 依赖的纯函数普通卡片：支持任务审批卡与结果回执卡离线构造，无隐式发送或 owner 赋权副作用。
 2. 敏感或截断影响强制 `REQUIRE_LOCAL`：当 `data_class` 为 `SENSITIVE`/`SECRET` 或预览被截断（`truncated=True`）时，自动隐藏敏感摘要并禁用远端一键批准按钮（`mode='REQUIRE_LOCAL'`，`remote_approve_enabled=False`）；结果卡对 `UNKNOWN` 明确标记 `RECONCILIATION_REQUIRED`。
 
+实现（OB-052）：新增 `services/feishu_gateway/src/openbot_feishu/progress.py`（`FeishuProgressCardCoordinator`、`CoalescedProgressUpdate`）与 `tests/unit/test_feishu_progress.py`：
+1. 版本递增与高频进度合并节流：节流窗口内的 100 次中间进度更新自动合并为 1 条待投递快照（`coalesced_count=99`），处理 `retry_after` 限流退避；终态（`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`）锁定后绝不被迟到的 `RUNNING` 进度回写覆盖。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -117,6 +120,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_inbound.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_approval_callback.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cards.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_progress.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -184,3 +188,5 @@
   1. Extracts the real `event.operator.open_id` and verifies active owner pairing while ignoring forged `action.value.is_owner` fields; rejects stale cards on cancelled tasks (`APPROVAL_REJECTED_OR_STALE`) and never claims approval on unconfirmed database commits (`COMMIT_UNCONFIRMED`).
 - **OB-051 (`IN_PROGRESS`)**: Pure Feishu plain card builders (`services/feishu_gateway/src/openbot_feishu/cards.py` and `tests/unit/test_feishu_cards.py`, 1 passed):
   1. Builds plain approval and result cards without CardKit; enforces `REQUIRE_LOCAL` (disabling remote approve and omitting sensitive text) when `data_class` is `SENSITIVE`/`SECRET` or `truncated=True`, and flags `UNKNOWN` outcomes with `RECONCILIATION_REQUIRED`.
+- **OB-052 (`IN_PROGRESS`)**: Feishu progress card throttling and terminal ordering (`services/feishu_gateway/src/openbot_feishu/progress.py` and `tests/unit/test_feishu_progress.py`, 1 passed):
+  1. Coalesces rapid intermediate progress updates (100 updates merged into 1 emission), respects `retry_after` rate-limit backoff, and prevents late `RUNNING` updates from overwriting terminal states (`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`).
