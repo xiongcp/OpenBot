@@ -69,9 +69,10 @@
 - 推进 OB-050（实现飞书审批 callback 处理）：实现 RemoteApprovalUseCase 与 FeishuApprovalCallbackHandler（校验真实 operator.open_id 配对状态，忽略 action.value 中伪造的 is_owner 字段；拦截已取消 Task 的旧审批卡，数据库忙/未确认提交时返回 COMMIT_UNCONFIRMED 且 approved=False，不等待模型或 worker）；新增集成测试通过，M0 增至 270 passed/3 skipped，M1 增至 289 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-050 记 IN_PROGRESS。
 - 推进 OB-051（实现普通卡片与结果回执）：实现 FeishuPlainCardBuilder（无 CardKit 依赖的纯函数普通卡片构造，当 data_class 为 SENSITIVE/SECRET 或 truncated=True 时强制 REQUIRE_LOCAL 并禁用远端批准按钮；对 UNKNOWN 结果明确标注 RECONCILIATION_REQUIRED）；新增单元测试通过，M0 增至 271 passed/3 skipped，M1 增至 290 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-051 记 IN_PROGRESS。
 - 推进 OB-052（实现进度卡节流与更新顺序）：实现 FeishuProgressCardCoordinator 与 CoalescedProgressUpdate（单调递增 card_revision，节流窗口内 100 次进度合并为 1 条更新，支持 retry_after 退避，且锁定终态防止迟到 RUNNING 进度覆盖 SUCCEEDED/FAILED/CANCELLED）；新增单元测试通过，M0 增至 272 passed/3 skipped，M1 增至 291 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-052 记 IN_PROGRESS。
+- 推进 OB-053（实现 CardKit 与更新通道降级）：实现 FeishuCardChannelSelector、CardChannelPolicy 与 ChannelSelection（回调 token 寿命严格自 token_minted_ms 起算，45 分钟后点击不误判过期；无权限、token 过期、次数耗尽或原消息不可更新时降级为 MESSAGE_PATCH_API 或 PLAIN_RESEND）；新增单元测试通过，M0 增至 273 passed/3 skipped，M1 增至 292 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-053 记 IN_PROGRESS。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed M2 `OB-094`, `OB-048`, `OB-049`, `OB-050`, `OB-051`, and `OB-052` (progress card coalescing, `retry_after`, and terminal state protection); continuing with `OB-053`–`OB-056` and M3 tasks.
+- Completed M2 `OB-094`, `OB-048`–`OB-053` (including CardKit channel selection and fallback); continuing with `OB-054`–`OB-056` and M3 tasks.

@@ -2258,7 +2258,7 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,198 @@
 +# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
@@ -2365,6 +2365,9 @@
 +实现（OB-052）：新增 `services/feishu_gateway/src/openbot_feishu/progress.py`（`FeishuProgressCardCoordinator`、`CoalescedProgressUpdate`）与 `tests/unit/test_feishu_progress.py`：
 +1. 版本递增与高频进度合并节流：节流窗口内的 100 次中间进度更新自动合并为 1 条待投递快照（`coalesced_count=99`），处理 `retry_after` 限流退避；终态（`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`）锁定后绝不被迟到的 `RUNNING` 进度回写覆盖。
 +
++实现（OB-053）：新增 `services/feishu_gateway/src/openbot_feishu/cardkit.py`（`FeishuCardChannelSelector`、`CardChannelPolicy`、`ChannelSelection`）与 `tests/unit/test_feishu_cardkit.py`：
++1. 回调 token 寿命从生成时刻（`token_minted_ms`）起算：任务创建 45 分钟后用户点击生成回调 token 时，不会因以任务创建时刻起算而误判 token 过期；当无 CardKit 权限、token 过期、使用次数耗尽或原消息不可更新时，平滑降级至 `MESSAGE_PATCH_API` 或 `PLAIN_RESEND`。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2382,6 +2385,7 @@
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_approval_callback.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cards.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_progress.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cardkit.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
@@ -2451,6 +2455,8 @@
 +  1. Builds plain approval and result cards without CardKit; enforces `REQUIRE_LOCAL` (disabling remote approve and omitting sensitive text) when `data_class` is `SENSITIVE`/`SECRET` or `truncated=True`, and flags `UNKNOWN` outcomes with `RECONCILIATION_REQUIRED`.
 +- **OB-052 (`IN_PROGRESS`)**: Feishu progress card throttling and terminal ordering (`services/feishu_gateway/src/openbot_feishu/progress.py` and `tests/unit/test_feishu_progress.py`, 1 passed):
 +  1. Coalesces rapid intermediate progress updates (100 updates merged into 1 emission), respects `retry_after` rate-limit backoff, and prevents late `RUNNING` updates from overwriting terminal states (`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`).
++- **OB-053 (`IN_PROGRESS`)**: CardKit capability selector and channel fallback (`services/feishu_gateway/src/openbot_feishu/cardkit.py` and `tests/unit/test_feishu_cardkit.py`, 1 passed):
++  1. Tracks callback token TTL strictly from `token_minted_ms` (so clicking 45 minutes after task creation does not falsely expire the newly minted token) and degrades to `MESSAGE_PATCH_API` or `PLAIN_RESEND` when permissions, TTL, use count, or message updatability are unavailable.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2896,7 +2902,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,78 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2968,12 +2974,13 @@
 +- 推进 OB-050（实现飞书审批 callback 处理）：实现 RemoteApprovalUseCase 与 FeishuApprovalCallbackHandler（校验真实 operator.open_id 配对状态，忽略 action.value 中伪造的 is_owner 字段；拦截已取消 Task 的旧审批卡，数据库忙/未确认提交时返回 COMMIT_UNCONFIRMED 且 approved=False，不等待模型或 worker）；新增集成测试通过，M0 增至 270 passed/3 skipped，M1 增至 289 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-050 记 IN_PROGRESS。
 +- 推进 OB-051（实现普通卡片与结果回执）：实现 FeishuPlainCardBuilder（无 CardKit 依赖的纯函数普通卡片构造，当 data_class 为 SENSITIVE/SECRET 或 truncated=True 时强制 REQUIRE_LOCAL 并禁用远端批准按钮；对 UNKNOWN 结果明确标注 RECONCILIATION_REQUIRED）；新增单元测试通过，M0 增至 271 passed/3 skipped，M1 增至 290 passed/1 skipped。因上游 OB-047 阻塞于真实飞书租户，OB-051 记 IN_PROGRESS。
 +- 推进 OB-052（实现进度卡节流与更新顺序）：实现 FeishuProgressCardCoordinator 与 CoalescedProgressUpdate（单调递增 card_revision，节流窗口内 100 次进度合并为 1 条更新，支持 retry_after 退避，且锁定终态防止迟到 RUNNING 进度覆盖 SUCCEEDED/FAILED/CANCELLED）；新增单元测试通过，M0 增至 272 passed/3 skipped，M1 增至 291 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-052 记 IN_PROGRESS。
++- 推进 OB-053（实现 CardKit 与更新通道降级）：实现 FeishuCardChannelSelector、CardChannelPolicy 与 ChannelSelection（回调 token 寿命严格自 token_minted_ms 起算，45 分钟后点击不误判过期；无权限、token 过期、次数耗尽或原消息不可更新时降级为 MESSAGE_PATCH_API 或 PLAIN_RESEND）；新增单元测试通过，M0 增至 273 passed/3 skipped，M1 增至 292 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-053 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed M2 `OB-094`, `OB-048`, `OB-049`, `OB-050`, `OB-051`, and `OB-052` (progress card coalescing, `retry_after`, and terminal state protection); continuing with `OB-053`–`OB-056` and M3 tasks.
++- Completed M2 `OB-094`, `OB-048`–`OB-053` (including CardKit channel selection and fallback); continuing with `OB-054`–`OB-056` and M3 tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -17654,6 +17661,96 @@
 +            simulate_db_timeout=simulate_db_timeout,
 +        )
 --- /dev/null
++++ b/services/feishu_gateway/src/openbot_feishu/cardkit.py
+@@ -0,0 +1,87 @@
++"""CardKit capability selection, token lifetime from mint time, and channel fallback (OB-053)."""
++
++from dataclasses import dataclass
++from typing import Literal
++
++type CardUpdateChannel = Literal["CARDKIT_STREAM", "MESSAGE_PATCH_API", "PLAIN_RESEND"]
++
++
++@dataclass(frozen=True, slots=True)
++class CardChannelPolicy:
++    cardkit_enabled: bool
++    callback_token_ttl_ms: int
++    callback_token_max_uses: int
++
++
++@dataclass
++class _CallbackTokenState:
++    token: str
++    task_created_ms: int
++    token_minted_ms: int
++    uses: int = 0
++
++
++@dataclass(frozen=True, slots=True)
++class ChannelSelection:
++    channel: CardUpdateChannel
++    degraded: bool
++    degrade_reason: str | None
++
++
++class FeishuCardChannelSelector:
++    """Track callback token TTL from mint time (not task creation) and degrade cleanly."""
++
++    def __init__(self, policy: CardChannelPolicy) -> None:
++        self._policy = policy
++        self._tokens: dict[str, _CallbackTokenState] = {}
++
++    def register_callback_token(
++        self, *, token: str, task_created_ms: int, token_minted_ms: int
++    ) -> None:
++        self._tokens[token] = _CallbackTokenState(
++            token=token,
++            task_created_ms=task_created_ms,
++            token_minted_ms=token_minted_ms,
++        )
++
++    def select_update_channel(
++        self, *, token: str | None, now_ms: int, message_updatable: bool
++    ) -> ChannelSelection:
++        if not message_updatable:
++            return ChannelSelection(
++                channel="PLAIN_RESEND",
++                degraded=True,
++                degrade_reason="MESSAGE_NOT_UPDATABLE",
++            )
++        if not self._policy.cardkit_enabled or token is None:
++            return ChannelSelection(
++                channel="MESSAGE_PATCH_API",
++                degraded=not self._policy.cardkit_enabled,
++                degrade_reason="CARDKIT_DISABLED_OR_NO_TOKEN",
++            )
++        st = self._tokens.get(token)
++        if st is None:
++            return ChannelSelection(
++                channel="MESSAGE_PATCH_API",
++                degraded=True,
++                degrade_reason="UNKNOWN_CALLBACK_TOKEN",
++            )
++        # Lifetime is measured strictly from token_minted_ms, NOT task_created_ms!
++        if now_ms - st.token_minted_ms >= self._policy.callback_token_ttl_ms:
++            return ChannelSelection(
++                channel="MESSAGE_PATCH_API",
++                degraded=True,
++                degrade_reason="TOKEN_TTL_EXPIRED",
++            )
++        if st.uses >= self._policy.callback_token_max_uses:
++            return ChannelSelection(
++                channel="MESSAGE_PATCH_API",
++                degraded=True,
++                degrade_reason="TOKEN_USES_EXHAUSTED",
++            )
++        st.uses += 1
++        return ChannelSelection(
++            channel="CARDKIT_STREAM",
++            degraded=False,
++            degrade_reason=None,
++        )
+--- /dev/null
 +++ b/services/feishu_gateway/src/openbot_feishu/cards.py
 @@ -0,0 +1,134 @@
 +"""Pure, side-effect-free Feishu plain card builders without CardKit dependency (OB-051)."""
@@ -18598,6 +18695,15 @@
 +阶段 M2 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
  
  **需求** [RQ02](requirements_traceability.md#rq02)、[RQ08](requirements_traceability.md#rq08)
+ 
+@@ -3625,7 +3625,7 @@
+ 
+ **实现CardKit与更新通道降级**
+ 
+-阶段 M2 · 优先级 P1 · 状态 TODO · 能力域 Integration · 规模 M
++阶段 M2 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
+ 
+ **需求** [RQ08](requirements_traceability.md#rq08)
  
 @@ -4319,7 +4319,7 @@
  
@@ -20070,7 +20176,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -3216,7 +3824,19 @@
+@@ -3216,14 +3824,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -20091,7 +20197,36 @@
    },
    {
      "id": "OB-053",
-@@ -4279,7 +4899,7 @@
+     "title": "实现CardKit与更新通道降级",
+     "milestone": "M2",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Integration",
+     "size": "M",
+     "req_ids": [
+@@ -3277,7 +3897,19 @@
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
+       "卡通道能力/时限依据、受控时钟反例与源码采纳或NO_COPY理由。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第10、23–24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第10、23–24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 FeishuCardChannelSelector tracking callback token TTL from token_minted_ms and degrading to MESSAGE_PATCH_API or PLAIN_RESEND",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_feishu_cardkit.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-047 缺少真实飞书测试租户与凭据（BLOCKED），OB-051、OB-052、OB-094 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (lark-oapi, nanobot), reuse_type (dependency_adapter), and reuse_notes; implemented configurable policy and mint-time token tracking without hardcoded constants."
++    }
+   },
+   {
+     "id": "OB-054",
+@@ -4279,7 +4911,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -20100,7 +20235,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4957,26 @@
+@@ -4337,14 +4969,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -20129,7 +20264,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5033,19 @@
+@@ -4401,7 +5045,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -20150,7 +20285,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5653,7 @@
+@@ -5009,7 +5665,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -20159,7 +20294,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5722,20 @@
+@@ -5078,7 +5734,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -20181,7 +20316,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6180,7 @@
+@@ -5523,7 +6192,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -20190,7 +20325,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6233,26 @@
+@@ -5576,14 +6245,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20219,7 +20354,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6311,26 @@
+@@ -5642,14 +6323,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -20248,7 +20383,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6385,26 @@
+@@ -5704,14 +6397,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20277,7 +20412,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6471,25 @@
+@@ -5778,14 +6483,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20305,7 +20440,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6557,26 @@
+@@ -5853,14 +6569,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20334,7 +20469,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,7 +6630,20 @@
+@@ -5914,7 +6642,20 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -30359,6 +30494,44 @@
 +            approved_proxy_url="https://unapproved-proxy.example:8443",
 +            ambient_env=ambient,
 +        )
+--- /dev/null
++++ b/tests/unit/test_feishu_cardkit.py
+@@ -0,0 +1,35 @@
++from openbot_feishu.cardkit import CardChannelPolicy, FeishuCardChannelSelector
++
++
++def test_cardkit_tracks_token_ttl_from_mint_time_and_degrades_gracefully() -> None:
++    policy = CardChannelPolicy(
++        cardkit_enabled=True,
++        callback_token_ttl_ms=1_800_000,
++        callback_token_max_uses=2,
++    )
++    selector = FeishuCardChannelSelector(policy)
++
++    # 1. Task created at t=0, user clicks 45 minutes later (t=2_700_000 ms):
++    # Token is minted at click time (t=2_700_000 ms), so at t=2_705_000 ms it is VALID!
++    selector.register_callback_token(token="cb_tok_1", task_created_ms=0, token_minted_ms=2_700_000)
++    ch1 = selector.select_update_channel(token="cb_tok_1", now_ms=2_705_000, message_updatable=True)
++    assert ch1.channel == "CARDKIT_STREAM"
++    assert ch1.degraded is False
++
++    # 2. Second use succeeds; third use exceeds max_uses -> degrades to MESSAGE_PATCH_API
++    ch2 = selector.select_update_channel(token="cb_tok_1", now_ms=2_710_000, message_updatable=True)
++    assert ch2.channel == "CARDKIT_STREAM"
++    ch3 = selector.select_update_channel(token="cb_tok_1", now_ms=2_715_000, message_updatable=True)
++    assert ch3.channel == "MESSAGE_PATCH_API"
++    assert ch3.degraded is True
++    assert ch3.degrade_reason == "TOKEN_USES_EXHAUSTED"
++
++    # 3. Missing CardKit permission or non-updatable original message degrades to PLAIN_RESEND
++    no_ck = FeishuCardChannelSelector(
++        CardChannelPolicy(
++            cardkit_enabled=False, callback_token_ttl_ms=60_000, callback_token_max_uses=1
++        )
++    )
++    ch_no_perm = no_ck.select_update_channel(token=None, now_ms=1000, message_updatable=False)
++    assert ch_no_perm.channel == "PLAIN_RESEND"
++    assert ch_no_perm.degraded is True
 --- /dev/null
 +++ b/tests/unit/test_feishu_cards.py
 @@ -0,0 +1,50 @@

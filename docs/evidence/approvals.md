@@ -104,6 +104,9 @@
 实现（OB-052）：新增 `services/feishu_gateway/src/openbot_feishu/progress.py`（`FeishuProgressCardCoordinator`、`CoalescedProgressUpdate`）与 `tests/unit/test_feishu_progress.py`：
 1. 版本递增与高频进度合并节流：节流窗口内的 100 次中间进度更新自动合并为 1 条待投递快照（`coalesced_count=99`），处理 `retry_after` 限流退避；终态（`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`）锁定后绝不被迟到的 `RUNNING` 进度回写覆盖。
 
+实现（OB-053）：新增 `services/feishu_gateway/src/openbot_feishu/cardkit.py`（`FeishuCardChannelSelector`、`CardChannelPolicy`、`ChannelSelection`）与 `tests/unit/test_feishu_cardkit.py`：
+1. 回调 token 寿命从生成时刻（`token_minted_ms`）起算：任务创建 45 分钟后用户点击生成回调 token 时，不会因以任务创建时刻起算而误判 token 过期；当无 CardKit 权限、token 过期、使用次数耗尽或原消息不可更新时，平滑降级至 `MESSAGE_PATCH_API` 或 `PLAIN_RESEND`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -121,6 +124,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_approval_callback.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cards.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_progress.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cardkit.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -190,3 +194,5 @@
   1. Builds plain approval and result cards without CardKit; enforces `REQUIRE_LOCAL` (disabling remote approve and omitting sensitive text) when `data_class` is `SENSITIVE`/`SECRET` or `truncated=True`, and flags `UNKNOWN` outcomes with `RECONCILIATION_REQUIRED`.
 - **OB-052 (`IN_PROGRESS`)**: Feishu progress card throttling and terminal ordering (`services/feishu_gateway/src/openbot_feishu/progress.py` and `tests/unit/test_feishu_progress.py`, 1 passed):
   1. Coalesces rapid intermediate progress updates (100 updates merged into 1 emission), respects `retry_after` rate-limit backoff, and prevents late `RUNNING` updates from overwriting terminal states (`SUCCEEDED`/`PARTIAL`/`FAILED`/`CANCELLED`).
+- **OB-053 (`IN_PROGRESS`)**: CardKit capability selector and channel fallback (`services/feishu_gateway/src/openbot_feishu/cardkit.py` and `tests/unit/test_feishu_cardkit.py`, 1 passed):
+  1. Tracks callback token TTL strictly from `token_minted_ms` (so clicking 45 minutes after task creation does not falsely expire the newly minted token) and degrades to `MESSAGE_PATCH_API` or `PLAIN_RESEND` when permissions, TTL, use count, or message updatability are unavailable.
