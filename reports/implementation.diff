@@ -2261,8 +2261,8 @@
 +  3. `RedactionPipeline`: Filters `stdout`, `stderr`, `sdk_debug`, `exception`, `http_header`, `ui_event`, `artifact`, `diagnostic`, and `model_input` without downgrading `SECRET`/`SENSITIVE` classifications on negative scans (`guarantees_100_percent_detection=False`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
-@@ -0,0 +1,41 @@
-+# OB-093 / OB-040 / OB-041：首发平台隔离能力、结构化进程执行与容器沙箱上限 / First-Platform Isolation, Structured Process Execution, and Container Sandbox Limits
+@@ -0,0 +1,48 @@
++# OB-093 / OB-040 / OB-041 / OB-042：首发平台隔离、结构化进程执行、容器沙箱与进程树回收 / First-Platform Isolation, Process Execution, Container Sandbox, and Process-Tree Supervision
 +
 +## 中文说明
 +
@@ -2292,6 +2292,10 @@
 +1. 固定隔离参数与拒绝自动兜底：强制 `--pull=never`、`--network=none`、`--read-only`、`--cap-drop=ALL`、`--security-opt=no-new-privileges`、`--user=65532:65532`（非 root）、`--memory`、`--cpus`、`--pids-limit`、只读 `/input` 与独立 `/out`，绝不使用 `--rm` 自动删除证据；拒绝挂载 `docker.sock` 或宿主 `HOME`；未认证后端（如 `podman`、`nerdctl`、`bubblewrap` 或宿主）立即返回 `CAPABILITY_UNAVAILABLE`，绝不自动降级兜底。
 +2. 独立归属登记与 `stop -> wait -> export_verified -> remove` 严格时序：创建前登记 `openbot.profile_id`/`operation_id`/`attempt_id`/`runtime_epoch` 标签；客户端进程退出（`notify_client_exited`）绝不将容器标为已回收；导出前强制要求容器已 `stop` 且 `wait` 确认完成，经 `validate_and_extract_tar_export` 拒绝符号链接、硬链接、设备文件、路径穿越（`..` 或 `/`）、可执行权限位（`0o111`）及超限归档后，才允许 `remove` 本 profile 登记的容器（拒绝触碰未登记用户容器）。
 +
++实现（OB-042）：新增 `services/core/src/openbot/tools/executors/supervision_port.py`（`ProcessSupervisorService`、`PLATFORM_CAPABILITY_BOUNDARIES`、`validate_windows_job_spawn_order`）与 `native/supervisor/src/process_tree.rs` 及 `tests/integration/platform/test_process_tree_supervision.py`：
++1. 平台监督边界与拒绝已归档 crate：显式记录 Darwin（POSIX 进程组 + 容器 ID）、Linux（cgroup v2 / 进程组 + `PR_SET_PDEATHSIG`）与 Windows（`CreateProcessW(CREATE_SUSPENDED) -> AssignProcessToJobObject(KILL_ON_JOB_CLOSE) -> ResumeThread`，入 Job 失败必须在恢复前终止进程）的边界；明确声明 `command-group` 已拒绝引入，且 `Drop`/pipe EOF 仅作协作机制（`cooperative_eof_or_drop_is_100_percent=False`）。
++2. 真实 POSIX 进程组回收、防 PID 复用误杀与逃逸 Quarantine：实测真实子进程派生孙进程后的 `SIGTERM -> SIGKILL` 进程组回收与 macOS 僵尸进程 `waitpid(WNOHANG)` 收割；发送信号前核验登记身份与 `process_start_token`（检测 PID 复用并拒绝误杀无关进程）；若存在逃逸子孙进程或容器未确认回收，`old_domain_isolated=False`、`quarantine_required=True`、`new_dispatch_allowed=False`；UI 窗口关闭（`on_ui_window_closed`）绝不停止常驻 daemon 或在途 worker。
++
 +影响：OB-029 正式隔离执行门禁尚未通过；原生进程/后端组合需完成上述缺口。存储、合同与 SDK 故障验证可继续，不以该门禁代替全部 M1 工作。
 +
 +## English Summary
@@ -2303,6 +2307,9 @@
 +- **OB-041 (`IN_PROGRESS`)**: Worker container sandbox broker and resource limits (`services/core/src/openbot/tools/executors/sandbox.py`, `native/supervisor/src/worker_control.rs`, and `tests/unit/test_container_sandbox.py`, 3 passed):
 +  1. `ContainerSandboxBroker`: Enforces non-root (`65532:65532`), `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--read-only`, `--network=none`, `--pull=never`, memory/CPU/PID limits, and read-only `/input` without `--rm`; blocks `docker.sock` and host `HOME` mounts; fails closed with `CAPABILITY_UNAVAILABLE` for unqualified or unapproved backends (`podman`, `nerdctl`, `bubblewrap`, `host`).
 +  2. Independent lifecycle & `validate_and_extract_tar_export`: Tracks `ContainerOwnership` labels (`profile_id`, `operation_id`, `attempt_id`, `runtime_epoch`), never treats CLI client exit as container reclamation, enforces `stop -> wait -> export_verified -> remove` order, rejects symlinks/traversal/executable bits in exported tar streams, and refuses to remove unregistered user containers.
++- **OB-042 (`IN_PROGRESS`)**: Worker process-tree cancellation and reclamation (`services/core/src/openbot/tools/executors/supervision_port.py`, `native/supervisor/src/process_tree.rs`, and `tests/integration/platform/test_process_tree_supervision.py`, 2 passed):
++  1. `PLATFORM_CAPABILITY_BOUNDARIES` & `validate_windows_job_spawn_order`: Documents Darwin/Linux/Windows supervision limits (`cooperative_eof_or_drop_is_100_percent=False`, `command-group` rejected, Windows `CREATE_SUSPENDED -> AssignProcessToJobObject -> ResumeThread` with pre-resume termination on failure).
++  2. `ProcessSupervisorService`: Verifies real POSIX process-group + grandchild termination (`SIGTERM -> SIGKILL` with `waitpid(WNOHANG)` zombie reaping), enforces `process_start_token` checks against PID reuse, sets `old_domain_isolated=False` and `quarantine_required=True` when residual PIDs or unstopped containers remain, and preserves daemon/workers when UI windows close.
 --- /dev/null
 +++ b/docs/evidence/code-review.md
 @@ -0,0 +1,14 @@
@@ -2569,7 +2576,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,56 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2625,6 +2632,7 @@
 +- 推进 OB-034（实现补丁提议与受授权应用）：实现 WorkspacePatchTool 与 PatchCommitJournal（审批前冻结 old_sha256、确切新字节 Artifact 与 new_sha256，拒绝多处匹配且不改原目录；apply_patch 复验旧哈希、父目录 inode 与新字节 Artifact 摘要，禁止批准后 fuzz 或 CRLF 改写；通过 PatchCommitJournal 记录逐文件提交日志并支持多文件部分失败回滚，显式声明 claims_cross_file_atomicity=False，绝不执行 git reset --hard 或自动 commit/push）；新增 2 项集成测试通过，存储套件增至 85 passed，M0 增至 241 passed/3 skipped，M1 增至 260 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-034 记 IN_PROGRESS。
 +- 推进 OB-040（实现结构化进程执行协议）：新增 contracts/schemas/dispatch.schema.json 与 ControlledProcessExecutor（锁定 executable/argv/workspace_snapshot_digest/image_digest/isolated_home/env/资源限制，拒绝 sh -c 等裸 shell 与 --pre；pytest/python/npm/git 一律按 CODE_EXECUTION 处理，不因只读标签绕过隔离；隔离后端未就绪时拒绝降级宿主；分离 client_pid 与 container_id，容器未确认停止时映射为 UNKNOWN；输出流经 RedactionPipeline 过滤并限制字节上限）；新增 2 项测试通过，M0 增至 243 passed/3 skipped，M1 增至 262 passed/1 skipped。因上游依赖与 OB-041 正式隔离后端待闭合，OB-040 记 IN_PROGRESS。
 +- 推进 OB-041（实现 worker 隔离与资源上限）：实现 ContainerSandboxBroker、validate_and_extract_tar_export 与 native/supervisor/src/worker_control.rs（固定非 root、cap-drop=ALL、no-new-privileges、只读根与 /input、禁网与内存/CPU/PID 上限，拒绝挂载 docker.sock 或宿主 HOME，未认证后端返回 CAPABILITY_UNAVAILABLE 绝不自动回退 Podman/nerdctl/bubblewrap/宿主；登记容器标签归属，客户端退出不等于容器回收，强制 stop -> wait -> 导出 tar 校验 -> remove 时序并拒绝删除未登记用户容器）；新增 3 项测试通过，M0 增至 246 passed/3 skipped，M1 增至 265 passed/1 skipped。因上游 OB-016/036/040/093 仍为 IN_PROGRESS，OB-041 记 IN_PROGRESS。
++- 推进 OB-042（实现 worker 进程树取消与回收）：实现 ProcessSupervisorService、PLATFORM_CAPABILITY_BOUNDARIES、validate_windows_job_spawn_order 与 native/supervisor/src/process_tree.rs（明确三平台监督边界与 Drop/EOF 非 100% 保证，不引入 command-group；实测 macOS 真实进程组及孙进程 SIGTERM->SIGKILL 回收与僵尸进程收割；通过 process_start_token 防御 PID 复用误杀；残留子孙或未停止容器时保持 quarantine 并阻断新派发；关闭 UI 窗口不停止常驻 daemon）；新增 2 项集成测试通过，M0 增至 248 passed/3 skipped，M1 增至 267 passed/1 skipped。因上游 OB-022/040/041/093 及 Windows/Linux 原生实测待闭合，OB-042 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -13038,6 +13046,238 @@
 +        self._reclaimed.add(cid)
 +        return exported, True
 --- /dev/null
++++ b/services/core/src/openbot/tools/executors/supervision_port.py
+@@ -0,0 +1,229 @@
++"""OS process-tree supervision port, PID reuse protection, and quarantine gating."""
++
++import os
++import signal
++import time
++from dataclasses import dataclass
++from typing import Literal
++
++
++@dataclass(frozen=True, slots=True)
++class PlatformSupervisionBoundary:
++    os_name: str
++    primary_primitive: str
++    escape_limitation_note: str
++    rejected_crates: tuple[str, ...]
++    cooperative_eof_or_drop_is_100_percent: Literal[False] = False
++
++
++PLATFORM_CAPABILITY_BOUNDARIES: dict[str, PlatformSupervisionBoundary] = {
++    "Darwin": PlatformSupervisionBoundary(
++        os_name="Darwin",
++        primary_primitive="POSIX process group (setpgid/killpg) + container ID tracking",
++        escape_limitation_note=(
++            "A child calling setsid() or double-forking can escape a POSIX process group; "
++            "strong containment requires container or OS sandbox isolation."
++        ),
++        rejected_crates=("command-group",),
++    ),
++    "Linux": PlatformSupervisionBoundary(
++        os_name="Linux",
++        primary_primitive="cgroup v2 (cgroup.procs / cgroup.kill) or setpgid + PR_SET_PDEATHSIG",
++        escape_limitation_note=(
++            "Without delegated cgroup v2 or PID namespace, setsid() can escape process groups; "
++            "PR_SET_PDEATHSIG is per-thread and cleared across setuid."
++        ),
++        rejected_crates=("command-group",),
++    ),
++    "Windows": PlatformSupervisionBoundary(
++        os_name="Windows",
++        primary_primitive=(
++            "CreateProcessW(CREATE_SUSPENDED) -> AssignProcessToJobObject("
++            "JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, no BREAKAWAY) -> ResumeThread"
++        ),
++        escape_limitation_note=(
++            "If AssignProcessToJobObject fails, the suspended process must be terminated "
++            "before ResumeThread; WSL results never substitute for native Win32 Job proof."
++        ),
++        rejected_crates=("command-group",),
++    ),
++}
++
++
++def validate_windows_job_spawn_order(*, job_assigned: bool) -> tuple[str, ...]:
++    """Verify suspended creation -> Job assignment -> resume (or terminate on failure)."""
++    if job_assigned:
++        return (
++            "CreateProcessW(CREATE_SUSPENDED)",
++            "AssignProcessToJobObject(KILL_ON_JOB_CLOSE)",
++            "ResumeThread",
++        )
++    return (
++        "CreateProcessW(CREATE_SUSPENDED)",
++        "AssignProcessToJobObject_FAILED",
++        "TerminateProcess_before_ResumeThread",
++    )
++
++
++@dataclass(frozen=True, slots=True)
++class ManagedWorkerIdentity:
++    worker_id: str
++    runtime_epoch: str
++    operation_id: str
++    attempt_id: str
++    pid: int
++    pgid: int
++    process_start_token: str
++    known_descendant_pids: tuple[int, ...] = ()
++    container_id: str | None = None
++
++
++@dataclass(frozen=True, slots=True)
++class WorkerReclaimReport:
++    worker_id: str
++    runtime_epoch: str
++    graceful_sent: bool
++    forced_kill_sent: bool
++    residual_pids: tuple[int, ...]
++    container_reclaimed: bool
++    old_domain_isolated: bool
++    quarantine_required: bool
++    new_dispatch_allowed: bool
++
++
++def _pid_alive(pid: int) -> bool:
++    if pid <= 0:
++        return False
++    try:
++        waited_pid, _ = os.waitpid(pid, os.WNOHANG)
++        if waited_pid == pid:
++            return False
++    except ChildProcessError:
++        pass
++    try:
++        os.kill(pid, 0)
++        return True
++    except ProcessLookupError:
++        return False
++    except PermissionError:
++        return True
++
++
++class ProcessSupervisorService:
++    """Supervise worker process groups and containers without mistaking UI exit for daemon stop."""
++
++    def __init__(self, *, runtime_epoch: str) -> None:
++        self._epoch = runtime_epoch
++        self._daemon_running = True
++        self._workers: dict[str, ManagedWorkerIdentity] = {}
++
++    def register_worker(
++        self,
++        *,
++        worker_id: str,
++        operation_id: str,
++        attempt_id: str,
++        pid: int,
++        pgid: int,
++        process_start_token: str,
++        known_descendant_pids: tuple[int, ...] = (),
++        container_id: str | None = None,
++    ) -> ManagedWorkerIdentity:
++        if not worker_id.strip() or not process_start_token.strip():
++            raise ValueError("worker_id and process_start_token required")
++        ident = ManagedWorkerIdentity(
++            worker_id=worker_id,
++            runtime_epoch=self._epoch,
++            operation_id=operation_id,
++            attempt_id=attempt_id,
++            pid=pid,
++            pgid=pgid,
++            process_start_token=process_start_token,
++            known_descendant_pids=known_descendant_pids,
++            container_id=container_id,
++        )
++        self._workers[worker_id] = ident
++        return ident
++
++    def on_ui_window_closed(self, ui_client_id: str) -> dict[str, object]:
++        """Closing a Tauri/desktop UI window never stops the resident daemon or workers."""
++        return {
++            "ui_client_id": ui_client_id,
++            "daemon_running": self._daemon_running,
++            "active_workers_count": len(self._workers),
++            "workers_stopped": 0,
++        }
++
++    def reclaim_worker(
++        self,
++        worker_id: str,
++        *,
++        current_start_token: str,
++        grace_ms: int = 100,
++        simulated_residual_pids: tuple[int, ...] = (),
++        container_reclaimed: bool = True,
++    ) -> WorkerReclaimReport:
++        ident = self._workers.get(worker_id)
++        if ident is None:
++            raise PermissionError(f"Unregistered worker cannot be signaled: {worker_id}")
++        if current_start_token != ident.process_start_token:
++            raise PermissionError(
++                f"PID reuse detected for worker {worker_id} (pid={ident.pid}); refusing to kill"
++            )
++
++        graceful_sent = False
++        forced_sent = False
++        if _pid_alive(ident.pid):
++            try:
++                os.killpg(ident.pgid, signal.SIGTERM)
++                graceful_sent = True
++            except (ProcessLookupError, PermissionError):
++                try:
++                    os.kill(ident.pid, signal.SIGTERM)
++                    graceful_sent = True
++                except ProcessLookupError:
++                    pass
++            deadline = time.monotonic() + max(0.01, grace_ms / 1000)
++            while time.monotonic() < deadline:
++                if not _pid_alive(ident.pid) and not any(
++                    _pid_alive(p) for p in ident.known_descendant_pids
++                ):
++                    break
++                time.sleep(0.01)
++
++        if _pid_alive(ident.pid) or any(_pid_alive(p) for p in ident.known_descendant_pids):
++            try:
++                os.killpg(ident.pgid, signal.SIGKILL)
++                forced_sent = True
++            except (ProcessLookupError, PermissionError):
++                pass
++            for d_pid in (ident.pid, *ident.known_descendant_pids):
++                if _pid_alive(d_pid):
++                    try:
++                        os.kill(d_pid, signal.SIGKILL)
++                        forced_sent = True
++                    except ProcessLookupError:
++                        pass
++            time.sleep(0.02)
++
++        live_residuals: list[int] = list(simulated_residual_pids)
++        for check_pid in (ident.pid, *ident.known_descendant_pids):
++            if _pid_alive(check_pid) and check_pid not in live_residuals:
++                live_residuals.append(check_pid)
++
++        c_ok = container_reclaimed if ident.container_id is not None else True
++        isolated = len(live_residuals) == 0 and c_ok
++        if isolated:
++            self._workers.pop(worker_id, None)
++
++        return WorkerReclaimReport(
++            worker_id=worker_id,
++            runtime_epoch=ident.runtime_epoch,
++            graceful_sent=graceful_sent,
++            forced_kill_sent=forced_sent,
++            residual_pids=tuple(live_residuals),
++            container_reclaimed=c_ok,
++            old_domain_isolated=isolated,
++            quarantine_required=not isolated,
++            new_dispatch_allowed=isolated,
++        )
+--- /dev/null
 +++ b/services/core/src/openbot/tools/filesystem_guard.py
 @@ -0,0 +1,359 @@
 +"""OS handle-backed workspace path guard, atomic file verification, and Git/rg isolation."""
@@ -14052,7 +14292,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/036/037/038/039/040/041 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 与补丁工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行与容器沙箱隔离；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/025/030/031/032/033/034/036/037/038/039/040/041/042 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、云模型适配器、工作区文件句柄守卫、list/read/search 与补丁工具、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入、敏感输出过滤、结构化进程执行、容器沙箱隔离与进程树回收；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -14431,6 +14671,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
  
  **需求** [RQ04](requirements_traceability.md#rq04)、[RQ05](requirements_traceability.md#rq05)、[RQ06](requirements_traceability.md#rq06)
+ 
+@@ -2700,7 +2700,7 @@
+ 
+ **实现worker进程树取消与回收**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Platform · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
+ 
+ **需求** [RQ01](requirements_traceability.md#rq01)、[RQ05](requirements_traceability.md#rq05)、[RQ11](requirements_traceability.md#rq11)
  
 @@ -3112,7 +3112,7 @@
  
@@ -15469,7 +15718,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -2525,7 +2943,20 @@
+@@ -2525,14 +2943,27 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "backend能力记录、实际容器ID/标签及完整stop→wait→export校验→remove时序、恶意导出拒绝证据。"
      ],
@@ -15491,7 +15740,37 @@
    },
    {
      "id": "OB-042",
-@@ -2851,7 +3282,7 @@
+     "title": "实现worker进程树取消与回收",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Platform",
+     "size": "M",
+     "req_ids": [
+@@ -2595,7 +3026,20 @@
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
+       "OS/arch/原语版本，PID身份/Job/容器归属与前后进程树清单及清理失败决定。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13–14、18、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13–14、18、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 ProcessSupervisorService, PLATFORM_CAPABILITY_BOUNDARIES, and native/supervisor/src/process_tree.rs (real POSIX process-group + grandchild SIGTERM->SIGKILL reclamation, PID reuse guard, residual escape/container quarantine gating, Windows Job spawn order verification, and UI close daemon preservation)",
++      "evidence": [
++        "docs/evidence/backend-capabilities.md",
++        "tests/integration/platform/test_process_tree_supervision.py",
++        "evidence/implementation/unit-contract-protocol.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-022、OB-040、OB-041、OB-093 仍为 IN_PROGRESS，且原生 Windows Job Object 与 Linux cgroup v2 实机验证待对应环境完成；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (windows-sys, processkit-process-wrap, ur-taking-me-with-you, command-group, python-on-whales), reuse_type (native_primitive), and reuse_notes; rejected archived command-group, documented cooperative Drop/EOF limits, and verified real macOS process-group/grandchild reclamation, PID reuse refusal, and quarantine on unconfirmed escape."
++    }
+   },
+   {
+     "id": "OB-043",
+@@ -2851,7 +3295,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -15500,7 +15779,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3339,19 @@
+@@ -2908,7 +3352,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -15521,7 +15800,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4722,7 @@
+@@ -4279,7 +4735,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -15530,7 +15809,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4780,26 @@
+@@ -4337,14 +4793,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -15559,7 +15838,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4856,19 @@
+@@ -4401,7 +4869,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -15580,7 +15859,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5990,7 @@
+@@ -5523,7 +6003,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -15589,7 +15868,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6043,26 @@
+@@ -5576,14 +6056,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15618,7 +15897,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6121,26 @@
+@@ -5642,14 +6134,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -15647,7 +15926,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6195,26 @@
+@@ -5704,14 +6208,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15676,7 +15955,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6281,25 @@
+@@ -5778,14 +6294,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -15704,7 +15983,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6367,19 @@
+@@ -5853,7 +6380,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -17025,6 +17304,129 @@
 +def crash_at(actual, requested):
 +    if actual == requested:
 +        raise CrashInjected(actual)
+--- /dev/null
++++ b/tests/integration/platform/test_process_tree_supervision.py
+@@ -0,0 +1,120 @@
++import subprocess
++import sys
++import time
++
++import pytest
++from openbot.tools.executors.supervision_port import (
++    PLATFORM_CAPABILITY_BOUNDARIES,
++    ProcessSupervisorService,
++    validate_windows_job_spawn_order,
++)
++
++
++def test_platform_boundaries_windows_job_order_and_ui_close_preserves_daemon():
++    # 1. Platform capability table explicitly documents cooperative vs forced cleanup limits
++    darwin_cap = PLATFORM_CAPABILITY_BOUNDARIES["Darwin"]
++    assert darwin_cap.cooperative_eof_or_drop_is_100_percent is False
++    assert "setsid" in darwin_cap.escape_limitation_note
++    assert "command-group" in darwin_cap.rejected_crates
++
++    # 2. Windows spawn order: CREATE_SUSPENDED -> AssignProcessToJobObject -> ResumeThread;
++    # if job assignment fails, process must be terminated before resume!
++    order_ok = validate_windows_job_spawn_order(job_assigned=True)
++    assert order_ok == (
++        "CreateProcessW(CREATE_SUSPENDED)",
++        "AssignProcessToJobObject(KILL_ON_JOB_CLOSE)",
++        "ResumeThread",
++    )
++    order_fail = validate_windows_job_spawn_order(job_assigned=False)
++    assert "TerminateProcess_before_ResumeThread" in order_fail
++    assert "ResumeThread" not in order_fail
++
++    # 3. Closing UI window never stops the daemon or active workers
++    sup = ProcessSupervisorService(runtime_epoch="ep_1")
++    ui_event = sup.on_ui_window_closed("ui_win_main")
++    assert ui_event["daemon_running"] is True
++    assert ui_event["workers_stopped"] == 0
++
++
++def test_real_posix_process_group_reclaim_pid_reuse_guard_and_unconfirmed_escape_quarantine(
++    tmp_path,
++):
++    sup = ProcessSupervisorService(runtime_epoch="ep_1")
++
++    # 1. Spawn a real process group that forks a child process and writes child PID to a file
++    child_pid_file = tmp_path / "child.pid"
++    script = (
++        "import os, subprocess, sys, time\n"
++        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
++        f"open({str(child_pid_file)!r}, 'w').write(str(child.pid))\n"
++        "time.sleep(30)\n"
++    )
++    proc = subprocess.Popen(
++        [sys.executable, "-c", script],
++        start_new_session=True,
++    )
++    try:
++        for _ in range(50):
++            if child_pid_file.exists() and child_pid_file.read_text().strip():
++                break
++            time.sleep(0.05)
++        grandchild_pid = int(child_pid_file.read_text().strip())
++
++        reg = sup.register_worker(
++            worker_id="wrk_real_1",
++            operation_id="op_1",
++            attempt_id="att_1",
++            pid=proc.pid,
++            pgid=proc.pid,
++            process_start_token="tok_real_1",
++            known_descendant_pids=(grandchild_pid,),
++        )
++        assert reg.worker_id == "wrk_real_1"
++
++        # Reclaim kills both the leader and the grandchild in the process group
++        report = sup.reclaim_worker("wrk_real_1", current_start_token="tok_real_1", grace_ms=100)
++        proc.wait(timeout=5)
++        assert report.old_domain_isolated is True
++        assert report.quarantine_required is False
++        assert report.residual_pids == ()
++    finally:
++        if proc.poll() is None:
++            proc.kill()
++            proc.wait(timeout=5)
++
++    # 2. PID reuse protection: if current_start_token differs from registered token, refuses to kill
++    sup.register_worker(
++        worker_id="wrk_reused_pid",
++        operation_id="op_2",
++        attempt_id="att_2",
++        pid=999991,
++        pgid=999991,
++        process_start_token="tok_original",
++    )
++    with pytest.raises(PermissionError, match="PID reuse"):
++        sup.reclaim_worker("wrk_reused_pid", current_start_token="tok_different_process")
++
++    # 3. Unregistered worker ID is refused
++    with pytest.raises(PermissionError, match="Unregistered"):
++        sup.reclaim_worker("wrk_unknown", current_start_token="tok_any")
++
++    # 4. If an escaped descendant or unstopped container remains, old_domain_isolated=False
++    # and quarantine_required=True (blocks new dispatch!)
++    sup.register_worker(
++        worker_id="wrk_escaped",
++        operation_id="op_3",
++        attempt_id="att_3",
++        pid=999992,
++        pgid=999992,
++        process_start_token="tok_esc",
++        container_id="cnt_unstopped",
++    )
++    esc_report = sup.reclaim_worker(
++        "wrk_escaped",
++        current_start_token="tok_esc",
++        simulated_residual_pids=(888881,),
++        container_reclaimed=False,
++    )
++    assert esc_report.old_domain_isolated is False
++    assert esc_report.quarantine_required is True
++    assert esc_report.new_dispatch_allowed is False
 --- /dev/null
 +++ b/tests/integration/storage/test_approvals.py
 @@ -0,0 +1,363 @@

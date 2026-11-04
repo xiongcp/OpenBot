@@ -1,4 +1,4 @@
-# OB-093 / OB-040 / OB-041：首发平台隔离能力、结构化进程执行与容器沙箱上限 / First-Platform Isolation, Structured Process Execution, and Container Sandbox Limits
+# OB-093 / OB-040 / OB-041 / OB-042：首发平台隔离、结构化进程执行、容器沙箱与进程树回收 / First-Platform Isolation, Process Execution, Container Sandbox, and Process-Tree Supervision
 
 ## 中文说明
 
@@ -28,6 +28,10 @@
 1. 固定隔离参数与拒绝自动兜底：强制 `--pull=never`、`--network=none`、`--read-only`、`--cap-drop=ALL`、`--security-opt=no-new-privileges`、`--user=65532:65532`（非 root）、`--memory`、`--cpus`、`--pids-limit`、只读 `/input` 与独立 `/out`，绝不使用 `--rm` 自动删除证据；拒绝挂载 `docker.sock` 或宿主 `HOME`；未认证后端（如 `podman`、`nerdctl`、`bubblewrap` 或宿主）立即返回 `CAPABILITY_UNAVAILABLE`，绝不自动降级兜底。
 2. 独立归属登记与 `stop -> wait -> export_verified -> remove` 严格时序：创建前登记 `openbot.profile_id`/`operation_id`/`attempt_id`/`runtime_epoch` 标签；客户端进程退出（`notify_client_exited`）绝不将容器标为已回收；导出前强制要求容器已 `stop` 且 `wait` 确认完成，经 `validate_and_extract_tar_export` 拒绝符号链接、硬链接、设备文件、路径穿越（`..` 或 `/`）、可执行权限位（`0o111`）及超限归档后，才允许 `remove` 本 profile 登记的容器（拒绝触碰未登记用户容器）。
 
+实现（OB-042）：新增 `services/core/src/openbot/tools/executors/supervision_port.py`（`ProcessSupervisorService`、`PLATFORM_CAPABILITY_BOUNDARIES`、`validate_windows_job_spawn_order`）与 `native/supervisor/src/process_tree.rs` 及 `tests/integration/platform/test_process_tree_supervision.py`：
+1. 平台监督边界与拒绝已归档 crate：显式记录 Darwin（POSIX 进程组 + 容器 ID）、Linux（cgroup v2 / 进程组 + `PR_SET_PDEATHSIG`）与 Windows（`CreateProcessW(CREATE_SUSPENDED) -> AssignProcessToJobObject(KILL_ON_JOB_CLOSE) -> ResumeThread`，入 Job 失败必须在恢复前终止进程）的边界；明确声明 `command-group` 已拒绝引入，且 `Drop`/pipe EOF 仅作协作机制（`cooperative_eof_or_drop_is_100_percent=False`）。
+2. 真实 POSIX 进程组回收、防 PID 复用误杀与逃逸 Quarantine：实测真实子进程派生孙进程后的 `SIGTERM -> SIGKILL` 进程组回收与 macOS 僵尸进程 `waitpid(WNOHANG)` 收割；发送信号前核验登记身份与 `process_start_token`（检测 PID 复用并拒绝误杀无关进程）；若存在逃逸子孙进程或容器未确认回收，`old_domain_isolated=False`、`quarantine_required=True`、`new_dispatch_allowed=False`；UI 窗口关闭（`on_ui_window_closed`）绝不停止常驻 daemon 或在途 worker。
+
 影响：OB-029 正式隔离执行门禁尚未通过；原生进程/后端组合需完成上述缺口。存储、合同与 SDK 故障验证可继续，不以该门禁代替全部 M1 工作。
 
 ## English Summary
@@ -39,3 +43,6 @@
 - **OB-041 (`IN_PROGRESS`)**: Worker container sandbox broker and resource limits (`services/core/src/openbot/tools/executors/sandbox.py`, `native/supervisor/src/worker_control.rs`, and `tests/unit/test_container_sandbox.py`, 3 passed):
   1. `ContainerSandboxBroker`: Enforces non-root (`65532:65532`), `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--read-only`, `--network=none`, `--pull=never`, memory/CPU/PID limits, and read-only `/input` without `--rm`; blocks `docker.sock` and host `HOME` mounts; fails closed with `CAPABILITY_UNAVAILABLE` for unqualified or unapproved backends (`podman`, `nerdctl`, `bubblewrap`, `host`).
   2. Independent lifecycle & `validate_and_extract_tar_export`: Tracks `ContainerOwnership` labels (`profile_id`, `operation_id`, `attempt_id`, `runtime_epoch`), never treats CLI client exit as container reclamation, enforces `stop -> wait -> export_verified -> remove` order, rejects symlinks/traversal/executable bits in exported tar streams, and refuses to remove unregistered user containers.
+- **OB-042 (`IN_PROGRESS`)**: Worker process-tree cancellation and reclamation (`services/core/src/openbot/tools/executors/supervision_port.py`, `native/supervisor/src/process_tree.rs`, and `tests/integration/platform/test_process_tree_supervision.py`, 2 passed):
+  1. `PLATFORM_CAPABILITY_BOUNDARIES` & `validate_windows_job_spawn_order`: Documents Darwin/Linux/Windows supervision limits (`cooperative_eof_or_drop_is_100_percent=False`, `command-group` rejected, Windows `CREATE_SUSPENDED -> AssignProcessToJobObject -> ResumeThread` with pre-resume termination on failure).
+  2. `ProcessSupervisorService`: Verifies real POSIX process-group + grandchild termination (`SIGTERM -> SIGKILL` with `waitpid(WNOHANG)` zombie reaping), enforces `process_start_token` checks against PID reuse, sets `old_domain_isolated=False` and `quarantine_required=True` when residual PIDs or unstopped containers remain, and preserves daemon/workers when UI windows close.

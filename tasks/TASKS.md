@@ -2700,7 +2700,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **实现worker进程树取消与回收**
 
-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Platform · 规模 M
+阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Platform · 规模 M
 
 **需求** [RQ01](requirements_traceability.md#rq01)、[RQ05](requirements_traceability.md#rq05)、[RQ11](requirements_traceability.md#rq11)
 

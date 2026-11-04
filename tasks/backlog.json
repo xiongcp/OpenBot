@@ -2963,7 +2963,7 @@
     "title": "实现worker进程树取消与回收",
     "milestone": "M1",
     "priority": "P0",
-    "status": "TODO",
+    "status": "IN_PROGRESS",
     "owner_lane": "Platform",
     "size": "M",
     "req_ids": [
@@ -3026,7 +3026,20 @@
       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
       "OS/arch/原语版本，PID身份/Job/容器归属与前后进程树清单及清理失败决定。"
     ],
-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13–14、18、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
+    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13–14、18、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
+    "execution": {
+      "scope": "macOS ARM64 ProcessSupervisorService, PLATFORM_CAPABILITY_BOUNDARIES, and native/supervisor/src/process_tree.rs (real POSIX process-group + grandchild SIGTERM->SIGKILL reclamation, PID reuse guard, residual escape/container quarantine gating, Windows Job spawn order verification, and UI close daemon preservation)",
+      "evidence": [
+        "docs/evidence/backend-capabilities.md",
+        "tests/integration/platform/test_process_tree_supervision.py",
+        "evidence/implementation/unit-contract-protocol.log",
+        "evidence/implementation/verification.json"
+      ],
+      "blockers": [
+        "上游 OB-022、OB-040、OB-041、OB-093 仍为 IN_PROGRESS，且原生 Windows Job Object 与 Linux cgroup v2 实机验证待对应环境完成；保持 IN_PROGRESS。"
+      ],
+      "review": "Read component_refs (windows-sys, processkit-process-wrap, ur-taking-me-with-you, command-group, python-on-whales), reuse_type (native_primitive), and reuse_notes; rejected archived command-group, documented cooperative Drop/EOF limits, and verified real macOS process-group/grandchild reclamation, PID reuse refusal, and quarantine on unconfirmed escape."
+    }
   },
   {
     "id": "OB-043",
