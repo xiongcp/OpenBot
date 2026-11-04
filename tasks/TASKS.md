@@ -3743,7 +3743,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **实现Ollama或第二Provider**
 
-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Runtime · 规模 M
+阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Runtime · 规模 M
 
 **需求** [RQ06](requirements_traceability.md#rq06)、[RQ07](requirements_traceability.md#rq07)
 
