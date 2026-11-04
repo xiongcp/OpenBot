@@ -2321,7 +2321,7 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,237 @@
+@@ -0,0 +1,243 @@
 +# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
@@ -2452,6 +2452,9 @@
 +实现（OB-059）：新增 `services/core/src/openbot/tools/browser/read.py`（`BrowserReadTool`、`BrowserPageSnapshot`、`BoundElementRef`）与 `tests/unit/test_browser_read.py`：
 +1. 有界结构化快照与不可信标注：每次快照返回单调递增 `snapshot_revision`、`page_id`、`frame_id`、`final_origin`，并强制标记 `provenance_kind='TAINTED_EXTERNAL'` 与 `grants_policy_or_owner_authority=False`；页面发生导航或 revision 变化后旧 `BoundElementRef` 立即失效（`STALE_BROWSER_ELEMENT_REF`）。
 +
++实现（OB-060）：新增 `services/core/src/openbot/tools/browser/actions.py`（`BrowserActionCoordinator`、`BrowserActionProposal`、`BrowserActionExecutionResult`）与 `tests/unit/test_browser_actions.py`：
++1. 派发前复验与超时转 `UNKNOWN`：绑定 `element_ref`、`expected_label` 与 `expected_amount`，若执行前页面发生跨站跳转、按钮文本变化或金额篡改，立即拒绝旧批准（`BROWSER_PRECONDITION_DRIFT`）；点击后超时统一转入 `UNKNOWN`/`RECONCILING`，严禁盲目二次点击或仅凭页面内“已成功”文字自动解除隔离（`second_click_permitted=False`，`page_text_can_clear_unknown=False`）。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2476,6 +2479,7 @@
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_session.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_network_policy.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_read.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_actions.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
@@ -2559,6 +2563,8 @@
 +  1. Blocks `file://`, loopback, private-IP, and cloud metadata (`169.254.169.254`) navigation/redirects/subrequests, requires Service Worker blocking or verified outer network isolation (`page_route_alone_is_complete_isolation=False`), sanitizes download paths into quarantine, and blocks unapproved file uploads.
 +- **OB-059 (`IN_PROGRESS`)**: Structured browser read tool (`services/core/src/openbot/tools/browser/read.py` and `tests/unit/test_browser_read.py`, 1 passed):
 +  1. Extracts bounded snapshots tagged `TAINTED_EXTERNAL` (`grants_policy_or_owner_authority=False`) bound to `(page_id, frame_id, snapshot_revision, final_origin)`, invalidating stale element references across navigations (`STALE_BROWSER_ELEMENT_REF`).
++- **OB-060 (`IN_PROGRESS`)**: Browser write action proposal and re-verification (`services/core/src/openbot/tools/browser/actions.py` and `tests/unit/test_browser_actions.py`, 1 passed):
++  1. Re-verifies `BoundElementRef`, button label, and amount before execution (`BROWSER_PRECONDITION_DRIFT`), transitions post-click timeouts to `UNKNOWN`/`RECONCILING`, and forbids automatic second clicks or trusting in-page text to clear `UNKNOWN`.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -3044,7 +3050,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,87 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3125,12 +3131,13 @@
 +- 推进 OB-058（实现浏览器网络与下载策略）：实现 BrowserNetworkPolicyEnforcer 与 BrowserNetworkBoundaryConfig（统一拦截导航/重定向/iframe/subrequest 的 file://、loopback、内网与 169.254.169.254 元数据地址；禁止仅靠 Page.route 声称完整隔离，强制禁用 Service Worker 或校验外层网络命名空间；净化下载路径穿越并拦截未批准文件上传）；新增单元测试通过，M0 增至 279 passed/3 skipped，M1 增至 298 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-058 记 IN_PROGRESS。
 +- 推进 OB-095（审查 DOM 提取脚本的最小源码复用）：完成 browser-use DOM 脚本边界审查，正式记录 NO_COPY 决策至 components/source-reuse/browser-dom.json 与双语证据 docs/evidence/source-reuse-browser-dom.md（禁止引入自治 Agent.run 循环与页面高亮篡改，采用自有有界只读快照提取器并强制标记 TAINTED_EXTERNAL）；新增单元测试通过，M0 增至 280 passed/3 skipped，M1 增至 299 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-095 记 IN_PROGRESS。
 +- 推进 OB-059（实现结构化浏览器读工具）：实现 BrowserReadTool、BrowserPageSnapshot 与 BoundElementRef（有界提取只读 DOM 快照，强制标记 TAINTED_EXTERNAL 与 grants_policy_or_owner_authority=False，绑定 page_id/frame_id/snapshot_revision/final_origin，跨页面或导航后旧元素引用立即抛出 STALE_BROWSER_ELEMENT_REF）；新增单元测试通过，M0 增至 281 passed/3 skipped，M1 增至 300 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-059 记 IN_PROGRESS。
++- 推进 OB-060（实现浏览器写动作提案与确认）：实现 BrowserActionCoordinator、BrowserActionProposal 与 BrowserActionExecutionResult（执行前复验 BoundElementRef、按钮文本与金额，任何漂移立即抛出 BROWSER_PRECONDITION_DRIFT 使旧批准失效；点击后超时转入 UNKNOWN/RECONCILING，禁止盲点第二次提交或凭页面内文本解除隔离）；新增单元测试通过，M0 增至 282 passed/3 skipped，M1 增至 301 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-060 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`, `OB-058`, `OB-095`, and `OB-059`, reaching 281 passed M0 checks and 300 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-060`, and `OB-095`, reaching 282 passed M0 checks and 301 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -15435,6 +15442,73 @@
 @@ -0,0 +1 @@
 +"""Structured browser read and write tools with revision and origin binding (M3)."""
 --- /dev/null
++++ b/services/core/src/openbot/tools/browser/actions.py
+@@ -0,0 +1,64 @@
++"""Browser write action proposal, pre-dispatch re-verification, and UNKNOWN guard (OB-060)."""
++
++from dataclasses import dataclass
++from typing import Literal
++
++from openbot.tools.browser.read import BoundElementRef, BrowserPageSnapshot, BrowserReadTool
++
++type DriverOutcome = Literal["OK", "TIMEOUT_AFTER_CLICK"]
++
++
++@dataclass(frozen=True, slots=True)
++class BrowserActionProposal:
++    element_ref: BoundElementRef
++    action_kind: Literal["CLICK_SUBMIT", "FILL_INPUT"]
++    input_value: str | None
++    expected_label: str
++    expected_amount: str | None = None
++
++
++@dataclass(frozen=True, slots=True)
++class BrowserActionExecutionResult:
++    operation_state: Literal["SUCCEEDED", "UNKNOWN"]
++    task_state: Literal["RUNNING", "RECONCILING"]
++    second_click_permitted: Literal[False] = False
++    page_text_can_clear_unknown: Literal[False] = False
++
++
++class BrowserActionCoordinator:
++    """Re-verify snapshot revision, origin, button label, and amount before browser.act."""
++
++    def __init__(self, read_tool: BrowserReadTool) -> None:
++        self._read = read_tool
++
++    def execute_approved_action(
++        self,
++        proposal: BrowserActionProposal,
++        *,
++        live_snapshot: BrowserPageSnapshot,
++        current_amount: str | None,
++        driver_outcome: DriverOutcome,
++    ) -> BrowserActionExecutionResult:
++        try:
++            el = self._read.resolve_element_ref(
++                proposal.element_ref, current_snapshot=live_snapshot
++            )
++        except PermissionError as exc:
++            raise PermissionError("BROWSER_PRECONDITION_DRIFT: snapshot or origin changed") from exc
++
++        if el.text != proposal.expected_label or current_amount != proposal.expected_amount:
++            raise PermissionError("BROWSER_PRECONDITION_DRIFT: button label or amount changed")
++
++        if driver_outcome == "TIMEOUT_AFTER_CLICK":
++            return BrowserActionExecutionResult(
++                operation_state="UNKNOWN",
++                task_state="RECONCILING",
++                second_click_permitted=False,
++                page_text_can_clear_unknown=False,
++            )
++        return BrowserActionExecutionResult(
++            operation_state="SUCCEEDED",
++            task_state="RUNNING",
++            second_click_permitted=False,
++            page_text_can_clear_unknown=False,
++        )
+--- /dev/null
 +++ b/services/core/src/openbot/tools/browser/read.py
 @@ -0,0 +1,123 @@
 +"""Bounded browser.open/extract tool with TAINTED_EXTERNAL and revision binding (OB-059)."""
@@ -19835,6 +19909,15 @@
  
  **需求** [RQ07](requirements_traceability.md#rq07)、[RQ09](requirements_traceability.md#rq09)
  
+@@ -4724,7 +4724,7 @@
+ 
+ **实现浏览器写动作提案与确认**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 Security · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ03](requirements_traceability.md#rq03)、[RQ04](requirements_traceability.md#rq04)、[RQ09](requirements_traceability.md#rq09)
+ 
 --- a/tasks/backlog.json
 +++ b/tasks/backlog.json
 @@ -4,7 +4,7 @@
@@ -21521,7 +21604,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -3649,7 +4354,19 @@
+@@ -3649,14 +4354,26 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "DOM来源决定、只读脚本fixture和隐式动作/网络canary计数。"
      ],
@@ -21542,7 +21625,36 @@
    },
    {
      "id": "OB-060",
-@@ -4279,7 +4996,7 @@
+     "title": "实现浏览器写动作提案与确认",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Security",
+     "size": "M",
+     "req_ids": [
+@@ -3712,7 +4429,19 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第13、18、24页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 BrowserActionCoordinator re-verifying element ref, label, and amount before browser.act and converting post-click timeout into UNKNOWN/RECONCILING",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_browser_actions.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-017、OB-018、OB-019、OB-059 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (playwright, browser-use, model-runner), reuse_type (control_owned), and reuse_notes; rejected autonomous Agent.run() and enforced per-action precondition re-verification and UNKNOWN quarantine."
++    }
+   },
+   {
+     "id": "OB-061",
+@@ -4279,7 +5008,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -21551,7 +21663,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +5054,26 @@
+@@ -4337,14 +5066,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -21580,7 +21692,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5130,19 @@
+@@ -4401,7 +5142,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -21601,7 +21713,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5750,7 @@
+@@ -5009,7 +5762,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -21610,7 +21722,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5819,20 @@
+@@ -5078,7 +5831,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -21632,7 +21744,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6277,7 @@
+@@ -5523,7 +6289,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -21641,7 +21753,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6330,26 @@
+@@ -5576,14 +6342,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21670,7 +21782,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6408,26 @@
+@@ -5642,14 +6420,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -21699,7 +21811,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6482,26 @@
+@@ -5704,14 +6494,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21728,7 +21840,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6568,25 @@
+@@ -5778,14 +6580,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21756,7 +21868,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6654,26 @@
+@@ -5853,14 +6666,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21785,7 +21897,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6727,27 @@
+@@ -5914,14 +6739,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -21815,7 +21927,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,7 +6803,20 @@
+@@ -5977,7 +6815,20 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -31543,6 +31655,64 @@
 +        health = json.loads(result.stdout)
 +        self.assertFalse(health["daemon_running"])
 +        self.assertEqual(health["isolation"], "CAPABILITY_UNAVAILABLE")
+--- /dev/null
++++ b/tests/unit/test_browser_actions.py
+@@ -0,0 +1,55 @@
++import pytest
++from openbot.tools.browser.actions import (
++    BrowserActionCoordinator,
++    BrowserActionProposal,
++)
++from openbot.tools.browser.read import BrowserDomNodeSpec, BrowserReadTool
++
++
++def test_browser_action_revalidates_preconditions_and_turns_timeout_into_unknown() -> None:
++    read_tool = BrowserReadTool()
++    snap1 = read_tool.extract_snapshot(
++        page_id="pg_1",
++        frame_id="fr_1",
++        final_url="https://shop.example.com/checkout",
++        nodes=(
++            BrowserDomNodeSpec(element_index=1, tag="button", text="Pay $19.99", attributes={}),
++        ),
++    )
++    coord = BrowserActionCoordinator(read_tool)
++    proposal = BrowserActionProposal(
++        element_ref=snap1.elements[0].ref,
++        action_kind="CLICK_SUBMIT",
++        input_value=None,
++        expected_label="Pay $19.99",
++        expected_amount="$19.99",
++    )
++
++    # 1. If button label / amount / origin drifts before execution, old approval is REJECTED
++    snap_tampered = read_tool.extract_snapshot(
++        page_id="pg_1",
++        frame_id="fr_1",
++        final_url="https://shop.example.com/checkout",
++        nodes=(
++            BrowserDomNodeSpec(element_index=1, tag="button", text="Pay $999.99", attributes={}),
++        ),
++    )
++    with pytest.raises(PermissionError, match="BROWSER_PRECONDITION_DRIFT"):
++        coord.execute_approved_action(
++            proposal,
++            live_snapshot=snap_tampered,
++            current_amount="$999.99",
++            driver_outcome="OK",
++        )
++
++    # 2. Timeout after submit enters UNKNOWN / RECONCILING and forbids automatic second click
++    res_timeout = coord.execute_approved_action(
++        proposal,
++        live_snapshot=snap1,
++        current_amount="$19.99",
++        driver_outcome="TIMEOUT_AFTER_CLICK",
++    )
++    assert res_timeout.operation_state == "UNKNOWN"
++    assert res_timeout.task_state == "RECONCILING"
++    assert res_timeout.second_click_permitted is False
++    assert res_timeout.page_text_can_clear_unknown is False
 --- /dev/null
 +++ b/tests/unit/test_browser_network_policy.py
 @@ -0,0 +1,60 @@

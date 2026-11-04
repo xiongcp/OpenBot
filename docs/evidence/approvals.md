@@ -128,6 +128,9 @@
 实现（OB-059）：新增 `services/core/src/openbot/tools/browser/read.py`（`BrowserReadTool`、`BrowserPageSnapshot`、`BoundElementRef`）与 `tests/unit/test_browser_read.py`：
 1. 有界结构化快照与不可信标注：每次快照返回单调递增 `snapshot_revision`、`page_id`、`frame_id`、`final_origin`，并强制标记 `provenance_kind='TAINTED_EXTERNAL'` 与 `grants_policy_or_owner_authority=False`；页面发生导航或 revision 变化后旧 `BoundElementRef` 立即失效（`STALE_BROWSER_ELEMENT_REF`）。
 
+实现（OB-060）：新增 `services/core/src/openbot/tools/browser/actions.py`（`BrowserActionCoordinator`、`BrowserActionProposal`、`BrowserActionExecutionResult`）与 `tests/unit/test_browser_actions.py`：
+1. 派发前复验与超时转 `UNKNOWN`：绑定 `element_ref`、`expected_label` 与 `expected_amount`，若执行前页面发生跨站跳转、按钮文本变化或金额篡改，立即拒绝旧批准（`BROWSER_PRECONDITION_DRIFT`）；点击后超时统一转入 `UNKNOWN`/`RECONCILING`，严禁盲目二次点击或仅凭页面内“已成功”文字自动解除隔离（`second_click_permitted=False`，`page_text_can_clear_unknown=False`）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -152,6 +155,7 @@
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_session.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_network_policy.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_read.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_browser_actions.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -235,3 +239,5 @@
   1. Blocks `file://`, loopback, private-IP, and cloud metadata (`169.254.169.254`) navigation/redirects/subrequests, requires Service Worker blocking or verified outer network isolation (`page_route_alone_is_complete_isolation=False`), sanitizes download paths into quarantine, and blocks unapproved file uploads.
 - **OB-059 (`IN_PROGRESS`)**: Structured browser read tool (`services/core/src/openbot/tools/browser/read.py` and `tests/unit/test_browser_read.py`, 1 passed):
   1. Extracts bounded snapshots tagged `TAINTED_EXTERNAL` (`grants_policy_or_owner_authority=False`) bound to `(page_id, frame_id, snapshot_revision, final_origin)`, invalidating stale element references across navigations (`STALE_BROWSER_ELEMENT_REF`).
+- **OB-060 (`IN_PROGRESS`)**: Browser write action proposal and re-verification (`services/core/src/openbot/tools/browser/actions.py` and `tests/unit/test_browser_actions.py`, 1 passed):
+  1. Re-verifies `BoundElementRef`, button label, and amount before execution (`BROWSER_PRECONDITION_DRIFT`), transitions post-click timeouts to `UNKNOWN`/`RECONCILING`, and forbids automatic second clicks or trusting in-page text to clear `UNKNOWN`.
