@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.2",
+  "scenarios": [
+    {
+      "scenario_id": "scn_patch_1",
+      "category": "workspace_aci",
+      "requires_outcome_verifier": true
+    },
+    {
+      "scenario_id": "scn_send_unknown",
+      "category": "recovery_reconciliation",
+      "requires_outcome_verifier": true
+    }
+  ]
+}

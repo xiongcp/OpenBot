@@ -1,0 +1,16 @@
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting tests/unit/test_evals_benchmark.py ______________
+ImportError while importing test module '/Users/admin-1234/work/OpenBot/tests/unit/test_evals_benchmark.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_evals_benchmark.py:3: in <module>
+    from openbot.application.evals import BenchmarkEvalRunner, EvalTrialSample
+E   ModuleNotFoundError: No module named 'openbot.application.evals'
+=========================== short test summary info ============================
+ERROR tests/unit/test_evals_benchmark.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.06s
