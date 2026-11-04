@@ -4553,7 +4553,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **建立断网休眠与崩溃浸泡**
 
-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 QA · 规模 M
+阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
 
 **需求** [RQ03](requirements_traceability.md#rq03)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
 

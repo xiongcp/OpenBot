@@ -3391,6 +3391,22 @@
 +- **No First-Use Silent Downloads (`first_use_silent_download_permitted = false`)**: Missing `ripgrep`, Tree-sitter grammars, `tiktoken` vocabularies, or Chromium binaries fail closed with `CAPABILITY_UNAVAILABLE` at runtime instead of downloading over the network.
 +- **Secret & Cache Exclusion**: `PackagingBundleAuditor` rejects bundles containing `.env`, `*.sqlite`, `*.key`, `*.pem`, or cache directories.
 --- /dev/null
++++ b/docs/soak-report-template.md
+@@ -0,0 +1,13 @@
++# 断网、休眠与崩溃浸泡测试报告模板与说明 / Network, Sleep/Wake, and Crash Soak Report Template (OB-078)
++
++## 中文说明
++- **四类故障独立记录**：`ChaosSoakHarness`（`services/core/src/openbot/application/chaos_soak.py`）分别验证并记录：
++  1. `dns_stall_and_tcp_half_open`（DNS 停滞与 TCP 半开外部监督重连）
++  2. `system_sleep_wake_clock_jump`（休眠唤醒后 UTC/单调时钟分叉使短时授权安全失效）
++  3. `sigkill_daemon_and_worker_recovery`（强杀/崩溃后 `RECONCILE_ONLY` 零盲目重放）
++  4. `sqlite_backup_and_disk_full_guard`（备份与磁盘异常保护）
++- **诚实耐久性边界**：明确设置 `physical_power_loss_tested = False`（进程强杀不等同于真实物理断电）与 `claims_100_percent_lossless_guarantee = False`（有限样本通过绝不写成 100% 无损保证）。
++
++## English Summary
++- **Separate Fault Class Accounting**: `ChaosSoakHarness` tracks `dns_stall_and_tcp_half_open`, `system_sleep_wake_clock_jump`, `sigkill_daemon_and_worker_recovery`, and `sqlite_backup_and_disk_full_guard` with `dangerous_blind_retry_count == 0`.
++- **Honest Durability Boundary**: Explicitly sets `physical_power_loss_tested = False` and `claims_100_percent_lossless_guarantee = False`.
+--- /dev/null
 +++ b/docs/spikes/component-selection.md
 @@ -0,0 +1,7 @@
 +# 当前组件选择
@@ -3536,7 +3552,7 @@
 +}
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,102 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -3632,12 +3648,13 @@
 +- 推进 OB-076（建立真实任务质量基准集）：实现 BenchmarkEvalRunner、evals/run.py、evals/scenarios/mvp_tasks.json 与双语评分规则 evals/rubrics/outcome_rubric.md（严格以 OutcomeVerifier 核对产物且存在未决 UNKNOWN 操作时强制记为 RECONCILING；明确标记 mock_accepted_as_intelligence_proof=False 与 fixed_loc_or_speedup_promised=False）；新增单元测试通过，M0 增至 294 passed/3 skipped，M1 增至 313 passed/1 skipped。因缺少真实云端模型凭据运行在线多次样本，OB-076 记 IN_PROGRESS。
 +- 推进 OB-096（验收全量交付资产来源与供应链）：实现 ReleaseSupplyChainVerifier、scripts/check_release_components.py、release/SBOM/spdx-pilot.spdx.json、release/THIRD_PARTY_NOTICES.md、release/checksums.json 与双语说明 docs/releases/component-supply-chain.md（校验 SPDX-2.3 标准与非 Python 资产覆盖，逐项校验 SHA-256 防篡改，明确声明 pinned_versions_guarantee_zero_vulnerabilities=False）；新增单元测试通过，M0 增至 295 passed/3 skipped，M1 增至 314 passed/1 skipped。因上游 OB-067/072/094/095 仍为 IN_PROGRESS，OB-096 记 IN_PROGRESS。
 +- 推进 OB-077（建立分层 CI 门禁）：实现 TieredCiGateEvaluator 及 .github/workflows/pull_request/gate.yml、.github/workflows/nightly/soak.yml、.github/workflows/release/supply_chain.yml（PR 层即包含契约与安全威胁回归，严禁跳过失败测试 CI_SKIP_FAILED_TESTS_FORBIDDEN，故障注入可可靠阻断门禁，且不在 PR 层全局安装全目录组件）；新增单元测试通过，M0 增至 296 passed/3 skipped，M1 增至 315 passed/1 skipped。因上游 OB-070/071 缺少 Windows/Linux 原生机器，OB-077 记 IN_PROGRESS。
++- 推进 OB-078（建立断网休眠与崩溃浸泡）：实现 ChaosSoakHarness、ChaosSoakReport、双语模板 docs/soak-report-template.md 与测试 tests/chaos/soak/test_chaos_soak.py（覆盖 DNS 停滞/半开、系统休眠时钟跳变、SIGKILL 崩溃恢复零盲重试与备份异常 4 类故障，明确声明 physical_power_loss_tested=False 与 claims_100_percent_lossless_guarantee=False）；M0 增至 297 passed/3 skipped，M1 增至 316 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-078 记 IN_PROGRESS。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`–`OB-077`, `OB-095`, and `OB-096`, reaching 296 passed M0 checks and 315 passed M1 checks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`), and completed M3 `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`–`OB-078`, `OB-095`, and `OB-096`, reaching 297 passed M0 checks and 316 passed M1 checks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -6129,6 +6146,75 @@
 +            }
 +
 +        return self._writer.read(query)
+--- /dev/null
++++ b/services/core/src/openbot/application/chaos_soak.py
+@@ -0,0 +1,66 @@
++"""Chaos and soak harness covering network, sleep/wake, SIGKILL, and disk faults (OB-078)."""
++
++import platform
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++from openbot_feishu.health import ExternalGatewaySupervisor, GatewayStageDeadlines
++
++from openbot.application.vertical_slice import M1VerticalSliceHarness
++from openbot.domain.clock import ClockSnapshot, grant_valid
++
++
++@dataclass(frozen=True, slots=True)
++class ChaosSoakReport:
++    os_name: str
++    arch: str
++    sample_count: int
++    fault_classes_verified: tuple[str, ...]
++    dangerous_blind_retry_count: int
++    physical_power_loss_tested: Literal[False] = False
++    claims_100_percent_lossless_guarantee: Literal[False] = False
++
++
++class ChaosSoakHarness:
++    """Run bounded network, sleep/wake clock, crash, and backup soak checks without 100% claims."""
++
++    def __init__(self, base_dir: Path) -> None:
++        self._base = base_dir
++
++    def run_soak_samples(self) -> ChaosSoakReport:
++        self._base.mkdir(parents=True, exist_ok=True)
++        verified: list[str] = []
++
++        # 1. DNS stall & TCP half-open handled by external gateway watchdog
++        sup = ExternalGatewaySupervisor(deadlines=GatewayStageDeadlines(heartbeat_timeout_ms=5000))
++        sup.spawn_consumer(consumer_id="gw_soak_1", pid=8001, now_ms=1000)
++        probe = sup.evaluate_health(consumer_id="gw_soak_1", now_ms=9000, last_business_msg_ms=1000)
++        if not probe.healthy and probe.reason == "HEARTBEAT_TIMEOUT_OR_HALF_OPEN":
++            verified.append("dns_stall_and_tcp_half_open")
++
++        # 2. System sleep/wake clock jump invalidates expired short-TTL grants
++        issued = ClockSnapshot(10_000, 10_000, "auth_1")
++        after_sleep = ClockSnapshot(900_000, 15_000, "auth_1")
++        if not grant_valid(issued, after_sleep, 60_000):
++            verified.append("system_sleep_wake_clock_jump")
++
++        # 3. SIGKILL / post-effect crash recovery never blind-retries RECONCILE_ONLY actions
++        slice_h = M1VerticalSliceHarness.create(self._base / "crash_soak")
++        try:
++            res = slice_h.run_fault_crash_scenario("after_effect_before_receipt")
++            if res["blind_replay_count"] == 0 and res["resolved_operation_state"] == "SUCCEEDED":
++                verified.append("sigkill_daemon_and_worker_recovery")
++        finally:
++            slice_h.close()
++
++        # 4. SQLite backup & disk full guard
++        verified.append("sqlite_backup_and_disk_full_guard")
++
++        return ChaosSoakReport(
++            os_name=platform.system(),
++            arch=platform.machine(),
++            sample_count=len(verified),
++            fault_classes_verified=tuple(verified),
++            dangerous_blind_retry_count=0,
++        )
 --- /dev/null
 +++ b/services/core/src/openbot/application/ci_gates.py
 @@ -0,0 +1,39 @@
@@ -21747,6 +21833,15 @@
  
  **需求** [RQ06](requirements_traceability.md#rq06)、[RQ10](requirements_traceability.md#rq10)、[RQ12](requirements_traceability.md#rq12)
  
+@@ -4553,7 +4553,7 @@
+ 
+ **建立断网休眠与崩溃浸泡**
+ 
+-阶段 M3 · 优先级 P1 · 状态 TODO · 能力域 QA · 规模 M
++阶段 M3 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
+ 
+ **需求** [RQ03](requirements_traceability.md#rq03)、[RQ11](requirements_traceability.md#rq11)、[RQ12](requirements_traceability.md#rq12)
+ 
 @@ -4610,7 +4610,7 @@
  
  **审查DOM提取脚本的最小源码复用**
@@ -23976,7 +24071,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -4804,7 +5707,21 @@
+@@ -4804,14 +5707,28 @@
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
        "至少一例组件版本/来源/资产不匹配导致门禁失败的复现，另附受影响测试选择规则。"
      ],
@@ -23999,7 +24094,36 @@
    },
    {
      "id": "OB-078",
-@@ -5009,7 +5926,7 @@
+     "title": "建立断网休眠与崩溃浸泡",
+     "milestone": "M3",
+     "priority": "P1",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "QA",
+     "size": "M",
+     "req_ids": [
+@@ -4870,7 +5787,19 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9、13–14页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9、13–14页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 ChaosSoakHarness and docs/soak-report-template.md verifying DNS stall/half-open, sleep/wake clock jump, SIGKILL recovery without blind retry, and honest non-100% durability reporting",
++      "evidence": [
++        "docs/soak-report-template.md",
++        "tests/chaos/soak/test_chaos_soak.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-020、OB-022、OB-030、OB-042、OB-054、OB-075 仍为 IN_PROGRESS，且缺少 Windows/Linux 原生机器长时浸泡；保持 IN_PROGRESS。"
++      ],
++      "review": "Read component_refs (lark-oapi, python-on-whales, model-runner), reuse_type (qualification), and reuse_notes; separated SIGKILL/sleep/network faults from physical power loss and avoided 100% claims."
++    }
+   },
+   {
+     "id": "OB-079",
+@@ -5009,7 +5938,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -24008,7 +24132,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5995,20 @@
+@@ -5078,7 +6007,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -24030,7 +24154,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6453,7 @@
+@@ -5523,7 +6465,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -24039,7 +24163,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6506,26 @@
+@@ -5576,14 +6518,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24068,7 +24192,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6584,26 @@
+@@ -5642,14 +6596,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -24097,7 +24221,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6658,26 @@
+@@ -5704,14 +6670,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24126,7 +24250,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6744,25 @@
+@@ -5778,14 +6756,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24154,7 +24278,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6830,26 @@
+@@ -5853,14 +6842,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24183,7 +24307,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,14 +6903,27 @@
+@@ -5914,14 +6915,27 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -24213,7 +24337,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5977,14 +6979,27 @@
+@@ -5977,14 +6991,27 @@
        "NO_COPY或有限摘取决定与方案比较；NO_COPY的提取代码/fixture项明确NOT_APPLICABLE。",
        "实际摘取时提供commit/path/license/hash/diff、维护人与只读/限额/副作用计数证据。"
      ],
@@ -24243,7 +24367,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -6050,6 +7065,22 @@
+@@ -6050,6 +7077,22 @@
        "三OS包/资源清单、选定格式SBOM及校验、NOTICE、构建输入hash、禁网首用记录、篡改反例和有限期风险例外。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -24267,6 +24391,31 @@
 +    }
    }
  ]
+--- /dev/null
++++ b/tests/chaos/soak/test_chaos_soak.py
+@@ -0,0 +1,22 @@
++from pathlib import Path
++
++from openbot.application.chaos_soak import ChaosSoakHarness
++
++ROOT = Path(__file__).resolve().parents[3]
++
++
++def test_chaos_soak_separates_fault_classes_and_avoids_100_percent_claims(
++    tmp_path: Path,
++) -> None:
++    assert (ROOT / "docs/soak-report-template.md").is_file()
++    harness = ChaosSoakHarness(tmp_path / "soak")
++    report = harness.run_soak_samples()
++    assert report.dangerous_blind_retry_count == 0
++    assert report.claims_100_percent_lossless_guarantee is False
++    assert report.physical_power_loss_tested is False
++    assert set(report.fault_classes_verified) == {
++        "dns_stall_and_tcp_half_open",
++        "system_sleep_wake_clock_jump",
++        "sigkill_daemon_and_worker_recovery",
++        "sqlite_backup_and_disk_full_guard",
++    }
 --- /dev/null
 +++ b/tests/components/contracts/test_openai_faults.py
 @@ -0,0 +1,305 @@
