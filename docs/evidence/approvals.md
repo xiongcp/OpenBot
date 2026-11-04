@@ -114,6 +114,9 @@
 实现（OB-055）：新增 `services/feishu_gateway/src/openbot_feishu/dead_letter.py`（`DeadLetterInspectorService`、`DeadLetterRecord`）与 `tests/integration/feishu/test_dead_letter.py`：
 1. 死信检视、丢弃与安全重投分离：仅允许已授权 owner 查看 `DEAD`/`EXPIRED` 通知记录并重置通知为 `PENDING`（`business_operation_reexecuted=False`）；对 `UNKNOWN` 状态或 `APPEND_MESSAGE` 非幂等副作用记录直接拒绝并要求先执行 reconcile（`UNKNOWN_REQUIRES_RECONCILE`）。
 
+实现（OB-056）：新增 `services/feishu_gateway/src/openbot_feishu/e2e_harness.py`（`FeishuM2EndToEndHarness`、`FeishuM2VerificationReport`）、`tests/integration/feishu/test_feishu_e2e_harness.py` 与中英双语 `docs/demos/m3.md`：
+1. 受控飞书端到端主流程与 6 故障场景验证：闭环串联安全配对、WebSocket 入站持久化后 ACK、普通审批卡构造与真实 operator 审批 callback CAS，并验证断网重连、daemon 重启、重复 callback、已取消任务旧卡、撤销 owner 与双消费者阻断；诚实标记 `real_feishu_tenant_verified=False`。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -134,6 +137,7 @@
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cardkit.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_health.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_dead_letter.py -q --tb=short`（1 passed）
+- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q --tb=short`（1 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
@@ -209,3 +213,5 @@
   1. Evaluates transport heartbeat outside the SDK event loop (`in_loop_wait_for_claimed_as_hard_kill=False`), treats idle business traffic with fresh heartbeat as healthy (`IDLE_BUT_HEARTBEAT_FRESH`), forbids spawning a second consumer before confirming old exit (`OLD_CONSUMER_NOT_CONFIRMED_EXITED`), and computes bounded jittered backoff without blocking the daemon writer.
 - **OB-055 (`IN_PROGRESS`)**: Dead-letter inspection and safe notification redelivery (`services/feishu_gateway/src/openbot_feishu/dead_letter.py` and `tests/integration/feishu/test_dead_letter.py`, 1 passed):
   1. Restricts dead-letter listing to the active owner, redelivers `DEAD`/`EXPIRED` notifications without re-running business operations (`business_operation_reexecuted=False`), and refuses to discard or blindly retry `UNKNOWN` side effects (`UNKNOWN_REQUIRES_RECONCILE`).
+- **OB-056 (`IN_PROGRESS`)**: Controlled M2 Feishu end-to-end harness (`services/feishu_gateway/src/openbot_feishu/e2e_harness.py`, `tests/integration/feishu/test_feishu_e2e_harness.py`, and `docs/demos/m3.md`, 1 passed):
+  1. Verifies the M2 Feishu main flow and 6 failure scenarios (`disconnect_and_jittered_reconnect`, `daemon_restart_recovery`, `duplicate_approval_callback`, `stale_card_on_cancelled_task`, `revoked_owner_rejected`, `dual_consumer_spawn_blocked`) while honestly reporting `real_feishu_tenant_verified=False` pending a live test tenant.

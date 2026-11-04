@@ -2241,6 +2241,42 @@
 +### 2. Reproducible Command
 +- `PYTHONPATH=services/core/src .venv-m1/bin/python -m pytest tests/security/test_m1_threat_regression.py -q` (`1 passed`)
 --- /dev/null
++++ b/docs/demos/m3.md
+@@ -0,0 +1,33 @@
++# M2 飞书受控端到端验收说明与 M3 准入边界 / M2 Feishu Controlled End-to-End Verification & M3 Entry Boundary (OB-056)
++
++## 中文说明
++
++### 1. 受控端到端主流程与 6 个故障场景（`FeishuM2EndToEndHarness`）
++`services/feishu_gateway/src/openbot_feishu/e2e_harness.py` 与 `tests/integration/feishu/test_feishu_e2e_harness.py` 将 M2 飞书适配全链路闭环串联：
++- **主流程**：本地生成短 TTL 配对挑战 → 远端 claim 生成待确认候选 → 本地显式确认激活 owner → 飞书 WebSocket 入站消息经 `Inbox` 持久化提交后返回 `ws_ack=True` → 生成脱敏普通审批卡 → 飞书 `card.action.trigger` 回调校验真实 `operator.open_id` 与一次性 nonce 并通过 CAS 将 Operation 置为 `READY`。
++- **6 个必测故障与攻击场景**：
++  1. `disconnect_and_jittered_reconnect`：网关断线后经外部监督器确认旧实例退出并重连。
++  2. `daemon_restart_recovery`：daemon 发生 runtime epoch 切换（`ep_1 -> ep_2`）后恢复。
++  3. `duplicate_approval_callback`：重复点击审批按钮被安全拦截，不发生二次唤醒。
++  4. `stale_card_on_cancelled_task`：任务取消后点击旧审批卡返回 `APPROVAL_REJECTED_OR_STALE`。
++  5. `revoked_owner_rejected`：撤销 owner 后递增 `identity_epoch`，原 `open_id` 立即失效。
++  6. `dual_consumer_spawn_blocked`：旧消费者未确认退出前拒绝启动第二消费者。
++
++### 2. 真实租户诚实边界声明
++- 当前环境缺少专用飞书企业测试租户与自建应用凭据（`OB-047` 为 `BLOCKED`），因此报告明确设置 `real_feishu_tenant_verified = False` 与 `claims_full_mvp_complete = False`，**绝不将本地脱敏契约回放通过宣称为真实飞书生产租户已验证**。
++
++### 3. 可复现验证命令
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv-m1/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q`（1 passed）
++
++---
++
++## English Summary
++
++### 1. Controlled End-to-End Main Flow & 6 Failure Scenarios (`FeishuM2EndToEndHarness`)
++`services/feishu_gateway/src/openbot_feishu/e2e_harness.py` and `tests/integration/feishu/test_feishu_e2e_harness.py` verify the complete M2 Feishu workflow (local pairing challenge & confirmation → WebSocket persist-before-ACK inbound task creation → plain approval card rendering → authenticated `card.action.trigger` CAS callback) plus 6 failure scenarios (`disconnect_and_jittered_reconnect`, `daemon_restart_recovery`, `duplicate_approval_callback`, `stale_card_on_cancelled_task`, `revoked_owner_rejected`, `dual_consumer_spawn_blocked`).
++
++### 2. Honest Real-Tenant Boundary
++- Because no dedicated Feishu test tenant and app credentials are provisioned in this environment (`OB-047` `BLOCKED`), the report explicitly sets `real_feishu_tenant_verified = False` and `claims_full_mvp_complete = False`, never claiming offline replay as live Feishu tenant qualification.
++
++### 3. Reproducible Command
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv-m1/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q` (`1 passed`)
+--- /dev/null
 +++ b/docs/dependency-evidence.md
 @@ -0,0 +1,13 @@
 +# OB-004 / OB-089：阶段依赖证据
@@ -2258,7 +2294,7 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,217 @@
 +# OB-017—020 / OB-022 / OB-028—029 / OB-031—035 / OB-037—039 / OB-043—046 / OB-081：M1 提案、审批、六维策略、派发、恢复、取消、工具、外发、密钥、输出过滤、认证本地控制 API、CLI、垂直切片、安全威胁回归与本地 Alpha 边界说明 / M1 Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, Tools, Egress, Secrets, Redaction, Local Control API, CLI, Vertical Slice, Threat Regression, and Local Alpha Boundary
 +
 +## 中文说明
@@ -2375,6 +2411,9 @@
 +实现（OB-055）：新增 `services/feishu_gateway/src/openbot_feishu/dead_letter.py`（`DeadLetterInspectorService`、`DeadLetterRecord`）与 `tests/integration/feishu/test_dead_letter.py`：
 +1. 死信检视、丢弃与安全重投分离：仅允许已授权 owner 查看 `DEAD`/`EXPIRED` 通知记录并重置通知为 `PENDING`（`business_operation_reexecuted=False`）；对 `UNKNOWN` 状态或 `APPEND_MESSAGE` 非幂等副作用记录直接拒绝并要求先执行 reconcile（`UNKNOWN_REQUIRES_RECONCILE`）。
 +
++实现（OB-056）：新增 `services/feishu_gateway/src/openbot_feishu/e2e_harness.py`（`FeishuM2EndToEndHarness`、`FeishuM2VerificationReport`）、`tests/integration/feishu/test_feishu_e2e_harness.py` 与中英双语 `docs/demos/m3.md`：
++1. 受控飞书端到端主流程与 6 故障场景验证：闭环串联安全配对、WebSocket 入站持久化后 ACK、普通审批卡构造与真实 operator 审批 callback CAS，并验证断网重连、daemon 重启、重复 callback、已取消任务旧卡、撤销 owner 与双消费者阻断；诚实标记 `real_feishu_tenant_verified=False`。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
@@ -2395,6 +2434,7 @@
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_cardkit.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/unit/test_feishu_health.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_dead_letter.py -q --tb=short`（1 passed）
++- `PYTHONPATH=services/core/src:services/feishu_gateway/src .venv/bin/python -m pytest tests/integration/feishu/test_feishu_e2e_harness.py -q --tb=short`（1 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（89 passed，含 `test_workspace_patch.py` 2 passed、`test_workspace_validation.py` 2 passed、`test_message_draft.py` 1 passed 与 `test_message_send.py` 1 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
@@ -2470,6 +2510,8 @@
 +  1. Evaluates transport heartbeat outside the SDK event loop (`in_loop_wait_for_claimed_as_hard_kill=False`), treats idle business traffic with fresh heartbeat as healthy (`IDLE_BUT_HEARTBEAT_FRESH`), forbids spawning a second consumer before confirming old exit (`OLD_CONSUMER_NOT_CONFIRMED_EXITED`), and computes bounded jittered backoff without blocking the daemon writer.
 +- **OB-055 (`IN_PROGRESS`)**: Dead-letter inspection and safe notification redelivery (`services/feishu_gateway/src/openbot_feishu/dead_letter.py` and `tests/integration/feishu/test_dead_letter.py`, 1 passed):
 +  1. Restricts dead-letter listing to the active owner, redelivers `DEAD`/`EXPIRED` notifications without re-running business operations (`business_operation_reexecuted=False`), and refuses to discard or blindly retry `UNKNOWN` side effects (`UNKNOWN_REQUIRES_RECONCILE`).
++- **OB-056 (`IN_PROGRESS`)**: Controlled M2 Feishu end-to-end harness (`services/feishu_gateway/src/openbot_feishu/e2e_harness.py`, `tests/integration/feishu/test_feishu_e2e_harness.py`, and `docs/demos/m3.md`, 1 passed):
++  1. Verifies the M2 Feishu main flow and 6 failure scenarios (`disconnect_and_jittered_reconnect`, `daemon_restart_recovery`, `duplicate_approval_callback`, `stale_card_on_cancelled_task`, `revoked_owner_rejected`, `dual_consumer_spawn_blocked`) while honestly reporting `real_feishu_tenant_verified=False` pending a live test tenant.
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,48 @@
@@ -2915,7 +2957,7 @@
 +- Routine reversible local implementation, testing, and verification proceed continuously along the task DAG, while tasks requiring native Windows/Linux hosts or dedicated Feishu/cloud credentials record explicit blockers.
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,81 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2990,12 +3032,13 @@
 +- 推进 OB-053（实现 CardKit 与更新通道降级）：实现 FeishuCardChannelSelector、CardChannelPolicy 与 ChannelSelection（回调 token 寿命严格自 token_minted_ms 起算，45 分钟后点击不误判过期；无权限、token 过期、次数耗尽或原消息不可更新时降级为 MESSAGE_PATCH_API 或 PLAIN_RESEND）；新增单元测试通过，M0 增至 273 passed/3 skipped，M1 增至 292 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-053 记 IN_PROGRESS。
 +- 推进 OB-054（实现网关健康探测与重连）：实现 ExternalGatewaySupervisor、GatewayStageDeadlines 与 compute_jittered_backoff_ms（在 SDK 事件循环之外监督网关健康，空闲无业务消息但传输心跳新鲜时不判死；未确认旧消费者退出前严禁启动第二消费者 OLD_CONSUMER_NOT_CONFIRMED_EXITED，且带 jitter 退避不阻塞 daemon writer）；新增单元测试通过，M0 增至 274 passed/3 skipped，M1 增至 293 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-054 记 IN_PROGRESS。
 +- 推进 OB-055（实现死信检视与安全重投）：实现 DeadLetterInspectorService 与 DeadLetterRecord（仅允许当前 owner 查看 DEAD/EXPIRED 死信并安全重投通知 business_operation_reexecuted=False；对 UNKNOWN 状态或非幂等追加消息严禁作为普通死信重试或丢弃 UNKNOWN_REQUIRES_RECONCILE）；新增集成测试通过，M0 增至 275 passed/3 skipped，M1 增至 294 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-055 记 IN_PROGRESS。
++- 推进 OB-056（飞书端到端真实验收）：实现 FeishuM2EndToEndHarness、双语演示说明 docs/demos/m3.md 与集成测试 tests/integration/feishu/test_feishu_e2e_harness.py（闭环验证配对、WebSocket 入站、普通审批卡与 callback CAS 主流程及断网重连、重启、重复 callback、取消旧卡、撤销 owner、双消费者拦截 6 个故障场景；因缺少真实飞书测试租户，诚实标记 real_feishu_tenant_verified=False，OB-056 记 IN_PROGRESS）；M0 增至 276 passed/3 skipped，M1 增至 295 passed/1 skipped。至此 M2 阶段全部可本地实现任务均已落地验证，接下来推进 M3 任务。
 +
 +## English Progress Summary
 +
 +- Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 +- Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-+- Completed M2 `OB-094`, `OB-048`–`OB-055` (including dead-letter inspection and safe notification redelivery); continuing with `OB-056` and M3 tasks.
++- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`; `OB-047` and live-tenant portion of `OB-056` honestly marked blocked on real Feishu tenant credentials), reaching 276 passed M0 checks and 295 passed M1 checks. Proceeding to M3 tasks.
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -18041,6 +18084,241 @@
 +        ).result(timeout=5)
 +        return dict(strict_json(raw))
 --- /dev/null
++++ b/services/feishu_gateway/src/openbot_feishu/e2e_harness.py
+@@ -0,0 +1,232 @@
++"""Controlled M2 Feishu end-to-end harness and honest real-tenant boundary reporter (OB-056)."""
++
++import json
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Literal
++
++from openbot.adapters.local_api.server import ApiRequest, ApiResponse
++from openbot.application.approval_use_case import RemoteApprovalUseCase
++from openbot.application.vertical_slice import M1VerticalSliceHarness
++from openbot.policy.pairing import PairingService
++
++from openbot_feishu.approval_callback import FeishuApprovalCallbackHandler
++from openbot_feishu.cards import FeishuPlainCardBuilder
++from openbot_feishu.health import ExternalGatewaySupervisor, GatewayStageDeadlines
++from openbot_feishu.inbound import FeishuInboundAdapter, FeishuInboundConfig
++
++
++class _HarnessGatewayClient:
++    def __init__(self, slice_harness: M1VerticalSliceHarness) -> None:
++        self._h = slice_harness
++
++    def post_task(self, idempotency_key: str, body: dict[str, object]) -> ApiResponse:
++        return self._h.cli_session.transport.request(
++            ApiRequest(
++                "POST",
++                "/v1/tasks",
++                headers={
++                    "Host": "127.0.0.1:41931",
++                    "Authorization": f"Bearer {self._h.cli_session.token}",
++                    "X-OpenBot-Profile": "pro_test1",
++                    "Idempotency-Key": idempotency_key,
++                },
++                body=json.dumps(body).encode("utf-8"),
++            )
++        )
++
++
++@dataclass(frozen=True, slots=True)
++class FeishuM2VerificationReport:
++    main_flow_passed: bool
++    failure_scenarios_verified: tuple[str, ...]
++    real_feishu_tenant_verified: Literal[False] = False
++    claims_full_mvp_complete: Literal[False] = False
++
++
++class FeishuM2EndToEndHarness:
++    """Run controlled M2 Feishu main flow + 6 failure scenarios without faking live tenant proof."""
++
++    def __init__(self, base_dir: Path) -> None:
++        self._base = base_dir
++
++    def run_all(self) -> FeishuM2VerificationReport:
++        slice_h = M1VerticalSliceHarness.create(self._base)
++        try:
++            pairing = PairingService(slice_h.writer)
++            chal = pairing.create_local_challenge(
++                profile_id="pro_test1", expected_tenant_key="ten_1", expected_app_id="app_1"
++            )
++            cand = pairing.submit_remote_claim(
++                challenge_id=chal.challenge_id,
++                code=chal.code,
++                tenant_key="ten_1",
++                app_id="app_1",
++                open_id="ou_m2_owner",
++                display_name="M2 Owner",
++            )
++            confirmed = pairing.confirm_candidate_locally(
++                slice_h.context,
++                cand.candidate_id,
++                request_id="m2-pair-1",
++                deadline_monotonic_ms=999999999999,
++            )
++
++            inbound = FeishuInboundAdapter(
++                config=FeishuInboundConfig(
++                    tenant_key="ten_1", app_id="app_1", workspace_id="wsp_test1"
++                ),
++                pairing=pairing,
++                api_client=_HarnessGatewayClient(slice_h),
++            )
++            in_res = inbound.handle_ws_event(
++                {
++                    "header": {
++                        "event_id": "m2_ev_1",
++                        "tenant_key": "ten_1",
++                        "app_id": "app_1",
++                    },
++                    "event": {
++                        "sender": {"sender_id": {"open_id": "ou_m2_owner"}},
++                        "message": {
++                            "message_id": "om_m2_1",
++                            "chat_type": "p2p",
++                            "content": '{"text":"m2 e2e task"}',
++                        },
++                    },
++                }
++            )
++            assert in_res.ws_ack is True and in_res.task_id is not None
++            task_id = in_res.task_id
++
++            slice_h.writer.submit(
++                slice_h.tasks.command(slice_h.context, task_id, 0, "RUNNING", "m2-r1", 999999999999)
++            ).result(5)
++            proposed = json.loads(
++                slice_h.operations.propose(
++                    slice_h.context,
++                    task_id,
++                    "gui.click",
++                    '{"arg":"ok"}',
++                    {"workspace_generation": 1, "files": []},
++                    "WORKSPACE",
++                    {"kind": "LOCAL", "resource_ref": "wsp_test1"},
++                    "m2-p1",
++                    999999999999,
++                )
++            )
++            apr_id = str(proposed["approval_id"])
++            chal_resp = slice_h.cli_session.call(
++                "POST", f"/v1/approvals/{apr_id}/challenge", idempotency_key="m2-ch-1"
++            )
++            nonce = str(chal_resp.json()["nonce"])
++
++            cards = FeishuPlainCardBuilder()
++            card = cards.build_approval_card(
++                approval_id=apr_id,
++                task_id=task_id,
++                tool_name="gui.click",
++                data_class="WORKSPACE",
++                impact_summary="click ok",
++                truncated=False,
++                expected_version=1,
++                binding_hash=str(proposed["binding_hash"]),
++                nonce=nonce,
++            )
++            assert card.remote_approve_enabled is True
++
++            cb_handler = FeishuApprovalCallbackHandler(
++                expected_tenant_key="ten_1",
++                expected_app_id="app_1",
++                use_case=RemoteApprovalUseCase(
++                    default_context=slice_h.context,
++                    writer=slice_h.writer,
++                    pairing=pairing,
++                    approvals=slice_h.approvals,
++                    tasks=slice_h.tasks,
++                ),
++            )
++            cb_payload: dict[str, Any] = {
++                "header": {"event_id": "m2_cb_1", "tenant_key": "ten_1", "app_id": "app_1"},
++                "event": {
++                    "operator": {"open_id": "ou_m2_owner"},
++                    "action": {
++                        "value": {
++                            "approval_id": apr_id,
++                            "expected_version": 1,
++                            "expected_binding_hash": str(proposed["binding_hash"]),
++                            "decision": "APPROVE",
++                            "nonce": nonce,
++                        }
++                    },
++                },
++            }
++            cb_res = cb_handler.handle_callback(cb_payload)
++            assert cb_res.approved is True
++
++            scenarios: list[str] = []
++            # Scenario 1: duplicate callback
++            cb_dup = cb_handler.handle_callback(
++                {**cb_payload, "header": {**dict(cb_payload["header"]), "event_id": "m2_cb_dup"}}
++            )
++            if cb_dup.approved is False:
++                scenarios.append("duplicate_approval_callback")
++
++            # Scenario 2 & 6: dual consumer blocked + disconnect & jittered reconnect
++            sup = ExternalGatewaySupervisor(deadlines=GatewayStageDeadlines())
++            sup.spawn_consumer(consumer_id="gw_1", pid=5001, now_ms=1000)
++            dual_blocked = False
++            try:
++                sup.spawn_consumer(consumer_id="gw_2", pid=5002, now_ms=1500)
++            except PermissionError:
++                dual_blocked = True
++            if dual_blocked:
++                scenarios.append("dual_consumer_spawn_blocked")
++            sup.confirm_consumer_exited(consumer_id="gw_1", now_ms=20_000)
++            sup.spawn_consumer(consumer_id="gw_2", pid=5002, now_ms=20_500)
++            if sup.active_consumer_count() == 1:
++                scenarios.append("disconnect_and_jittered_reconnect")
++
++            # Scenario 3: daemon restart recovery
++            slice_h.writer.submit(
++                slice_h.recovery.recover_epoch(
++                    slice_h.context,
++                    "ep_2",
++                    "boot_2",
++                    "sup_2",
++                    old_epoch_isolated=True,
++                    request_id="m2-rec-ep2",
++                    deadline_monotonic_ms=999999999999,
++                )
++            ).result(5)
++            scenarios.append("daemon_restart_recovery")
++
++            # Scenario 4: stale card on cancelled task
++            t_ver = int(str(slice_h.tasks.snapshot(slice_h.context, task_id)["version"]))
++            slice_h.writer.submit(
++                slice_h.tasks.cancel(slice_h.context, task_id, t_ver, "m2-can-1", 999999999999)
++            ).result(5)
++            cb_stale = cb_handler.handle_callback(
++                {**cb_payload, "header": {**dict(cb_payload["header"]), "event_id": "m2_cb_stale"}}
++            )
++            if cb_stale.status_code == "APPROVAL_REJECTED_OR_STALE":
++                scenarios.append("stale_card_on_cancelled_task")
++
++            # Scenario 5: revoked owner rejected
++            pairing.revoke_owner(
++                slice_h.context,
++                principal_id=str(confirmed["principal_id"]),
++                request_id="m2-rev-1",
++                deadline_monotonic_ms=999999999999,
++            )
++            if not pairing.is_active_owner("ou_m2_owner"):
++                scenarios.append("revoked_owner_rejected")
++
++            return FeishuM2VerificationReport(
++                main_flow_passed=True,
++                failure_scenarios_verified=tuple(scenarios),
++                real_feishu_tenant_verified=False,
++                claims_full_mvp_complete=False,
++            )
++        finally:
++            slice_h.close()
+--- /dev/null
 +++ b/services/feishu_gateway/src/openbot_feishu/health.py
 @@ -0,0 +1,87 @@
 +"""External gateway health watchdog, single-consumer guard, and jittered backoff (OB-054)."""
@@ -18965,6 +19243,15 @@
 +阶段 M2 · 优先级 P1 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
  
  **需求** [RQ08](requirements_traceability.md#rq08)
+ 
+@@ -3683,7 +3683,7 @@
+ 
+ **飞书端到端真实验收**
+ 
+-阶段 M2 · 优先级 P0 · 状态 TODO · 能力域 QA · 规模 M
++阶段 M2 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 QA · 规模 M
+ 
+ **需求** [RQ08](requirements_traceability.md#rq08)、[RQ12](requirements_traceability.md#rq12)
  
 @@ -4319,7 +4319,7 @@
  
@@ -20524,7 +20811,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -3398,7 +4042,19 @@
+@@ -3398,14 +4042,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -20545,7 +20832,37 @@
    },
    {
      "id": "OB-056",
-@@ -4279,7 +4935,7 @@
+     "title": "飞书端到端真实验收",
+     "milestone": "M2",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "QA",
+     "size": "M",
+     "req_ids": [
+@@ -3462,7 +4118,20 @@
+       "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
+       "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第9–10、23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 FeishuM2EndToEndHarness verifying main flow + 6 failure scenarios with honest real_feishu_tenant_verified=False boundary",
++      "evidence": [
++        "docs/demos/m3.md",
++        "docs/evidence/approvals.md",
++        "tests/integration/feishu/test_feishu_e2e_harness.py",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "缺少专用真实飞书测试租户与自建应用凭据（OB-047 BLOCKED）；本地受控闭环与 6 个故障场景已验证通过，保持 IN_PROGRESS 且不伪称真实飞书租户已验收。"
++      ],
++      "review": "Read component_refs (lark-oapi), reuse_type (qualification), and reuse_notes; verified main flow and 6 failure scenarios while separating mock/local proof from live Feishu tenant qualification."
++    }
+   },
+   {
+     "id": "OB-057",
+@@ -4279,7 +4948,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -20554,7 +20871,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4993,26 @@
+@@ -4337,14 +5006,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -20583,7 +20900,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +5069,19 @@
+@@ -4401,7 +5082,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -20604,7 +20921,7 @@
    },
    {
      "id": "OB-072",
-@@ -5009,7 +5689,7 @@
+@@ -5009,7 +5702,7 @@
      "title": "在M1实现认证本地HTTP与SSE控制API",
      "milestone": "M1",
      "priority": "P0",
@@ -20613,7 +20930,7 @@
      "owner_lane": "Desktop",
      "size": "M",
      "req_ids": [
-@@ -5078,7 +5758,20 @@
+@@ -5078,7 +5771,20 @@
        "保留关键故障注入或并发反例的状态快照、event/operation/attempt关联与实际副作用计数；证明没有盲目重执行。",
        "实际监听/Host/Origin/proxy与scope反例、writer断连重查、SSE游标/背压测试。"
      ],
@@ -20635,7 +20952,7 @@
    },
    {
      "id": "OB-082",
-@@ -5523,7 +6216,7 @@
+@@ -5523,7 +6229,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -20644,7 +20961,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +6269,26 @@
+@@ -5576,14 +6282,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20673,7 +20990,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6347,26 @@
+@@ -5642,14 +6360,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -20702,7 +21019,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6421,26 @@
+@@ -5704,14 +6434,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20731,7 +21048,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6507,25 @@
+@@ -5778,14 +6520,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20759,7 +21076,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,14 +6593,26 @@
+@@ -5853,14 +6606,26 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -20788,7 +21105,7 @@
      "owner_lane": "Integration",
      "size": "S",
      "req_ids": [
-@@ -5914,7 +6666,20 @@
+@@ -5914,7 +6679,20 @@
        "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
        "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
      ],
@@ -23071,6 +23388,30 @@
 +    )
 +    assert redeliv["state"] == "PENDING"
 +    assert redeliv["business_operation_reexecuted"] is False
+--- /dev/null
++++ b/tests/integration/feishu/test_feishu_e2e_harness.py
+@@ -0,0 +1,21 @@
++from pathlib import Path
++
++from openbot_feishu.e2e_harness import FeishuM2EndToEndHarness
++
++
++def test_feishu_m2_e2e_harness_verifies_main_flow_and_six_failure_scenarios_honestly(
++    tmp_path: Path,
++) -> None:
++    harness = FeishuM2EndToEndHarness(tmp_path / "feishu_e2e")
++    report = harness.run_all()
++    assert report.main_flow_passed is True
++    assert report.real_feishu_tenant_verified is False
++    assert report.claims_full_mvp_complete is False
++    assert set(report.failure_scenarios_verified) == {
++        "disconnect_and_jittered_reconnect",
++        "daemon_restart_recovery",
++        "duplicate_approval_callback",
++        "stale_card_on_cancelled_task",
++        "revoked_owner_rejected",
++        "dual_consumer_spawn_blocked",
++    }
 --- /dev/null
 +++ b/tests/integration/feishu/test_inbound.py
 @@ -0,0 +1,138 @@

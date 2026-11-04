@@ -72,9 +72,10 @@
 - 推进 OB-053（实现 CardKit 与更新通道降级）：实现 FeishuCardChannelSelector、CardChannelPolicy 与 ChannelSelection（回调 token 寿命严格自 token_minted_ms 起算，45 分钟后点击不误判过期；无权限、token 过期、次数耗尽或原消息不可更新时降级为 MESSAGE_PATCH_API 或 PLAIN_RESEND）；新增单元测试通过，M0 增至 273 passed/3 skipped，M1 增至 292 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-053 记 IN_PROGRESS。
 - 推进 OB-054（实现网关健康探测与重连）：实现 ExternalGatewaySupervisor、GatewayStageDeadlines 与 compute_jittered_backoff_ms（在 SDK 事件循环之外监督网关健康，空闲无业务消息但传输心跳新鲜时不判死；未确认旧消费者退出前严禁启动第二消费者 OLD_CONSUMER_NOT_CONFIRMED_EXITED，且带 jitter 退避不阻塞 daemon writer）；新增单元测试通过，M0 增至 274 passed/3 skipped，M1 增至 293 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-054 记 IN_PROGRESS。
 - 推进 OB-055（实现死信检视与安全重投）：实现 DeadLetterInspectorService 与 DeadLetterRecord（仅允许当前 owner 查看 DEAD/EXPIRED 死信并安全重投通知 business_operation_reexecuted=False；对 UNKNOWN 状态或非幂等追加消息严禁作为普通死信重试或丢弃 UNKNOWN_REQUIRES_RECONCILE）；新增集成测试通过，M0 增至 275 passed/3 skipped，M1 增至 294 passed/1 skipped。因上游依赖仍为 IN_PROGRESS，OB-055 记 IN_PROGRESS。
+- 推进 OB-056（飞书端到端真实验收）：实现 FeishuM2EndToEndHarness、双语演示说明 docs/demos/m3.md 与集成测试 tests/integration/feishu/test_feishu_e2e_harness.py（闭环验证配对、WebSocket 入站、普通审批卡与 callback CAS 主流程及断网重连、重启、重复 callback、取消旧卡、撤销 owner、双消费者拦截 6 个故障场景；因缺少真实飞书测试租户，诚实标记 real_feishu_tenant_verified=False，OB-056 记 IN_PROGRESS）；M0 增至 276 passed/3 skipped，M1 增至 295 passed/1 skipped。至此 M2 阶段全部可本地实现任务均已落地验证，接下来推进 M3 任务。
 
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
-- Completed M2 `OB-094`, `OB-048`–`OB-055` (including dead-letter inspection and safe notification redelivery); continuing with `OB-056` and M3 tasks.
+- Completed all M2 local implementation and contract verification tasks (`OB-048`–`OB-056`, `OB-094`; `OB-047` and live-tenant portion of `OB-056` honestly marked blocked on real Feishu tenant credentials), reaching 276 passed M0 checks and 295 passed M1 checks. Proceeding to M3 tasks.
