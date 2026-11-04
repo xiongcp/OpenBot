@@ -16,7 +16,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/unit-contract-protocol.log",
-      "log_sha256": "1af921467d8ab5ad170337a325338f7a6faac4a65851c446cf14169ef0d1987c"
+      "log_sha256": "f5bc65ca575c3aed470cef5badbb4c8dc1fa8fd1dba0d82726ff8dc466aa5d6a"
     },
     {
       "name": "lint",
@@ -41,7 +41,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/format.log",
-      "log_sha256": "0e25936f296d6783c9ed43fd68bade26a8911c0a0482012f92297f6a797443ff"
+      "log_sha256": "376c98847555bc08e6d0e81fe12f18c2e0f80f00d2279bb463c6b7c5f3d666c1"
     },
     {
       "name": "types",
@@ -73,7 +73,7 @@
       ],
       "exit_code": 0,
       "log": "evidence/implementation/design.log",
-      "log_sha256": "41975c2f5b5c0ab63b0b946d698c8b1ed92cf347d94367a04bb42cb0b2ff2426"
+      "log_sha256": "d8cb90f4cb0530f8ad8e2a5540fed713503bae2c5439b1cd811061f59eea801f"
     },
     {
       "name": "design-components",

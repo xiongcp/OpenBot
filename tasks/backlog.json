@@ -6515,7 +6515,7 @@
     "title": "审查飞书模板的最小源码复用",
     "milestone": "M2",
     "priority": "P1",
-    "status": "TODO",
+    "status": "IN_PROGRESS",
     "owner_lane": "Integration",
     "size": "S",
     "req_ids": [
@@ -6569,7 +6569,20 @@
       "明确的NO_COPY或有限摘取决定，所比较的候选/方案、收益与维护理由。",
       "实际摘取时附精确commit/path/hash/许可证/NOTICE/diff及离线fixture；NO_COPY无需虚构这些已采用资产。"
     ],
-    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第10、17、23页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。"
+    "source_basis": "U3《OpenBot 开源组件复用评估》PDF物理第10、17、23页提出复用方向；本任务为v1.2工程补足与修正，以docs_refs中设计及官方证据为准。",
+    "execution": {
+      "scope": "Audited nanobot and langbot Feishu card/channel templates and recorded formal NO_COPY decision",
+      "evidence": [
+        "docs/evidence/source-reuse-feishu.md",
+        "components/source-reuse/feishu.json",
+        "tests/unit/test_source_reuse_feishu.py",
+        "evidence/implementation/verification.json"
+      ],
+      "blockers": [
+        "上游 OB-047 缺少真实飞书测试租户与凭据（BLOCKED），OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS。"
+      ],
+      "review": "Read component_refs (nanobot, langbot), reuse_type (source_review), and reuse_notes; documented NO_COPY decision with extraction_verification=NOT_APPLICABLE."
+    }
   },
   {
     "id": "OB-095",

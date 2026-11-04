@@ -1,0 +1,23 @@
+{
+  "kind": "SOURCE_REUSE_DECISION_RECORD",
+  "decision": "NO_COPY",
+  "task_id": "OB-094",
+  "candidates_reviewed": [
+    "nanobot",
+    "langbot"
+  ],
+  "upstream_url": null,
+  "commit": null,
+  "files": [],
+  "license_expression": null,
+  "license_files": [],
+  "local_patch": null,
+  "owner": "Integration",
+  "regression_tests": [
+    "tests/unit/test_source_reuse_feishu.py"
+  ],
+  "extraction_verification": "NOT_APPLICABLE",
+  "upgrade_trigger": null,
+  "replacement_plan": "OpenBot native pure-JSON card builders in services/feishu_gateway/src/openbot_feishu/cards.py",
+  "reason": "Both nanobot and LangBot couple card templates with in-memory channel buses, first-user auto-pairing, or direct SDK send calls. Writing OpenBot-owned pure dict card constructors is simpler, avoids vendoring upstream runtime assumptions, and keeps EgressGuard/Outbox authority intact."
+}

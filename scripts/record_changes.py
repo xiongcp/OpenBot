@@ -36,12 +36,14 @@ def run():
     initial = json.loads((ROOT / "evidence/implementation/initial-files.json").read_text())
     roots = [
         "services/core/src",
+        "services/feishu_gateway/src",
         "tests",
         "scripts",
         "docs",
         "db/migrations",
         ".github",
         "components/admissions",
+        "components/source-reuse",
         "components/locks",
         "components/assets",
         "evidence/implementation",

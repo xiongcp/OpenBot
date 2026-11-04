@@ -1,0 +1,16 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_feishu_source_reuse_audit_records_no_copy_without_vendoring_upstream_runtime _
+
+    def test_feishu_source_reuse_audit_records_no_copy_without_vendoring_upstream_runtime() -> None:
+        rec_path = ROOT / "components/source-reuse/feishu.json"
+        doc_path = ROOT / "docs/evidence/source-reuse-feishu.md"
+>       assert rec_path.is_file()
+E       AssertionError: assert False
+E        +  where False = is_file()
+E        +    where is_file = PosixPath('/Users/admin-1234/work/OpenBot/components/source-reuse/feishu.json').is_file
+
+tests/unit/test_source_reuse_feishu.py:10: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_source_reuse_feishu.py::test_feishu_source_reuse_audit_records_no_copy_without_vendoring_upstream_runtime
+1 failed in 0.02s
