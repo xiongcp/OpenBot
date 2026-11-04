@@ -1,4 +1,4 @@
-# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031 / OB-032 / OB-037 / OB-038：提案、审批、六维策略、两次短事务派发、恢复、取消、文件守卫、统一外发与密钥最小注入 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard, Egress, and Minimal Secret Injection
+# OB-017—020 / OB-022 / OB-031—032 / OB-037—039：提案、审批、六维策略、两次短事务派发、恢复、取消、文件守卫、统一外发、密钥注入与敏感输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard, Egress, Secrets, and Output Redaction
 
 ## 中文说明
 
@@ -38,15 +38,21 @@
 2. 按组件最小权限隔离注入：飞书网关仅可解析 `keychain:feishu:*`；模型网关仅可解析匹配 `selected_provider` 的 `keychain:provider:<selected_provider>:*`（禁止跨 Provider 读取或读取飞书密钥）；Worker 仅获得绑定 `attempt_id` 与有效期的单用途短时 IPC 句柄 `SingleUseSecretHandle`（一次消费即销毁，撤销或轮换 `secret_ref` 立即使全部在途句柄失效）。
 3. 子进程环境净化与 Canary 扫描（`build_minimal_child_spawn_spec`）：不继承父进程 `os.environ`，拒绝挂载宿主 `HOME` 目录，扫描并拒绝任何包含测试/已注册密钥 canary 的 `argv`，确保 child env、argv、异常栈与诊断中零密钥泄漏。
 
+实现（OB-039）：新增 `services/core/src/openbot/observability/redaction.py`（`StreamingSecretRedactor`、`RedactionPipeline`、`RedactionContract`、`RedactionResult`）：
+1. 跨任意分片与超长秘密的流式过滤（`StreamingSecretRedactor`）：根据已注册秘密及其 Base64/URL/JSON 转义变体的最大长度动态扩展 `holdback_window_chars`（不依赖固定 128 字节窗口），支持在任意字符边界切分的流式 `feed()` + `flush()`，并结合离线审查过的模式规则（Bearer、`sk-*`、`fs_sec_*`、`cli_*`、PEM 私钥等）先过滤再持久化或外发。
+2. 忽略外部 Allowlist 与永久禁用在线验证：外部 `# pragma: allowlist secret` 等注释完全不生效；`network_verification_enabled=False` 且 `verify_secret_online_forbidden` 硬拒绝任何向第三方验证端点发送秘密的行为。
+3. 全出口统一接入与分类保护（`RedactionPipeline`）：统一覆盖 `stdout`、`stderr`、`sdk_debug`、`exception`、`http_header`、`ui_event`、`artifact`、`diagnostic` 与 `model_input` 九类出口；显式声明 `guarantees_100_percent_detection=False` 与 `negative_scan_downgrades_classification=False`（扫描阴性绝不降低 `SECRET`/`SENSITIVE` 分类，不确定敏感内容 `uncertain_sensitivity=True` 直接阻断远端外发）。
+
 实际命令：
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
+- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
 - `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
 - 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 
-当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/037/038 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 
 ## English Summary
 
@@ -70,3 +76,7 @@
   1. `APPROVED_KEYRING_BACKENDS` & `SecretUnavailableError`: Rejects plaintext or ad-hoc Fernet file fallbacks and unapproved plugins; fails closed on locked keychain, missing D-Bus, headless session, or user cancellation without leaking secret bytes in exceptions.
   2. `SecretBroker`: Compartmentalizes secrets so the Feishu gateway only accesses `keychain:feishu:*`, model gateways only access `keychain:provider:<selected_provider>:*`, and workers only receive attempt-bound single-use IPC handles (`SingleUseSecretHandle`) invalidated on consumption, rotation, or revocation.
   3. `build_minimal_child_spawn_spec`: Prevents inheriting ambient `os.environ`, blocks mounting host `HOME`, and rejects `argv` containing any registered secret canary.
+- **OB-039 (`IN_PROGRESS`)**: Streaming offline secret redaction across all output sinks (`services/core/src/openbot/observability/redaction.py`):
+  1. `StreamingSecretRedactor`: Dynamically sizes its holdback window to the longest registered secret (including Base64, URL-encoded, and JSON-escaped variants) rather than relying on a fixed 128-byte window; redacts secrets split across arbitrary chunk boundaries.
+  2. No allowlist or network bypass: Ignores `# pragma: allowlist secret` comments and permanently disables online secret verification (`network_verification_enabled=False`).
+  3. `RedactionPipeline`: Filters `stdout`, `stderr`, `sdk_debug`, `exception`, `http_header`, `ui_event`, `artifact`, `diagnostic`, and `model_input` without downgrading `SECRET`/`SENSITIVE` classifications on negative scans (`guarantees_100_percent_detection=False`).

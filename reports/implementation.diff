@@ -2160,8 +2160,8 @@
 +本阶段官方实现文档：[jsonschema 引用](https://python-jsonschema.readthedocs.io/en/stable/referencing/)、[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785.html)、[rfc8785.py](https://github.com/trailofbits/rfc8785.py)。每个已安装包的精确 PyPI 版本元数据 URL、wheel URL/hash、LICENSE 文本定位均由实际锁和安装包生成。
 --- /dev/null
 +++ b/docs/evidence/approvals.md
-@@ -0,0 +1,72 @@
-+# OB-017 / OB-018 / OB-019 / OB-020 / OB-022 / OB-031 / OB-032 / OB-037 / OB-038：提案、审批、六维策略、两次短事务派发、恢复、取消、文件守卫、统一外发与密钥最小注入 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard, Egress, and Minimal Secret Injection
+@@ -0,0 +1,82 @@
++# OB-017—020 / OB-022 / OB-031—032 / OB-037—039：提案、审批、六维策略、两次短事务派发、恢复、取消、文件守卫、统一外发、密钥注入与敏感输出过滤 / Proposals, Approvals, 6D Policy, Dispatch, Recovery, Cancellation, File Guard, Egress, Secrets, and Output Redaction
 +
 +## 中文说明
 +
@@ -2201,15 +2201,21 @@
 +2. 按组件最小权限隔离注入：飞书网关仅可解析 `keychain:feishu:*`；模型网关仅可解析匹配 `selected_provider` 的 `keychain:provider:<selected_provider>:*`（禁止跨 Provider 读取或读取飞书密钥）；Worker 仅获得绑定 `attempt_id` 与有效期的单用途短时 IPC 句柄 `SingleUseSecretHandle`（一次消费即销毁，撤销或轮换 `secret_ref` 立即使全部在途句柄失效）。
 +3. 子进程环境净化与 Canary 扫描（`build_minimal_child_spawn_spec`）：不继承父进程 `os.environ`，拒绝挂载宿主 `HOME` 目录，扫描并拒绝任何包含测试/已注册密钥 canary 的 `argv`，确保 child env、argv、异常栈与诊断中零密钥泄漏。
 +
++实现（OB-039）：新增 `services/core/src/openbot/observability/redaction.py`（`StreamingSecretRedactor`、`RedactionPipeline`、`RedactionContract`、`RedactionResult`）：
++1. 跨任意分片与超长秘密的流式过滤（`StreamingSecretRedactor`）：根据已注册秘密及其 Base64/URL/JSON 转义变体的最大长度动态扩展 `holdback_window_chars`（不依赖固定 128 字节窗口），支持在任意字符边界切分的流式 `feed()` + `flush()`，并结合离线审查过的模式规则（Bearer、`sk-*`、`fs_sec_*`、`cli_*`、PEM 私钥等）先过滤再持久化或外发。
++2. 忽略外部 Allowlist 与永久禁用在线验证：外部 `# pragma: allowlist secret` 等注释完全不生效；`network_verification_enabled=False` 且 `verify_secret_online_forbidden` 硬拒绝任何向第三方验证端点发送秘密的行为。
++3. 全出口统一接入与分类保护（`RedactionPipeline`）：统一覆盖 `stdout`、`stderr`、`sdk_debug`、`exception`、`http_header`、`ui_event`、`artifact`、`diagnostic` 与 `model_input` 九类出口；显式声明 `guarantees_100_percent_detection=False` 与 `negative_scan_downgrades_classification=False`（扫描阴性绝不降低 `SECRET`/`SENSITIVE` 分类，不确定敏感内容 `uncertain_sensitivity=True` 直接阻断远端外发）。
++
 +实际命令：
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_policy_evaluator.py -q --tb=short`（20 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_filesystem_guard.py -q --tb=short`（22 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_egress_policy.py -q --tb=short`（3 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_secrets_broker.py -q --tb=short`（3 passed）
++- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/unit/test_redaction.py -q --tb=short`（2 passed）
 +- `PYTHONPATH=services/core/src .venv/bin/python -m pytest tests/integration/storage -q --tb=short`（75 passed，含 `test_dispatch.py` 6 passed、`test_recovery.py` 3 passed、`test_outbox.py` 4 passed 与 `test_cancellation.py` 3 passed，见 evidence/implementation/m1-storage-tests.log）
 +- 完整验证命令为 `.venv/bin/python scripts/verify.py` 与 `.venv-m1/bin/python scripts/verify.py --phase M1`，各自真实退出码/日志 hash 位于 verification.json、m1-verification.json。
 +
-+当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/037/038 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
++当前限制：提案与审批仍仅 local/internal 用例，未接认证 API、飞书、安全 ApprovalPreview 或真实持久 challenge store；上游 OB-015/093 及三平台真实 OS Keychain 实测尚未闭合。因此 OB-017/018/019/020/022/031/032/037/038/039 均保持 IN_PROGRESS，不凭该子集关闭 OB-029。
 +
 +## English Summary
 +
@@ -2233,6 +2239,10 @@
 +  1. `APPROVED_KEYRING_BACKENDS` & `SecretUnavailableError`: Rejects plaintext or ad-hoc Fernet file fallbacks and unapproved plugins; fails closed on locked keychain, missing D-Bus, headless session, or user cancellation without leaking secret bytes in exceptions.
 +  2. `SecretBroker`: Compartmentalizes secrets so the Feishu gateway only accesses `keychain:feishu:*`, model gateways only access `keychain:provider:<selected_provider>:*`, and workers only receive attempt-bound single-use IPC handles (`SingleUseSecretHandle`) invalidated on consumption, rotation, or revocation.
 +  3. `build_minimal_child_spawn_spec`: Prevents inheriting ambient `os.environ`, blocks mounting host `HOME`, and rejects `argv` containing any registered secret canary.
++- **OB-039 (`IN_PROGRESS`)**: Streaming offline secret redaction across all output sinks (`services/core/src/openbot/observability/redaction.py`):
++  1. `StreamingSecretRedactor`: Dynamically sizes its holdback window to the longest registered secret (including Base64, URL-encoded, and JSON-escaped variants) rather than relying on a fixed 128-byte window; redacts secrets split across arbitrary chunk boundaries.
++  2. No allowlist or network bypass: Ignores `# pragma: allowlist secret` comments and permanently disables online secret verification (`network_verification_enabled=False`).
++  3. `RedactionPipeline`: Filters `stdout`, `stderr`, `sdk_debug`, `exception`, `http_header`, `ui_event`, `artifact`, `diagnostic`, and `model_input` without downgrading `SECRET`/`SENSITIVE` classifications on negative scans (`guarantees_100_percent_detection=False`).
 --- /dev/null
 +++ b/docs/evidence/backend-capabilities.md
 @@ -0,0 +1,21 @@
@@ -2508,7 +2518,7 @@
 +- 当前 M0/M1 完整本机测试为 150/169 通过，未开放任何真实工具/API 运行能力。OB-029 未通过，M2/M3 仍需上游实现与各自真实服务/原生平台证据。
 --- /dev/null
 +++ b/progress.md
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,50 @@
 +# 实施日志
 +
 +## 2026-11-04
@@ -2558,6 +2568,7 @@
 +- 推进 OB-030（实现数据库备份恢复与保留策略）：实现 DatabaseMaintenanceService、BackupManifest 与 RestoreVerificationReport（备份前 pin_for_backup 阻止并发 GC 删引用，使用 SQLite backup 接口含 WAL 状态并核验 integrity/FK 与全部产物磁盘哈希，仅保留 secret_ref 排除真实秘密；恢复时核验 manifest 与产物哈希，停止旧 epoch、撤销未消费批准防旧授权复活、将在途 DISPATCHING 转 UNKNOWN/RECONCILING 防盲重放、缺失 secret_ref 自动禁用对应账户并标记需重配置）；新增集成测试通过，存储套件增至 83 passed，M0 增至 226 passed/3 skipped，M1 增至 245 passed/1 skipped。因上游 OB-020 及跨平台恢复待闭合，OB-030 记 IN_PROGRESS。
 +- 推进 OB-037（实现统一数据外发策略）：实现 EgressGuard、LocalModelRunnerAttestation 与 build_controlled_http_config（统一覆盖模型、飞书通知、Browser、MCP、上传与消息工具；OFFLINE 全出口阻断；SENSITIVE 在卡片预览返回 REQUIRE_LOCAL、经摘要/Artifact 仍须 ASK，SECRET 硬拒绝；阻断托管 web_search/remote_mcp/词表下载/扫描器联网验证；要求 LocalModelRunnerAttestation 证明非云转发；强制 trust_env=False、剥离环境代理并记录 Python 探针覆盖与 OS 隔离边界）；新增 3 项测试通过，M0 增至 229 passed/3 skipped，M1 增至 248 passed/1 skipped。因上游 OB-031/036 仍为 IN_PROGRESS，OB-037 记 IN_PROGRESS。
 +- 推进 OB-038（实现密钥存储与最小注入）：实现 SecretBroker、SingleUseSecretHandle、build_minimal_child_spawn_spec 与 native/supervisor/src/credential_transport.rs（锁定获准 OS 钥匙串后端，拒绝明文或自制 Fernet 文件回退；飞书网关/被选模型 Provider/Worker 单用途 attempt 绑定 IPC 句柄三域隔离；撤销与轮换立即失效在途句柄；子进程禁继承全量 env、禁挂宿主 HOME、禁 argv 传 token 且异常栈零密钥泄漏）；新增 3 项测试通过，M0 增至 232 passed/3 skipped，M1 增至 251 passed/1 skipped。因上游 OB-031/092 及三平台原生钥匙串实测待闭合，OB-038 记 IN_PROGRESS。
++- 推进 OB-039（实现敏感数据输出过滤）：实现 StreamingSecretRedactor 与 RedactionPipeline（按最长注册秘密及 Base64/URL/JSON 编码变体动态扩展跨分片窗口，不依赖固定 128 字节窗口；忽略外部 pragma allowlist secret 注释，永久禁用网络验证；统一过滤 stdout/stderr/sdk_debug/exception/http_header/ui_event/artifact/diagnostic/model_input 九类出口，扫描阴性不降低 SECRET/SENSITIVE 分类）；新增 2 项测试通过，M0 增至 234 passed/3 skipped，M1 增至 253 passed/1 skipped。因上游 OB-036/037/038/092 仍为 IN_PROGRESS，OB-039 记 IN_PROGRESS。
 --- /dev/null
 +++ b/pyproject.toml
 @@ -0,0 +1,51 @@
@@ -9341,6 +9352,173 @@
 +    timeout_ms: int
 +    max_output_bytes: int
 --- /dev/null
++++ b/services/core/src/openbot/observability/__init__.py
+@@ -0,0 +1 @@
++"""Offline secret redaction and structured telemetry primitives."""
+--- /dev/null
++++ b/services/core/src/openbot/observability/redaction.py
+@@ -0,0 +1,160 @@
++"""Streaming offline secret redaction across arbitrary chunk boundaries without allowlist bypass."""
++
++import base64
++import json
++import re
++import urllib.parse
++from dataclasses import dataclass
++from typing import Literal
++
++_OFFLINE_PATTERNS: tuple[re.Pattern[str], ...] = (
++    re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{12,}"),
++    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
++    re.compile(r"\bfs_sec_[A-Za-z0-9_-]{8,}\b"),
++    re.compile(r"\bcli_[A-Za-z0-9_-]{12,}\b"),
++    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
++    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----"),
++    re.compile(r"(?i)(api_key|secret|token|password)\s*[=:]\s*['\"]?[A-Za-z0-9._~+/=-]{8,}['\"]?"),
++)
++
++_VALID_SINKS = frozenset(
++    {
++        "stdout",
++        "stderr",
++        "sdk_debug",
++        "exception",
++        "http_header",
++        "ui_event",
++        "artifact",
++        "diagnostic",
++        "model_input",
++    }
++)
++
++
++def _encode_variants(secret: str) -> tuple[str, ...]:
++    variants: list[str] = [secret]
++    b64 = base64.b64encode(secret.encode("utf-8")).decode("ascii")
++    url_enc = urllib.parse.quote(secret, safe="")
++    json_esc = json.dumps(secret)[1:-1]
++    for v in (b64, url_enc, json_esc):
++        if v and v not in variants:
++            variants.append(v)
++    return tuple(sorted(variants, key=len, reverse=True))
++
++
++@dataclass(frozen=True, slots=True)
++class RedactionContract:
++    holdback_window_chars: int
++    network_verification_enabled: Literal[False] = False
++    dynamic_plugins_enabled: Literal[False] = False
++    external_allowlist_honored: Literal[False] = False
++    guarantees_100_percent_detection: Literal[False] = False
++    negative_scan_downgrades_classification: Literal[False] = False
++    residual_risk_note: str = (
++        "Regex and exact-canary matching cannot identify all unstructured private data; "
++        "data classification and EgressGuard remain the primary enforcement boundary."
++    )
++
++
++@dataclass(frozen=True, slots=True)
++class RedactionResult:
++    sink: str
++    sanitized_text: str
++    redaction_count: int
++    data_class: str
++    allow_remote_egress: bool
++
++
++class StreamingSecretRedactor:
++    """Stateful streaming redactor handling arbitrary chunk splits and long secrets."""
++
++    def __init__(
++        self,
++        *,
++        registered_secrets: tuple[str, ...] = (),
++        min_pattern_holdback: int = 256,
++    ) -> None:
++        all_variants: list[str] = []
++        for s in registered_secrets:
++            if s:
++                for v in _encode_variants(s):
++                    if v not in all_variants:
++                        all_variants.append(v)
++        self._variants = tuple(sorted(all_variants, key=len, reverse=True))
++        max_secret_len = max((len(v) for v in self._variants), default=0)
++        # Dynamic holdback window scales with the longest registered secret + pattern margin
++        self._holdback = max(min_pattern_holdback, max_secret_len + 64)
++        self._buffer = ""
++        self.total_redactions = 0
++
++    @property
++    def holdback_window_chars(self) -> int:
++        return self._holdback
++
++    def _scrub(self, text: str) -> str:
++        out = text
++        for v in self._variants:
++            if v in out:
++                cnt = out.count(v)
++                self.total_redactions += cnt
++                out = out.replace(v, "[REDACTED]")
++        for pat in _OFFLINE_PATTERNS:
++            out, n = pat.subn("[REDACTED]", out)
++            self.total_redactions += n
++        return out
++
++    def feed(self, chunk: str | bytes) -> str:
++        piece = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else chunk
++        self._buffer += piece
++        self._buffer = self._scrub(self._buffer)
++        if len(self._buffer) <= self._holdback:
++            return ""
++        emit_len = len(self._buffer) - self._holdback
++        emitted = self._buffer[:emit_len]
++        self._buffer = self._buffer[emit_len:]
++        return emitted
++
++    def flush(self) -> str:
++        final = self._scrub(self._buffer)
++        self._buffer = ""
++        return final
++
++
++class RedactionPipeline:
++    """Unified offline redaction across all sinks while preserving data classification."""
++
++    def __init__(self, *, registered_secrets: tuple[str, ...] = ()) -> None:
++        self._secrets = tuple(s for s in registered_secrets if s)
++
++    def contract(self) -> RedactionContract:
++        probe = StreamingSecretRedactor(registered_secrets=self._secrets)
++        return RedactionContract(holdback_window_chars=probe.holdback_window_chars)
++
++    def sanitize_sink(
++        self,
++        *,
++        sink: str,
++        text: str,
++        data_class: str,
++        uncertain_sensitivity: bool = False,
++    ) -> RedactionResult:
++        if sink not in _VALID_SINKS:
++            raise ValueError(f"Unsupported redaction sink: {sink}")
++        if data_class not in {"PUBLIC", "WORKSPACE", "SENSITIVE", "SECRET"}:
++            raise ValueError(f"Unsupported data_class: {data_class}")
++        redactor = StreamingSecretRedactor(registered_secrets=self._secrets)
++        sanitized = redactor.feed(text) + redactor.flush()
++        # Negative scan never downgrades SECRET or SENSITIVE; uncertain sensitivity blocks egress
++        allow_remote = not uncertain_sensitivity and data_class in {"PUBLIC", "WORKSPACE"}
++        return RedactionResult(
++            sink=sink,
++            sanitized_text=sanitized,
++            redaction_count=redactor.total_redactions,
++            data_class=data_class,
++            allow_remote_egress=allow_remote,
++        )
++
++    def verify_secret_online_forbidden(self, candidate: str) -> None:
++        del candidate
++        raise PermissionError("Network verification of secrets is permanently disabled in OpenBot")
+--- /dev/null
 +++ b/services/core/src/openbot/policy/__init__.py
 @@ -0,0 +1 @@
 +"""Control-owned authorization services; third-party metadata cannot grant permissions."""
@@ -12390,7 +12568,7 @@
 +- [complete] 标准合同、故障夹具与协议 PoC 本地验证
 +- [in_progress] M1 SDK / 隔离先行验证和正式集成
 +- [complete] OB-011/012/013/014 本机持久化与 Task 状态机/OutcomeVerifier 验收；上游三 OS 门禁未闭合，保留 VERIFIED
-+- [in_progress] OB-016/017/018/019/020/021/022/023/024/030/031/032/036/037/038 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、工作区文件句柄守卫、Artifact 存储、数据库备份恢复、统一外发策略与密钥最小注入；上游 OB-015/093 未闭合
++- [in_progress] OB-016/017/018/019/020/021/022/023/024/030/031/032/036/037/038/039 持久资源锁、内部提案/决定、六维策略评估器、两次短事务派发门禁、按副作用恢复器、durable outbox、取消传播、持久预算/熔断、上下文快照/摘要、工作区文件句柄守卫、Artifact 存储、数据库备份恢复、统一外发策略、密钥最小注入与敏感输出过滤；上游 OB-015/093 未闭合
 +- [pending] M2 / M3 就绪任务与最终能力 / 阻塞报告
 +
 +## 已知错误与处理
@@ -12661,6 +12839,15 @@
 +阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
  
  **需求** [RQ06](requirements_traceability.md#rq06)、[RQ11](requirements_traceability.md#rq11)
+ 
+@@ -1887,7 +1887,7 @@
+ 
+ **实现敏感数据输出过滤**
+ 
+-阶段 M1 · 优先级 P0 · 状态 TODO · 能力域 Security · 规模 M
++阶段 M1 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Security · 规模 M
+ 
+ **需求** [RQ06](requirements_traceability.md#rq06)、[RQ12](requirements_traceability.md#rq12)
  
 @@ -2003,7 +2003,7 @@
  
@@ -13573,7 +13760,7 @@
      "owner_lane": "Security",
      "size": "M",
      "req_ids": [
-@@ -2330,7 +2670,20 @@
+@@ -2330,14 +2670,27 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。"
      ],
@@ -13595,7 +13782,37 @@
    },
    {
      "id": "OB-039",
-@@ -2851,7 +3204,7 @@
+     "title": "实现敏感数据输出过滤",
+     "milestone": "M1",
+     "priority": "P0",
+-    "status": "TODO",
++    "status": "IN_PROGRESS",
+     "owner_lane": "Security",
+     "size": "M",
+     "req_ids": [
+@@ -2392,7 +2745,20 @@
+       "提供可重复的正向用例和负向边界用例，记录任何未实现或受环境限制的能力。",
+       "redactor规则/长度/flush合同、网络验证禁用配置、canary矩阵及明确未覆盖风险。"
+     ],
+-    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、18–19、22–23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。"
++    "source_basis": "U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务规划》PDF第26–33页WBS；本任务细化及修正以docs_refs所列本设计包基线为准。 U3《OpenBot 开源组件复用评估》PDF物理第14、18–19、22–23页为候选建议；本轮采纳/修正及官方证据以docs/12–14为准，不照搬未验证版本、性能或安全保证。",
++    "execution": {
++      "scope": "macOS ARM64 StreamingSecretRedactor and RedactionPipeline across 9 sinks (dynamic holdback window for arbitrary chunk splits and >256B secrets, Base64/URL/JSON encoding variants, allowlist comment immunity, disabled online verification, and classification preservation)",
++      "evidence": [
++        "docs/evidence/approvals.md",
++        "tests/unit/test_redaction.py",
++        "evidence/implementation/unit-contract-protocol.log",
++        "evidence/implementation/verification.json"
++      ],
++      "blockers": [
++        "上游 OB-036、OB-037、OB-038、OB-092 仍为 IN_PROGRESS；保持 IN_PROGRESS，不越过上游依赖宣称 VERIFIED/DONE。"
++      ],
++      "review": "Read component_refs (detect-secrets, structlog), reuse_type (dependency_adapter), and reuse_notes; implemented offline-only StreamingSecretRedactor with dynamic holdback window, ignoring external pragma allowlist comments and disabling online verification without claiming 100% regex detection."
++    }
+   },
+   {
+     "id": "OB-040",
+@@ -2851,7 +3217,7 @@
      "title": "核验飞书真实租户协议与权限",
      "milestone": "M2",
      "priority": "P0",
@@ -13604,7 +13821,7 @@
      "owner_lane": "Integration",
      "size": "M",
      "req_ids": [
-@@ -2908,7 +3261,19 @@
+@@ -2908,7 +3274,19 @@
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。",
        "所选SDK版本、脱敏真实payload、分段时序和当前缺陷/上游修复证据。"
      ],
@@ -13625,7 +13842,7 @@
    },
    {
      "id": "OB-048",
-@@ -4279,7 +4644,7 @@
+@@ -4279,7 +4657,7 @@
      "title": "建立Windows原生运行门禁",
      "milestone": "M3",
      "priority": "P1",
@@ -13634,7 +13851,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4337,14 +4702,26 @@
+@@ -4337,14 +4715,26 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -13663,7 +13880,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -4401,7 +4778,19 @@
+@@ -4401,7 +4791,19 @@
        "提供验收与反例的可复现命令、环境/依赖版本、预期和实际结果；隐藏全部凭据。",
        "提供至少一份实际声明平台/服务的受控集成证据及能力矩阵；mock结果单独列出，不能代替真实验证。"
      ],
@@ -13684,7 +13901,7 @@
    },
    {
      "id": "OB-072",
-@@ -5523,7 +5912,7 @@
+@@ -5523,7 +5925,7 @@
      "title": "建立组件准入目录和分阶段依赖门禁",
      "milestone": "M0",
      "priority": "P0",
@@ -13693,7 +13910,7 @@
      "owner_lane": "Lead",
      "size": "M",
      "req_ids": [
-@@ -5576,14 +5965,26 @@
+@@ -5576,14 +5978,26 @@
        "组件目录样例、每组解析清单、锁diff、许可证原文定位、拒绝fixture运行记录。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -13722,7 +13939,7 @@
      "owner_lane": "Runtime",
      "size": "M",
      "req_ids": [
-@@ -5642,14 +6043,26 @@
+@@ -5642,14 +6056,26 @@
        "实际第二实现存在时附跨实现比较；不存在时记录NOT_APPLICABLE及Python权威边界。",
        "记录网络观察范围，证明被拒绝ref没有触发下载。"
      ],
@@ -13751,7 +13968,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5704,14 +6117,26 @@
+@@ -5704,14 +6130,26 @@
        "一条可运行PoC命令、seed/故障位置、SQLite快照、dispatch与效果计数、失败反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -13780,7 +13997,7 @@
      "owner_lane": "QA",
      "size": "M",
      "req_ids": [
-@@ -5778,14 +6203,25 @@
+@@ -5778,14 +6216,25 @@
        "探针覆盖范围/局限、attempt计数、fault traces、组件合同runner使用说明与反例。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -13808,7 +14025,7 @@
      "owner_lane": "Platform",
      "size": "M",
      "req_ids": [
-@@ -5853,7 +6289,19 @@
+@@ -5853,7 +6302,19 @@
        "OS/arch/版本、可重放命令、父子PID/容器id前后清单、失败样本与能力矩阵。",
        "记录精确来源/版本、OS/架构/配置、测试命令与限制；本包只定义门禁，真实结果未实施前保持NOT_RUN。"
      ],
@@ -21790,6 +22007,98 @@
 +            )
 +    finally:
 +        db.close()
+--- /dev/null
++++ b/tests/unit/test_redaction.py
+@@ -0,0 +1,89 @@
++import base64
++import urllib.parse
++
++import pytest
++from openbot.observability.redaction import (
++    RedactionPipeline,
++    StreamingSecretRedactor,
++)
++
++
++def test_arbitrary_chunk_boundaries_long_secrets_encodings_and_allowlist_injection():
++    short_canary = "sk_live_canary_9876543210abcdef"
++    # 300-byte secret exceeding any naive 128-byte fixed window
++    long_canary = "wk_long_secret_" + ("A1b2C3d4" * 36)
++    assert len(long_canary) > 256
++
++    for secret in (short_canary, long_canary):
++        text = f"prefix {secret} middle # pragma: allowlist secret {secret} suffix"
++        # Split at every single character index to prove arbitrary chunk boundary safety
++        for split_at in range(1, len(text)):
++            stream = StreamingSecretRedactor(registered_secrets=(short_canary, long_canary))
++            out = stream.feed(text[:split_at]) + stream.feed(text[split_at:]) + stream.flush()
++            assert secret not in out
++            assert "[REDACTED]" in out
++
++    # Base64 and URL-encoded variants of registered secrets are also redacted
++    b64_val = base64.b64encode(short_canary.encode()).decode()
++    url_val = urllib.parse.quote(short_canary + "/+=extra", safe="")
++    stream_enc = StreamingSecretRedactor(
++        registered_secrets=(short_canary, short_canary + "/+=extra")
++    )
++    encoded_payload = f"b64={b64_val} url={url_val} # pragma: allowlist secret"
++    redacted_enc = stream_enc.feed(encoded_payload) + stream_enc.flush()
++    assert b64_val not in redacted_enc
++    assert url_val not in redacted_enc
++    assert short_canary not in redacted_enc
++
++
++def test_all_sinks_classification_preservation_and_online_verification_forbidden():
++    canary = "fs_sec_canary_sink_test_123456"
++    pipeline = RedactionPipeline(registered_secrets=(canary,))
++    contract = pipeline.contract()
++    assert contract.network_verification_enabled is False
++    assert contract.external_allowlist_honored is False
++    assert contract.guarantees_100_percent_detection is False
++    assert contract.negative_scan_downgrades_classification is False
++
++    # 1. Cover stdout, stderr, sdk_debug, exception, header, ui_event, artifact, diag, model_input
++    for sink in (
++        "stdout",
++        "stderr",
++        "sdk_debug",
++        "exception",
++        "http_header",
++        "ui_event",
++        "artifact",
++        "diagnostic",
++        "model_input",
++    ):
++        res = pipeline.sanitize_sink(
++            sink=sink,
++            text=f'{{"err":"failed with {canary} and Bearer sk-proj-1234567890abcdefghij"}}',
++            data_class="SENSITIVE",
++        )
++        assert canary not in res.sanitized_text
++        assert "sk-proj-1234567890abcdefghij" not in res.sanitized_text
++        assert res.data_class == "SENSITIVE"
++
++    # 2. Negative scan result NEVER downgrades SECRET or SENSITIVE classification
++    clean_res = pipeline.sanitize_sink(
++        sink="artifact",
++        text="harmless looking text without regex hits",
++        data_class="SECRET",
++    )
++    assert clean_res.redaction_count == 0
++    assert clean_res.data_class == "SECRET"
++    assert clean_res.allow_remote_egress is False
++
++    # 3. Uncertain sensitive content or attempt to enable online verifier is refused
++    uncertain = pipeline.sanitize_sink(
++        sink="model_input",
++        text="binary/opaque blob",
++        data_class="WORKSPACE",
++        uncertain_sensitivity=True,
++    )
++    assert uncertain.allow_remote_egress is False
++
++    with pytest.raises(PermissionError, match="Network verification"):
++        pipeline.verify_secret_online_forbidden(canary)
 --- /dev/null
 +++ b/tests/unit/test_secrets_broker.py
 @@ -0,0 +1,150 @@
