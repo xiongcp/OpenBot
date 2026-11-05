@@ -59,11 +59,19 @@ class ConsumerLock:
         self.fd: int | None = None
 
     def __enter__(self) -> "ConsumerLock":
-        import fcntl
-
-        self.fd = os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        if nofollow is None:
+            raise PermissionError("FEISHU_POSIX_PLATFORM_REQUIRED")
+        self.fd = os.open(self.path, os.O_CREAT | os.O_RDWR | nofollow, 0o600)
         try:
-            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            import fcntl
+
+            flock = getattr(fcntl, "flock", None)
+            lock_ex = getattr(fcntl, "LOCK_EX", None)
+            lock_nb = getattr(fcntl, "LOCK_NB", None)
+            if flock is None or lock_ex is None or lock_nb is None:
+                raise PermissionError("FEISHU_POSIX_PLATFORM_REQUIRED")
+            flock(self.fd, lock_ex | lock_nb)
         except BlockingIOError:
             os.close(self.fd)
             self.fd = None
@@ -228,7 +236,9 @@ def supervise(
 def _worker() -> None:
     # SDK raw URLs, exception bodies and callback payloads never reach ordinary logs.
     logging.disable(logging.CRITICAL)
-    signal.alarm(1800)
+    alarm = getattr(signal, "alarm", None)
+    if alarm is not None:
+        alarm(1800)
     config = strict_json(sys.stdin.buffer.readline(4096))
     app_id, app_secret = config["app_id"], config["app_secret"]
     import lark_oapi as lark  # type: ignore[import-not-found]
@@ -324,7 +334,10 @@ def main() -> int:
         response = owner.call("POST", "/v1/client/feishu/configure", body={"app_id": args.app_id})
         if response.status_code != 200:
             raise PermissionError("FEISHU_SETUP_REJECTED")
-        fd = os.open(profile / "feishu_gateway.token", os.O_RDONLY | os.O_NOFOLLOW)
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        if nofollow is None:
+            raise PermissionError("FEISHU_POSIX_PLATFORM_REQUIRED")
+        fd = os.open(profile / "feishu_gateway.token", os.O_RDONLY | nofollow)
         try:
             mode = os.fstat(fd)
             if not stat.S_ISREG(mode.st_mode) or mode.st_mode & 0o077:

@@ -706,11 +706,12 @@ def _serve_daemon_process(
             profile_id=profile_id, principal_id=context.principal_id, scope="feishu_gateway"
         )
         gateway_path = profile_dir / "feishu_gateway.token"
-        fd_gateway = os.open(
-            gateway_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
-        )
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        fd_gateway = os.open(gateway_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | nofollow, 0o600)
         try:
-            os.fchmod(fd_gateway, 0o600)
+            fchmod = getattr(os, "fchmod", None)
+            if fchmod is not None:
+                fchmod(fd_gateway, 0o600)
             os.write(fd_gateway, (gateway_token + "\n").encode())
         finally:
             os.close(fd_gateway)
