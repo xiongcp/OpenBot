@@ -5712,9 +5712,9 @@
     "execution": {
       "scope": "macOS ARM64 TieredCiGateEvaluator and .github/workflows/{pull_request,nightly,release} enforcing PR security gates and blocking on injected failures",
       "evidence": [
-        ".github/workflows/pull_request/gate.yml",
-        ".github/workflows/nightly/soak.yml",
-        ".github/workflows/release/supply_chain.yml",
+        ".github/workflows/pr-gate.yml",
+        ".github/workflows/nightly-soak.yml",
+        ".github/workflows/release-supply-chain.yml",
         "tests/unit/test_tiered_ci_gates.py",
         "evidence/implementation/verification.json"
       ],

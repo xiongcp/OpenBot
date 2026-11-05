@@ -21,6 +21,27 @@ class TieredCiGateEvaluator:
     def __init__(self, repo_root: Path) -> None:
         self._root = repo_root.resolve()
 
+    def validate_workflow_layout(self) -> tuple[str, ...]:
+        wf_dir = self._root / ".github/workflows"
+        nested = [
+            p.relative_to(wf_dir).as_posix()
+            for p in wf_dir.rglob("*")
+            if p.is_file() and p.suffix in {".yml", ".yaml"} and p.parent != wf_dir
+        ]
+        if nested:
+            raise PermissionError(f"UNSUPPORTED_WORKFLOW_SUBDIRECTORY: {', '.join(sorted(nested))}")
+        required = (
+            "pr.yml",
+            "pr-gate.yml",
+            "platform-macos.yml",
+            "nightly-soak.yml",
+            "release-supply-chain.yml",
+        )
+        missing = [name for name in required if not (wf_dir / name).is_file()]
+        if missing:
+            raise PermissionError(f"MISSING_REQUIRED_WORKFLOWS: {', '.join(missing)}")
+        return required
+
     def evaluate_tier(
         self,
         *,
@@ -30,7 +51,8 @@ class TieredCiGateEvaluator:
     ) -> CiTierEvaluation:
         if allow_skip_failed:
             raise PermissionError("CI_SKIP_FAILED_TESTS_FORBIDDEN")
-        pr_wf = (self._root / ".github/workflows/pull_request/gate.yml").read_text("utf-8")
+        self.validate_workflow_layout()
+        pr_wf = (self._root / ".github/workflows/pr-gate.yml").read_text("utf-8")
         sec_included = "security" in pr_wf.lower() or "verify.py" in pr_wf
         return CiTierEvaluation(
             tier=tier,
