@@ -377,10 +377,10 @@ class LocalControlApiServer:
                 return ApiResponse(200, raw)
 
             return _json_resp(404, {"code": "NOT_FOUND"})
-        except (ContractError, ValueError) as exc:
-            return _json_resp(400, {"code": "CONTRACT_ERROR", "message": str(exc)})
         except RequestConflict as exc:
             return _json_resp(409, {"code": "CONFLICT", "message": str(exc)})
+        except (ContractError, ValueError) as exc:
+            return _json_resp(400, {"code": "CONTRACT_ERROR", "message": str(exc)})
         except PermissionError as exc:
             return _json_resp(403, {"code": "FORBIDDEN", "message": str(exc)})
 
