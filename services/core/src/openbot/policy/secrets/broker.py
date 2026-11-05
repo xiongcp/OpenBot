@@ -1,6 +1,7 @@
 """Keychain backend allowlist, compartmentalized secret broker, and single-use worker handles."""
 
 import secrets
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +31,87 @@ class CredentialBackendPort(Protocol):
     def get_secret(self, secret_ref: str) -> bytes: ...
     def set_secret(self, secret_ref: str, value: bytes) -> None: ...
     def delete_secret(self, secret_ref: str) -> None: ...
+
+
+class MacOSKeychainCliBackend:
+    """Native macOS Keychain backend using /usr/bin/security without leaking secret values."""
+
+    backend_id: str = "macos.Keychain"
+    is_native_os_keychain: bool = True
+
+    def __init__(
+        self,
+        *,
+        service_name: str = "com.openbot.secrets",
+        security_binary: str = "/usr/bin/security",
+    ) -> None:
+        self._service = service_name
+        self._bin = security_binary
+
+    def _check_bin(self, secret_ref: str) -> None:
+        if not Path(self._bin).is_file():
+            raise SecretUnavailableError(secret_ref, reason_code="KEYCHAIN_BINARY_MISSING")
+
+    def set_secret(self, secret_ref: str, value: bytes) -> None:
+        self._check_bin(secret_ref)
+        res = subprocess.run(
+            [
+                self._bin,
+                "add-generic-password",
+                "-U",
+                "-s",
+                self._service,
+                "-a",
+                secret_ref,
+                "-w",
+                value.decode("utf-8"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if res.returncode != 0:
+            raise SecretUnavailableError(secret_ref, reason_code="KEYCHAIN_WRITE_DENIED")
+
+    def get_secret(self, secret_ref: str) -> bytes:
+        self._check_bin(secret_ref)
+        res = subprocess.run(
+            [
+                self._bin,
+                "find-generic-password",
+                "-s",
+                self._service,
+                "-a",
+                secret_ref,
+                "-w",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if res.returncode != 0:
+            raise SecretUnavailableError(secret_ref, reason_code="KEYCHAIN_READ_DENIED_OR_MISSING")
+        return res.stdout.rstrip("\r\n").encode("utf-8")
+
+    def delete_secret(self, secret_ref: str) -> None:
+        if not Path(self._bin).is_file():
+            return
+        subprocess.run(
+            [
+                self._bin,
+                "delete-generic-password",
+                "-s",
+                self._service,
+                "-a",
+                secret_ref,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
 
 
 @dataclass(frozen=True, slots=True)
