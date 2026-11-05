@@ -101,3 +101,9 @@ def test_tiered_ci_gates_run_security_in_pr_and_block_on_injected_failure_or_ski
                 if node.func.attr == "read_text":
                     has_enc = bool(node.args) or any(kw.arg == "encoding" for kw in node.keywords)
                     assert has_enc, f"Unencoded read_text() in {val_path}:{node.lineno}"
+
+    gitattributes = ROOT / ".gitattributes"
+    assert gitattributes.is_file()
+    attr_text = gitattributes.read_text(encoding="utf-8")
+    assert "eol=lf" in attr_text
+    assert "filter=" not in attr_text
