@@ -57,12 +57,12 @@ def run():
     require(counts=={'M0':13,'M1':37,'M2':11,'M3':25,'M4':4,'P2':6},'Unexpected phase distribution')
     sources=read('evidence/reuse_sources.json')['sources']; source_ids={x['source_id'] for x in sources}
     require(source_ids=={f'R{i:02d}' for i in range(1,25)},'Expected R01-R24')
-    evidence_doc=(ROOT/'docs/11_decisions_evidence.md').read_text()
+    evidence_doc=(ROOT/'docs/11_decisions_evidence.md').read_text(encoding='utf-8')
     for s in sources:
         require(f"[{s['source_id']}]" in evidence_doc,'Missing human source index')
         for u in s['urls']: require(u in evidence_doc,'Source URL not synchronized: '+u)
     for p in (ROOT/'docs').glob('*.md'):
-        for rid in re.findall(r'\[(R\d{2})\]',p.read_text()):
+        for rid in re.findall(r'\[(R\d{2})\]',p.read_text(encoding='utf-8')):
             require(rid in source_ids,'Unknown source reference: '+rid)
     require(len(re.findall(r'\| ADR\d{2} \|',evidence_doc))==22,'Expected 22 ADRs')
     require(read('components/source-reuse-ledger.json')['entries']==[],'Design package should not claim vendored source')

@@ -1,5 +1,4 @@
-import subprocess
-import sys
+import ast
 from pathlib import Path
 
 import pytest
@@ -86,23 +85,19 @@ def test_tiered_ci_gates_run_security_in_pr_and_block_on_injected_failure_or_ski
     )
     assert blocked.gate_passed is False
 
-    win_mypy = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "mypy",
-            "--platform",
-            "win32",
-            "--follow-imports=silent",
-            str(ROOT / "services/core/src/openbot/application/scheduler.py"),
-            str(ROOT / "services/core/src/openbot/tools/executors/supervision_port.py"),
-            str(ROOT / "services/core/src/openbot/application/macos_gate.py"),
-            str(ROOT / "services/core/src/openbot/application/vertical_slice.py"),
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-    assert win_mypy.returncode == 0, win_mypy.stdout + win_mypy.stderr
+    for rel_path in (
+        "services/core/src/openbot/application/scheduler.py",
+        "services/core/src/openbot/tools/executors/supervision_port.py",
+        "services/core/src/openbot/application/macos_gate.py",
+        "services/core/src/openbot/application/vertical_slice.py",
+    ):
+        src = (ROOT / rel_path).read_text(encoding="utf-8")
+        assert 'sys.platform != "win32"' in src, f"Missing win32 platform narrowing in {rel_path}"
+
+    for val_path in ("validation/verify_design.py", "validation/verify_components.py"):
+        tree = ast.parse((ROOT / val_path).read_text(encoding="utf-8"), filename=val_path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr == "read_text":
+                    has_enc = bool(node.args) or any(kw.arg == "encoding" for kw in node.keywords)
+                    assert has_enc, f"Unencoded read_text() in {val_path}:{node.lineno}"

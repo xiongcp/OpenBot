@@ -13,7 +13,7 @@ checks=[]
 def passed(name,detail):checks.append({'check':name,'result':'PASS','detail':detail})
 def require(cond,message):
  if not cond:raise AssertionError(message)
-def read(p):return json.loads(p.read_text())
+def read(p):return json.loads(p.read_text(encoding='utf-8'))
 def resolve(ref,source):
  name,_,fragment=ref.partition('#')
  target=(source.parent/name).resolve() if name else source
@@ -143,7 +143,7 @@ def run():
  require(len(list((ROOT/'diagrams').glob('*.mmd')))==7,'Missing Mermaid source')
  passed('Diagram assets','7 SVG XML documents parsed; matching PNG and Mermaid files present; visual review is separate')
  for p in (ROOT/'docs').glob('*.md'):
-  for link in re.findall(r'!?\[[^]]*\]\(([^)]+)\)',p.read_text()):
+  for link in re.findall(r'!?\[[^]]*\]\(([^)]+)\)',p.read_text(encoding='utf-8')):
    if not link.startswith(('http://','https://','#')):require((p.parent/link.split('#')[0]).exists(),'Missing linked file '+link)
  passed('Document asset links','All document-local diagram links resolve')
  result={'status':'PASS','scope':'Design integrity only; no real providers, Feishu, OS isolation, signing, or product runtime tested','checks':checks,'task_topological_order':ordered,'not_validated':['Full JSON Schema/OpenAPI meta-schema conformance','RFC8785 digest correctness of synthetic examples','MCP real-server compatibility','Real sandbox egress and file boundaries','Actual OpenBot application behavior','Native installation and upgrades']}
