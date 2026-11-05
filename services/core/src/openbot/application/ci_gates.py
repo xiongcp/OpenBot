@@ -47,6 +47,8 @@ class TieredCiGateEvaluator:
             for label in _RETIRED_RUNNER_LABELS:
                 if label in text:
                     raise PermissionError(f"RETIRED_RUNNER_LABEL_FORBIDDEN: {name} uses {label}")
+            if "uv sync --locked" not in text:
+                raise PermissionError(f"WORKFLOW_MISSING_LOCKED_SYNC: {name}")
         return required
 
     def evaluate_tier(
