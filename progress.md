@@ -102,6 +102,7 @@
 
 - 用户已确认设计并授权继续实施。完成 ClientState 第一切片：复用 events/checkpoint 保存配置 revision、预览 hash、owner CAS、run 配置快照与有界脱敏因果事件；权限类变更原子更新 policy revision。先观察 10 项缺失实现失败及 3 项边界失败，再达到 14 passed，lint/types 与完整验证 8/8 通过。
 - Approved design is now in implementation. The first ClientState slice adds durable settings revisions, preview/CAS, pinned run configuration and bounded redacted causal events through existing storage; no migration or new dependency. Targeted tests: 14 passed; full verification: all eight checks passed.
+- MCP 远端 CI 发现 Windows 缺少文件保护常量；先重现 2 个 AttributeError，再修为缺失保护时显式拒绝。相关 9 tests、Windows target mypy、ruff 均通过；Windows 容器执行仍未验收。
 - 只读 MCP 子切片 RED 7 failed → GREEN 7 passed；真实 Docker JSON-RPC read、文件 SHA-256 回执与 container ID 回收实测 1 passed。仅专用合成 demo.txt 可读；任意其他文件和宿主执行均不开放。Rust 1.91.0 仅在临时目录准备，Tauri 依赖正在原生离线编译。
 
 - 已只读核对 PDF、当前 Git 状态、客户端任务、配置/API/可观测性与官方 Hermes/飞书/Tauri 文档。

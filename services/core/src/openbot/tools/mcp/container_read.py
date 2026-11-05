@@ -106,12 +106,15 @@ class ContainerReadTool:
         workspace: Path,
         expected_sha256: str,
     ) -> dict[str, Any]:
+        nofollow, nonblock = getattr(os, "O_NOFOLLOW", None), getattr(os, "O_NONBLOCK", None)
+        if nofollow is None or nonblock is None:
+            raise PermissionError("MCP_FILE_GUARD_UNAVAILABLE")
         if arguments != {"path": "demo.txt"} or not self.available():
             raise PermissionError("MCP_DEMO_READ_UNAVAILABLE")
         server_bytes = self.server.read_bytes()
         if hashlib.sha256(server_bytes).hexdigest() != self.server_sha256:
             raise PermissionError("MCP_SERVER_CHANGED")
-        fd = os.open(workspace / "demo.txt", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(workspace / "demo.txt", os.O_RDONLY | nofollow | nonblock)
         try:
             info = os.fstat(fd)
             if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:

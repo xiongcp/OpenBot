@@ -33,3 +33,11 @@ OPENBOT_NATIVE_MCP=1 .venv-m1/bin/python -m pytest tests/components/native_poc/t
 RED 7 failed；GREEN 7 passed；真实容器 1 passed（0.71s 单样本，不作性能承诺）。
 Native evidence covers only this synthetic read tool, not arbitrary third-party MCP servers,
 all Docker versions, other native platforms or full Agent integration.
+
+## File guard portability / 文件保护可移植性
+
+The first pushed MCP slice passed native macOS read/cleanup, but Windows CI correctly rejected direct access to POSIX-only constants. Missing either `O_NOFOLLOW` or `O_NONBLOCK` now rejects the read before Docker or filesystem access. This does not qualify Windows container execution.
+
+首个 MCP 提交的 macOS 实测通过，但 Windows CI 暴露 POSIX 常量访问问题。任一保护标志缺失时现显式拒绝读取；不将本修复算作 Windows 容器能力验收。
+
+Regression: `pytest tests/unit/test_mcp_file_guards.py tests/unit/test_mcp_read_fixture.py -q`: RED 2 AttributeError failures, GREEN 9 passed. `mypy --platform win32 services/core/src/openbot/tools/mcp/container_read.py`: passed. Ruff passed.
