@@ -180,6 +180,7 @@ def test_task_lifecycle_approval_preview_secret_omission_reconcile_and_sse_curso
         ApiRequest("GET", f"/v1/approvals/{apr_id}/preview", headers=_headers(owner_token))
     )
     assert prev.status_code == 200
+    assert prev.json()["binding_hash"] == proposed["binding_hash"]
     assert prev.json()["data_class"] in {"PUBLIC", "WORKSPACE", "SENSITIVE"}
     assert "nonce" not in json.dumps(prev.json())
 

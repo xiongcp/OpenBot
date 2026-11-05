@@ -387,7 +387,7 @@ class LocalControlApiServer:
                 "workspace_id": str(row[6]),
                 "status": str(row[1]),
                 "version": int(row[2]) + 1,
-                "binding_hash": str(row[3]),
+                "binding_hash": "sha256:" + str(row[3]),
                 "expires_at_ms": int(row[4]),
                 "tool_name": str(row[7]),
                 "effect": "EXTERNAL_WRITE",
