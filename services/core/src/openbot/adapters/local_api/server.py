@@ -1,16 +1,23 @@
 """Loopback HTTP and SSE control API with Host/Origin/proxy guards and scoped tokens."""
 
 import hmac
+import http.server
+import json
 import re
 import secrets
+import socketserver
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from urllib.parse import parse_qs, urlsplit
 
 from openbot.application.cancellation import CancellationService
+from openbot.application.dispatch import DispatchService
 from openbot.application.operations import ChallengeStore, OperationService
 from openbot.application.recovery import RecoveryService
+from openbot.application.resources import ResourceRequest
 from openbot.application.state_machine import TaskStateService
 from openbot.artifacts.store import ArtifactStore
 from openbot.contracts import ContractError, SchemaRegistry, canonicalize, strict_json
@@ -94,6 +101,7 @@ class LocalControlApiServer:
         cancellation: CancellationService,
         artifacts: ArtifactStore,
         challenges: ChallengeStore,
+        dispatcher: DispatchService | None = None,
         min_retained_event_seq: int = 1,
         max_body_bytes: int = 65_536,
     ) -> None:
@@ -110,6 +118,7 @@ class LocalControlApiServer:
         self._cancellation = cancellation
         self._artifacts = artifacts
         self._challenges = challenges
+        self._dispatcher = dispatcher
         self._min_seq = min_retained_event_seq
         self._max_body = max_body_bytes
 
@@ -174,6 +183,23 @@ class LocalControlApiServer:
                 snap = self._tasks.snapshot(self._ctx, m_task.group(1))
                 return _json_resp(200, snap)
 
+            m_trans = re.fullmatch(r"/v1/tasks/([A-Za-z0-9_-]+)/transition", req.path)
+            if req.method == "POST" and m_trans:
+                if grant.scope != "owner_cli":
+                    return _json_resp(403, {"code": "OWNER_SCOPE_ONLY"})
+                body_doc = dict(strict_json(req.body))
+                raw = self._writer.submit(
+                    self._tasks.command(
+                        self._ctx,
+                        m_trans.group(1),
+                        int(body_doc["expected_version"]),
+                        str(body_doc["target_state"]),
+                        f"api_trans:{idem_key}",
+                        deadline,
+                    )
+                ).result(timeout=5)
+                return ApiResponse(200, raw)
+
             m_cancel = re.fullmatch(r"/v1/tasks/([A-Za-z0-9_-]+)/cancel", req.path)
             if req.method == "POST" and m_cancel:
                 body_doc = dict(strict_json(req.body)) if req.body else {}
@@ -222,9 +248,91 @@ class LocalControlApiServer:
                 )
                 return ApiResponse(200, raw)
 
+            if req.method == "POST" and req.path == "/v1/operations/propose":
+                if grant.scope != "owner_cli":
+                    return _json_resp(403, {"code": "OWNER_SCOPE_ONLY"})
+                body_doc = dict(strict_json(req.body))
+                raw = self._operations.propose(
+                    self._ctx,
+                    str(body_doc["task_id"]),
+                    str(body_doc["tool_id"]),
+                    json.dumps(body_doc.get("args", {"arg": "default"})),
+                    dict(body_doc.get("preconditions", {"workspace_generation": 1, "files": []})),
+                    str(body_doc.get("data_class", "WORKSPACE")),
+                    dict(
+                        body_doc.get(
+                            "destination",
+                            {"kind": "LOCAL", "resource_ref": self._ctx.workspace_id},
+                        )
+                    ),
+                    f"api_prop:{idem_key}",
+                    deadline,
+                )
+                return ApiResponse(201, raw)
+
             m_op = re.fullmatch(r"/v1/operations/([A-Za-z0-9_-]+)", req.path)
             if req.method == "GET" and m_op:
                 return self._handle_operation_snapshot(m_op.group(1))
+
+            m_claim = re.fullmatch(r"/v1/operations/([A-Za-z0-9_-]+)/claim", req.path)
+            if req.method == "POST" and m_claim and self._dispatcher is not None:
+                if grant.scope != "owner_cli":
+                    return _json_resp(403, {"code": "OWNER_SCOPE_ONLY"})
+                body_doc = dict(strict_json(req.body)) if req.body else {}
+                raw = self._writer.submit(
+                    self._dispatcher.claim(
+                        self._ctx,
+                        m_claim.group(1),
+                        str(body_doc.get("runtime_epoch", "ep_1")),
+                        str(body_doc.get("executor_id", "exec_1")),
+                        [
+                            ResourceRequest(
+                                "WORKSPACE",
+                                self._ctx.workspace_id,
+                                expected_generation=int(body_doc.get("expected_generation", 1)),
+                            )
+                        ],
+                        int(body_doc.get("lease_ttl_ms", 30_000)),
+                        f"api_claim:{idem_key}",
+                        deadline,
+                    )
+                ).result(timeout=5)
+                return ApiResponse(200, raw)
+
+            m_disp = re.fullmatch(r"/v1/operations/([A-Za-z0-9_-]+)/dispatch", req.path)
+            if req.method == "POST" and m_disp and self._dispatcher is not None:
+                if grant.scope != "owner_cli":
+                    return _json_resp(403, {"code": "OWNER_SCOPE_ONLY"})
+                body_doc = dict(strict_json(req.body))
+                raw = self._writer.submit(
+                    self._dispatcher.begin_dispatch(
+                        self._ctx,
+                        m_disp.group(1),
+                        str(body_doc["attempt_id"]),
+                        str(body_doc.get("runtime_epoch", "ep_1")),
+                        str(body_doc.get("executor_id", "exec_1")),
+                        f"api_disp:{idem_key}",
+                        deadline,
+                    )
+                ).result(timeout=5)
+                return ApiResponse(200, raw)
+
+            if req.method == "POST" and req.path == "/v1/runtime/recover-epoch":
+                if grant.scope != "owner_cli":
+                    return _json_resp(403, {"code": "OWNER_SCOPE_ONLY"})
+                body_doc = dict(strict_json(req.body))
+                raw = self._writer.submit(
+                    self._recovery.recover_epoch(
+                        self._ctx,
+                        str(body_doc["new_epoch"]),
+                        str(body_doc.get("boot_id", "boot_2")),
+                        str(body_doc.get("supervisor_ref", "sup_2")),
+                        old_epoch_isolated=bool(body_doc.get("old_epoch_isolated", True)),
+                        request_id=f"api_recep:{idem_key}",
+                        deadline_monotonic_ms=deadline,
+                    )
+                ).result(timeout=5)
+                return ApiResponse(200, raw)
 
             m_ev = re.fullmatch(r"/v1/operations/([A-Za-z0-9_-]+)/evidence", req.path)
             if req.method == "POST" and m_ev:
@@ -374,3 +482,82 @@ class LocalControlApiServer:
         all_events = self._tasks.replay(self._ctx, task_id)
         filtered = [e for e in all_events if int(str(e["seq"])) > after_seq][:64]
         return _json_resp(200, {"task_id": task_id, "events": filtered})
+
+
+class _ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+class LoopbackHttpDaemon:
+    """Real loopback TCP HTTP server binding LocalControlApiServer to 127.0.0.1."""
+
+    def __init__(
+        self,
+        api: LocalControlApiServer,
+        *,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        artificial_delay_ms: int = 0,
+    ) -> None:
+        if host not in _LOOPBACK_IPS:
+            raise PermissionError(f"NON_LOOPBACK_BIND_FORBIDDEN: {host}")
+        self._api = api
+        self.artificial_delay_ms = artificial_delay_ms
+        parent = self
+
+        class _Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _dispatch(self, method: str) -> None:
+                if parent.artificial_delay_ms > 0:
+                    time.sleep(parent.artificial_delay_ms / 1000.0)
+                length = int(self.headers.get("Content-Length", "0"))
+                raw_body = self.rfile.read(length) if length > 0 else b""
+                parsed = urlsplit(self.path)
+                query = {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
+                hdrs = {k: v for k, v in self.headers.items()}
+                api_req = ApiRequest(
+                    method=method,
+                    path=parsed.path,
+                    headers=hdrs,
+                    query=query,
+                    body=raw_body,
+                    client_ip=str(self.client_address[0]),
+                )
+                resp = parent._api.handle(api_req)
+                self.send_response(resp.status_code)
+                self.send_header("Content-Type", resp.content_type)
+                self.send_header("Content-Length", str(len(resp.body)))
+                self.end_headers()
+                self.wfile.write(resp.body)
+
+            def do_GET(self) -> None:  # noqa: N802
+                self._dispatch("GET")
+
+            def do_POST(self) -> None:  # noqa: N802
+                self._dispatch("POST")
+
+        self._httpd = _ThreadedHTTPServer((host, port), _Handler)
+        self._thread: threading.Thread | None = None
+
+    @property
+    def address(self) -> str:
+        host, port = self._httpd.server_address[:2]
+        host_str = host.decode("utf-8") if isinstance(host, (bytes, bytearray)) else str(host)
+        return f"{host_str}:{port}"
+
+    def start_background(self) -> str:
+        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._thread.start()
+        return self.address
+
+    def serve_forever(self) -> None:
+        self._httpd.serve_forever()
+
+    def close(self) -> None:
+        self._httpd.shutdown()
+        self._httpd.server_close()
+        if self._thread is not None:
+            self._thread.join(timeout=2)

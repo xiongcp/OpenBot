@@ -1,8 +1,13 @@
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 from openbot.adapters.local_api.server import ApiRequest, ApiResponse
 from openbot.cli import (
     CliApiSession,
+    discover_cli_session,
     run_cli_command,
     sanitize_terminal_text,
 )
@@ -280,3 +285,297 @@ def test_cli_rejects_forbidden_flags_escapes_ansi_and_never_claims_unexecuted_on
     to_doc = json.loads(out_to)
     assert to_doc["action_guaranteed_not_executed"] is False
     assert to_doc["requery_required"] is True
+
+
+def test_installed_openbot_console_script_and_loopback_daemon_subprocess_e2e(
+    tmp_path: Path,
+) -> None:
+    openbot_bin = Path(sys.executable).with_name("openbot")
+    assert openbot_bin.is_file()
+
+    # 1. Subprocess --help works on all product command groups
+    for grp in ("task", "approval", "operation", "daemon"):
+        res_help = subprocess.run(
+            [str(openbot_bin), grp, "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert res_help.returncode == 0, res_help.stderr
+
+    # 2. Without running daemon, --require-daemon returns exit code 2
+    prof_dir = tmp_path / "prof_e2e"
+    prof_dir.mkdir(parents=True, exist_ok=True)
+    res_h_down = subprocess.run(
+        [str(openbot_bin), "health", "--profile-dir", str(prof_dir), "--require-daemon"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert res_h_down.returncode == 2
+    assert json.loads(res_h_down.stdout)["daemon_running"] is False
+
+    # 3. Start real daemon subprocess listening on 127.0.0.1 ephemeral port
+    daemon_proc = subprocess.Popen(
+        [
+            str(openbot_bin),
+            "daemon",
+            "serve",
+            "--profile-dir",
+            str(prof_dir),
+            "--profile-id",
+            "pro_test1",
+            "--workspace-id",
+            "wsp_test1",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert daemon_proc.stdout is not None
+        ready_line = daemon_proc.stdout.readline().strip()
+        assert ready_line, daemon_proc.stderr.read() if daemon_proc.stderr else ""
+        meta = json.loads(ready_line)
+        assert meta["host"].startswith("127.0.0.1:")
+        assert meta["profile_id"] == "pro_test1"
+
+        # Second daemon on same profile is rejected by SingleInstanceSupervisorLock
+        dup_daemon = subprocess.run(
+            [
+                str(openbot_bin),
+                "daemon",
+                "serve",
+                "--profile-dir",
+                str(prof_dir),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert dup_daemon.returncode == 3
+        assert "PROFILE_LOCK_HELD" in dup_daemon.stdout
+
+        # Health check with active daemon returns daemon_running=True
+        res_h_up = subprocess.run(
+            [str(openbot_bin), "health", "--profile-dir", str(prof_dir), "--require-daemon"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert res_h_up.returncode == 0
+        h_doc = json.loads(res_h_up.stdout)
+        assert h_doc["daemon_running"] is True
+        assert h_doc["profile_id"] == "pro_test1"
+
+        # Passing token on CLI argv is forbidden
+        res_tok_flag = subprocess.run(
+            [
+                str(openbot_bin),
+                "task",
+                "show",
+                "--task-id",
+                "tsk_1",
+                "--token=secret",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert res_tok_flag.returncode == 6
+        assert "FORBIDDEN_CLI_FLAG" in res_tok_flag.stdout
+
+        # Create task via subprocess console script (and verify idempotency)
+        cmd_create = [
+            str(openbot_bin),
+            "task",
+            "create",
+            "--profile-dir",
+            str(prof_dir),
+            "--workspace",
+            "wsp_test1",
+            "--goal",
+            "subprocess-cli-e2e",
+            "--idempotency-key",
+            "sub-idem-1",
+            "--json",
+        ]
+        c1 = subprocess.run(cmd_create, capture_output=True, text=True, timeout=10, check=False)
+        c2 = subprocess.run(cmd_create, capture_output=True, text=True, timeout=10, check=False)
+        assert c1.returncode == 0, c1.stderr
+        assert c2.returncode == 0, c2.stderr
+        task_id = json.loads(c1.stdout)["task_id"]
+        assert task_id == json.loads(c2.stdout)["task_id"]
+
+        # Drive operation proposal, approval preview/decide, claim/dispatch, epoch recovery,
+        # and reconcile over the real loopback HTTP session
+        ses = discover_cli_session(prof_dir)
+        assert ses is not None
+        assert (
+            ses.call(
+                "POST",
+                f"/v1/tasks/{task_id}/transition",
+                body={"expected_version": 0, "target_state": "RUNNING"},
+            ).status_code
+            == 200
+        )
+        prop_resp = ses.call(
+            "POST",
+            "/v1/operations/propose",
+            body={"task_id": task_id, "tool_id": "gui.click", "args": {"arg": "ok"}},
+        )
+        assert prop_resp.status_code == 201
+        prop_doc = prop_resp.json()
+        op_id, apr_id = str(prop_doc["operation_id"]), str(prop_doc["approval_id"])
+
+        res_prev = subprocess.run(
+            [
+                str(openbot_bin),
+                "approval",
+                "preview",
+                "--profile-dir",
+                str(prof_dir),
+                "--approval-id",
+                apr_id,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert res_prev.returncode == 0
+        assert json.loads(res_prev.stdout)["approval_id"] == apr_id
+
+        res_dec = subprocess.run(
+            [
+                str(openbot_bin),
+                "approval",
+                "decide",
+                "--profile-dir",
+                str(prof_dir),
+                "--approval-id",
+                apr_id,
+                "--expected-version",
+                "1",
+                "--binding-hash",
+                str(prop_doc["binding_hash"]),
+                "--decision",
+                "APPROVE",
+                "--idempotency-key",
+                "sub-apr-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert res_dec.returncode == 0
+        assert json.loads(res_dec.stdout)["operation_state"] == "READY"
+
+        # Advance task, claim, dispatch, recover epoch -> UNKNOWN -> reconcile via CLI subprocess
+        assert (
+            ses.call(
+                "POST",
+                f"/v1/tasks/{task_id}/transition",
+                body={"expected_version": 3, "target_state": "RUNNING"},
+            ).status_code
+            == 200
+        )
+        claim_doc = ses.call("POST", f"/v1/operations/{op_id}/claim", body={}).json()
+        assert (
+            ses.call(
+                "POST",
+                f"/v1/operations/{op_id}/dispatch",
+                body={"attempt_id": claim_doc["attempt_id"]},
+            ).status_code
+            == 200
+        )
+        assert (
+            ses.call(
+                "POST",
+                "/v1/runtime/recover-epoch",
+                body={"new_epoch": "ep_2", "old_epoch_isolated": True},
+            ).status_code
+            == 200
+        )
+
+        res_rec = subprocess.run(
+            [
+                str(openbot_bin),
+                "operation",
+                "reconcile",
+                "--profile-dir",
+                str(prof_dir),
+                "--operation-id",
+                op_id,
+                "--expected-version",
+                "4",
+                "--outcome",
+                "CONFIRMED_SUCCEEDED",
+                "--evidence-content",
+                "subprocess receipt",
+                "--idempotency-key",
+                "sub-rec-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert res_rec.returncode == 0
+        assert json.loads(res_rec.stdout)["operation_state"] == "SUCCEEDED"
+
+        # Insecure token permissions are rejected on POSIX
+        if sys.platform != "win32":
+            os.chmod(prof_dir / "owner_cli.token", 0o644)
+            res_insec = subprocess.run(
+                [
+                    str(openbot_bin),
+                    "task",
+                    "show",
+                    "--profile-dir",
+                    str(prof_dir),
+                    "--task-id",
+                    task_id,
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            assert res_insec.returncode == 3
+            assert "INSECURE_TOKEN_FILE_PERMISSIONS" in res_insec.stdout
+            os.chmod(prof_dir / "owner_cli.token", 0o600)
+    finally:
+        daemon_proc.terminate()
+        daemon_proc.wait(timeout=5)
+
+    # 4. After daemon stops, CLI reports DAEMON_UNAVAILABLE (exit code 2)
+    res_after_stop = subprocess.run(
+        [
+            str(openbot_bin),
+            "task",
+            "show",
+            "--profile-dir",
+            str(prof_dir),
+            "--task-id",
+            task_id,
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert res_after_stop.returncode == 2
+    assert json.loads(res_after_stop.stdout)["code"] == "DAEMON_UNAVAILABLE"

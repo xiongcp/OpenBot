@@ -1,15 +1,29 @@
 """Authenticated loopback CLI for OpenBot tasks, approvals, and reconciliation (OB-028)."""
 
 import argparse
+import hashlib
+import http.client
 import json
+import os
 import re
 import secrets
+import signal
+import socket
+import sqlite3
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 from openbot import __version__
-from openbot.adapters.local_api.server import ApiRequest, ApiResponse
+from openbot.adapters.local_api.server import (
+    ApiRequest,
+    ApiResponse,
+    LocalControlApiServer,
+    LoopbackHttpDaemon,
+    ScopedTokenStore,
+)
 
 _ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _ANSI_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
@@ -22,6 +36,9 @@ _FORBIDDEN_FLAGS = frozenset(
         "--ignore-and-rerun",
         "--force-success",
         "--revive-consumed",
+        "--token",
+        "--bearer",
+        "--api-key",
     }
 )
 
@@ -38,6 +55,34 @@ def sanitize_terminal_text(text: str) -> str:
 
 class CliTransport(Protocol):
     def request(self, req: ApiRequest) -> ApiResponse: ...
+
+
+class LoopbackHttpTransport:
+    """Real loopback HTTP client transport connecting to 127.0.0.1/<port> without proxy bypass."""
+
+    def __init__(self, host: str, *, timeout_seconds: float = 5.0) -> None:
+        if not host.startswith(("127.0.0.1:", "localhost:", "[::1]:")):
+            raise PermissionError(f"CLI transport only permits loopback hosts, got {host}")
+        self._host = host
+        self._timeout = timeout_seconds
+
+    def request(self, req: ApiRequest) -> ApiResponse:
+        raw_body = req.body.encode("utf-8") if isinstance(req.body, str) else req.body
+        conn = http.client.HTTPConnection(self._host, timeout=self._timeout)
+        try:
+            conn.request(req.method, req.path, body=raw_body, headers=req.headers)
+            resp = conn.getresponse()
+            data = resp.read()
+            ctype = resp.getheader("Content-Type", "application/json")
+            return ApiResponse(resp.status, data, ctype)
+        except TimeoutError as exc:
+            raise TimeoutError(str(exc)) from exc
+        except (ConnectionRefusedError, OSError, http.client.HTTPException) as exc:
+            if isinstance(exc, socket.timeout):
+                raise TimeoutError(str(exc)) from exc
+            raise ConnectionRefusedError(str(exc)) from exc
+        finally:
+            conn.close()
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +143,143 @@ def _map_http_error(resp: ApiResponse, *, as_json: bool) -> tuple[int, str]:
     return 6, _format_output({"code": "CLI_REQUEST_ERROR", "detail": doc}, as_json=as_json)
 
 
+def discover_cli_session(
+    profile_dir: Path | None = None, *, timeout_seconds: float = 5.0
+) -> CliApiSession | None:
+    """Discover authenticated CLI session from a protected profile directory."""
+    effective_dir = profile_dir
+    if effective_dir is None:
+        env_dir = os.environ.get("OPENBOT_PROFILE_DIR")
+        if env_dir:
+            effective_dir = Path(env_dir)
+    if effective_dir is None:
+        return None
+    if effective_dir.is_symlink() or not effective_dir.is_dir():
+        raise ConnectionRefusedError(f"Profile directory unavailable: {effective_dir}")
+    session_file = effective_dir / "daemon_session.json"
+    token_file = effective_dir / "owner_cli.token"
+    if not session_file.is_file() or not token_file.is_file():
+        raise ConnectionRefusedError(f"Daemon session metadata missing in {effective_dir}")
+    if session_file.is_symlink() or token_file.is_symlink():
+        raise PermissionError("SESSION_OR_TOKEN_SYMLINK_FORBIDDEN")
+    if sys.platform != "win32":
+        st = os.lstat(token_file)
+        if (st.st_mode & 0o077) != 0:
+            raise PermissionError("INSECURE_TOKEN_FILE_PERMISSIONS")
+    meta = json.loads(session_file.read_text(encoding="utf-8"))
+    token = token_file.read_text(encoding="utf-8").strip()
+    host = str(meta["host"])
+    profile_id = str(meta["profile_id"])
+    return CliApiSession(
+        profile_id=profile_id,
+        token=token,
+        transport=LoopbackHttpTransport(host, timeout_seconds=timeout_seconds),
+        host=host,
+    )
+
+
+def build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="openbot")
+    parser.add_argument("--profile-dir", type=Path, default=None)
+    parser.add_argument("--timeout-ms", type=int, default=5000)
+    sub = parser.add_subparsers(dest="group")
+
+    sub.add_parser("version")
+    p_health = sub.add_parser("health")
+    p_health.add_argument("--profile-dir", type=Path, default=None)
+    p_health.add_argument("--require-daemon", action="store_true")
+    p_health.add_argument("--json", action="store_true")
+
+    p_daemon = sub.add_parser("daemon")
+    daemon_sub = p_daemon.add_subparsers(dest="action", required=True)
+    p_dserve = daemon_sub.add_parser("serve")
+    p_dserve.add_argument("--profile-dir", type=Path, required=True)
+    p_dserve.add_argument("--profile-id", default="pro_test1")
+    p_dserve.add_argument("--workspace-id", default="wsp_test1")
+    p_dserve.add_argument("--port", type=int, default=0)
+    p_dserve.add_argument("--epoch", default="ep_1")
+
+    # task group
+    p_task = sub.add_parser("task")
+    task_sub = p_task.add_subparsers(dest="action", required=True)
+
+    p_tc = task_sub.add_parser("create")
+    p_tc.add_argument("--workspace", required=True)
+    p_tc.add_argument("--goal", required=True)
+    p_tc.add_argument("--idempotency-key", default=None)
+    p_tc.add_argument("--profile-dir", type=Path, default=None)
+    p_tc.add_argument("--timeout-ms", type=int, default=5000)
+    p_tc.add_argument("--json", action="store_true")
+
+    p_ts = task_sub.add_parser("show")
+    p_ts.add_argument("--task-id", required=True)
+    p_ts.add_argument("--profile-dir", type=Path, default=None)
+    p_ts.add_argument("--timeout-ms", type=int, default=5000)
+    p_ts.add_argument("--json", action="store_true")
+
+    p_tcan = task_sub.add_parser("cancel")
+    p_tcan.add_argument("--task-id", required=True)
+    p_tcan.add_argument("--expected-version", type=int, required=True)
+    p_tcan.add_argument("--idempotency-key", default=None)
+    p_tcan.add_argument("--profile-dir", type=Path, default=None)
+    p_tcan.add_argument("--timeout-ms", type=int, default=5000)
+    p_tcan.add_argument("--json", action="store_true")
+
+    p_tres = task_sub.add_parser("resume")
+    p_tres.add_argument("--task-id", required=True)
+    p_tres.add_argument("--expected-version", type=int, required=True)
+    p_tres.add_argument("--idempotency-key", default=None)
+    p_tres.add_argument("--profile-dir", type=Path, default=None)
+    p_tres.add_argument("--timeout-ms", type=int, default=5000)
+    p_tres.add_argument("--json", action="store_true")
+
+    # approval group
+    p_apr = sub.add_parser("approval")
+    apr_sub = p_apr.add_subparsers(dest="action", required=True)
+
+    p_aprev = apr_sub.add_parser("preview")
+    p_aprev.add_argument("--approval-id", required=True)
+    p_aprev.add_argument("--profile-dir", type=Path, default=None)
+    p_aprev.add_argument("--timeout-ms", type=int, default=5000)
+    p_aprev.add_argument("--json", action="store_true")
+
+    p_adec = apr_sub.add_parser("decide")
+    p_adec.add_argument("--approval-id", required=True)
+    p_adec.add_argument("--expected-version", type=int, required=True)
+    p_adec.add_argument("--binding-hash", required=True)
+    p_adec.add_argument("--decision", choices=("APPROVE", "DENY"), required=True)
+    p_adec.add_argument("--reason", default="cli_owner_decision")
+    p_adec.add_argument("--idempotency-key", default=None)
+    p_adec.add_argument("--profile-dir", type=Path, default=None)
+    p_adec.add_argument("--timeout-ms", type=int, default=5000)
+    p_adec.add_argument("--json", action="store_true")
+
+    # operation group
+    p_op = sub.add_parser("operation")
+    op_sub = p_op.add_subparsers(dest="action", required=True)
+
+    p_oshow = op_sub.add_parser("show")
+    p_oshow.add_argument("--operation-id", required=True)
+    p_oshow.add_argument("--profile-dir", type=Path, default=None)
+    p_oshow.add_argument("--timeout-ms", type=int, default=5000)
+    p_oshow.add_argument("--json", action="store_true")
+
+    p_orec = op_sub.add_parser("reconcile")
+    p_orec.add_argument("--operation-id", required=True)
+    p_orec.add_argument("--expected-version", type=int, required=True)
+    p_orec.add_argument(
+        "--outcome",
+        choices=("CONFIRMED_SUCCEEDED", "CONFIRMED_NOT_EXECUTED"),
+        required=True,
+    )
+    p_orec.add_argument("--evidence-content", required=True)
+    p_orec.add_argument("--idempotency-key", default=None)
+    p_orec.add_argument("--profile-dir", type=Path, default=None)
+    p_orec.add_argument("--timeout-ms", type=int, default=5000)
+    p_orec.add_argument("--json", action="store_true")
+    return parser
+
+
 def run_cli_command(
     argv: Sequence[str], *, session: CliApiSession | None = None
 ) -> tuple[int, str]:
@@ -120,8 +302,36 @@ def run_cli_command(
 
     if argv[0] == "version":
         return 0, __version__
-    if argv[0] == "health" and session is None:
-        return 0, json.dumps(
+    if argv[0] == "health":
+        require_daemon = "--require-daemon" in argv
+        eff_session = session
+        if eff_session is None:
+            p_dir: Path | None = None
+            for i, tok in enumerate(argv):
+                if tok == "--profile-dir" and i + 1 < len(argv):
+                    p_dir = Path(argv[i + 1])
+                elif tok.startswith("--profile-dir="):
+                    p_dir = Path(tok.split("=", 1)[1])
+            try:
+                eff_session = discover_cli_session(p_dir)
+            except (ConnectionRefusedError, PermissionError):
+                eff_session = None
+        if eff_session is not None:
+            try:
+                resp = eff_session.call("GET", "/v1/health")
+                if resp.status_code == 200:
+                    doc = resp.json()
+                    return 0, json.dumps(
+                        {
+                            "version": __version__,
+                            "daemon_running": True,
+                            "profile_id": doc.get("profile_id", eff_session.profile_id),
+                            "status": doc.get("status", "ok"),
+                        }
+                    )
+            except (ConnectionRefusedError, TimeoutError):
+                pass
+        return (2 if require_daemon else 0), json.dumps(
             {
                 "version": __version__,
                 "daemon_running": False,
@@ -130,14 +340,42 @@ def run_cli_command(
             }
         )
 
-    if session is None:
+    eff_session = session
+    if eff_session is None:
+        prof_dir: Path | None = None
+        timeout_ms = 5000
+        for i, tok in enumerate(argv):
+            if tok == "--profile-dir" and i + 1 < len(argv):
+                prof_dir = Path(argv[i + 1])
+            elif tok.startswith("--profile-dir="):
+                prof_dir = Path(tok.split("=", 1)[1])
+            elif tok == "--timeout-ms" and i + 1 < len(argv):
+                timeout_ms = int(argv[i + 1])
+            elif tok.startswith("--timeout-ms="):
+                timeout_ms = int(tok.split("=", 1)[1])
+        try:
+            eff_session = discover_cli_session(
+                prof_dir, timeout_seconds=max(0.05, timeout_ms / 1000.0)
+            )
+        except PermissionError as exc:
+            return 3, _format_output(
+                {"code": "AUTH_OR_PERMISSION_ERROR", "message": sanitize_terminal_text(str(exc))},
+                as_json=as_json,
+            )
+        except ConnectionRefusedError as exc:
+            return 2, _format_output(
+                {"code": "DAEMON_UNAVAILABLE", "message": sanitize_terminal_text(str(exc))},
+                as_json=as_json,
+            )
+
+    if eff_session is None:
         return 2, _format_output(
             {"code": "DAEMON_UNAVAILABLE", "message": "No active CLI API session configured."},
             as_json=as_json,
         )
 
     try:
-        return _dispatch_authenticated(argv, session=session, as_json=as_json)
+        return _dispatch_authenticated(argv, session=eff_session, as_json=as_json)
     except ConnectionRefusedError as exc:
         return 2, _format_output(
             {"code": "DAEMON_UNAVAILABLE", "message": sanitize_terminal_text(str(exc))},
@@ -160,68 +398,7 @@ def run_cli_command(
 def _dispatch_authenticated(
     argv: Sequence[str], *, session: CliApiSession, as_json: bool
 ) -> tuple[int, str]:
-    parser = argparse.ArgumentParser(prog="openbot", add_help=False)
-    sub = parser.add_subparsers(dest="group")
-
-    # task group
-    p_task = sub.add_parser("task", add_help=False)
-    task_sub = p_task.add_subparsers(dest="action")
-
-    p_tc = task_sub.add_parser("create", add_help=False)
-    p_tc.add_argument("--workspace", required=True)
-    p_tc.add_argument("--goal", required=True)
-    p_tc.add_argument("--idempotency-key", default=None)
-    p_tc.add_argument("--json", action="store_true")
-
-    p_ts = task_sub.add_parser("show", add_help=False)
-    p_ts.add_argument("--task-id", required=True)
-    p_ts.add_argument("--json", action="store_true")
-
-    p_tcan = task_sub.add_parser("cancel", add_help=False)
-    p_tcan.add_argument("--task-id", required=True)
-    p_tcan.add_argument("--expected-version", type=int, required=True)
-    p_tcan.add_argument("--idempotency-key", default=None)
-    p_tcan.add_argument("--json", action="store_true")
-
-    p_tres = task_sub.add_parser("resume", add_help=False)
-    p_tres.add_argument("--task-id", required=True)
-    p_tres.add_argument("--expected-version", type=int, required=True)
-    p_tres.add_argument("--idempotency-key", default=None)
-    p_tres.add_argument("--json", action="store_true")
-
-    # approval group
-    p_apr = sub.add_parser("approval", add_help=False)
-    apr_sub = p_apr.add_subparsers(dest="action")
-
-    p_aprev = apr_sub.add_parser("preview", add_help=False)
-    p_aprev.add_argument("--approval-id", required=True)
-    p_aprev.add_argument("--json", action="store_true")
-
-    p_adec = apr_sub.add_parser("decide", add_help=False)
-    p_adec.add_argument("--approval-id", required=True)
-    p_adec.add_argument("--expected-version", type=int, required=True)
-    p_adec.add_argument("--binding-hash", required=True)
-    p_adec.add_argument("--decision", choices=("APPROVE", "DENY"), required=True)
-    p_adec.add_argument("--reason", default="cli_owner_decision")
-    p_adec.add_argument("--idempotency-key", default=None)
-    p_adec.add_argument("--json", action="store_true")
-
-    # operation group
-    p_op = sub.add_parser("operation", add_help=False)
-    op_sub = p_op.add_subparsers(dest="action")
-
-    p_orec = op_sub.add_parser("reconcile", add_help=False)
-    p_orec.add_argument("--operation-id", required=True)
-    p_orec.add_argument("--expected-version", type=int, required=True)
-    p_orec.add_argument(
-        "--outcome",
-        choices=("CONFIRMED_SUCCEEDED", "CONFIRMED_NOT_EXECUTED"),
-        required=True,
-    )
-    p_orec.add_argument("--evidence-content", required=True)
-    p_orec.add_argument("--idempotency-key", default=None)
-    p_orec.add_argument("--json", action="store_true")
-
+    parser = build_cli_parser()
     args = parser.parse_args(argv)
     idem = getattr(args, "idempotency_key", None) or f"cli_{secrets.token_hex(8)}"
 
@@ -273,6 +450,8 @@ def _dispatch_authenticated(
         resp = session.call(
             "POST", f"/v1/approvals/{args.approval_id}/decide", body=body, idempotency_key=idem
         )
+    elif args.group == "operation" and args.action == "show":
+        resp = session.call("GET", f"/v1/operations/{args.operation_id}")
     elif args.group == "operation" and args.action == "reconcile":
         ev_resp = session.call(
             "POST",
@@ -301,14 +480,244 @@ def _dispatch_authenticated(
     return 0, _format_output(resp.json(), as_json=as_json)
 
 
+class _PersistentChallengeStore:
+    """File-backed challenge nonce store surviving daemon restarts within a profile."""
+
+    def __init__(self, store_path: Path) -> None:
+        self._path = store_path
+        if not self._path.is_file():
+            self._write({})
+
+    def _read(self) -> dict[str, str]:
+        if not self._path.is_file():
+            return {}
+        return dict(json.loads(self._path.read_text(encoding="utf-8")))
+
+    def _write(self, data: dict[str, str]) -> None:
+        tmp = self._path.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, json.dumps(data, sort_keys=True).encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.replace(tmp, self._path)
+
+    def put(self, approval_id: str, nonce: bytes) -> None:
+        data = self._read()
+        data[approval_id] = nonce.decode("utf-8")
+        self._write(data)
+
+    def get(self, approval_id: str) -> bytes | None:
+        val = self._read().get(approval_id)
+        return val.encode("utf-8") if val is not None else None
+
+
+def _seed_daemon_profile_db(
+    db: sqlite3.Connection, *, profile_id: str, workspace_id: str, runtime_epoch: str
+) -> None:
+    from openbot.contracts import canonicalize
+
+    row = db.execute("SELECT count(*) FROM profile_config").fetchone()
+    if row and int(row[0]) > 0:
+        return
+    db.execute("INSERT INTO policy_revisions VALUES(1, ?, '{}', 1000, 1000)", ("a" * 64,))
+    db.execute(
+        "INSERT INTO runtime_instances("
+        "runtime_epoch,boot_id,supervisor_ref,state,started_at,heartbeat_at) "
+        "VALUES(?, 'boot_1', 'sup_1', 'ACTIVE', 1000, 1000)",
+        (runtime_epoch,),
+    )
+    db.execute(
+        "INSERT INTO profile_config("
+        "singleton,profile_id,schema_version,policy_version,identity_epoch,"
+        "privacy_mode,active_runtime_epoch,last_fencing_token,created_at,updated_at) "
+        "VALUES(1, ?, 1, 1, 1, 'OFFLINE', ?, 0, 1000, 1000)",
+        (profile_id, runtime_epoch),
+    )
+    db.execute(
+        "INSERT INTO principals(principal_id,role,status,display_name,created_at) "
+        "VALUES('pri_test1','OWNER','ACTIVE','local owner',1000)"
+    )
+    db.execute(
+        "INSERT INTO workspaces("
+        "workspace_id,root_ref,generation,status,version,created_at,updated_at) "
+        "VALUES(?, 'local-workspace', 1, 'ACTIVE', 0, 1000, 1000)",
+        (workspace_id,),
+    )
+    db.execute(
+        "INSERT INTO sessions(session_id,owner_id,workspace_id,status,created_at,updated_at) "
+        "VALUES('ses_test1','pri_test1',?,'OPEN',1000,1000)",
+        (workspace_id,),
+    )
+    for name, effect, retry_class in (
+        ("fs.patch", "LOCAL_WRITE", "IDEMPOTENT_WRITE"),
+        ("gui.click", "EXTERNAL_WRITE", "RECONCILE_ONLY"),
+        ("test.run", "LOCAL_WRITE", "SAFE_READ"),
+    ):
+        manifest = {
+            "name": name,
+            "version": "1.0.0",
+            "effect": effect,
+            "retry_class": retry_class,
+            "input_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {"arg": {"type": "string"}},
+                "required": ["arg"],
+                "additionalProperties": False,
+            },
+        }
+        raw = canonicalize(manifest)
+        db.execute(
+            "INSERT INTO tool_registry VALUES(?, '1.0.0', ?, NULL, 'builtin', ?, 'ACTIVE', 1000)",
+            (name, hashlib.sha256(raw).hexdigest(), raw.decode()),
+        )
+
+
+def _serve_daemon_process(
+    *,
+    profile_dir: Path,
+    profile_id: str,
+    workspace_id: str,
+    port: int,
+    runtime_epoch: str,
+) -> int:
+    from openbot.application.cancellation import CancellationService
+    from openbot.application.dispatch import DispatchService
+    from openbot.application.operations import OperationService
+    from openbot.application.recovery import RecoveryService
+    from openbot.application.scheduler import SingleInstanceSupervisorLock
+    from openbot.application.state_machine import TaskStateService
+    from openbot.artifacts.store import ArtifactStore
+    from openbot.contracts import SchemaRegistry
+    from openbot.policy.approvals import ApprovalService
+    from openbot.storage.inbox import InboundContext, Inbox
+    from openbot.storage.migrate import connect, load_migrations, migrate
+    from openbot.storage.writer import Writer
+
+    profile_dir = profile_dir.resolve()
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[4]
+
+    sup_lock = SingleInstanceSupervisorLock(profile_dir / "daemon.lock", profile_id=profile_id)
+    sup_lock.acquire_and_mint_handoff(runtime_epoch=runtime_epoch, boot_id="boot_daemon")
+
+    db_path = profile_dir / "state.sqlite"
+    migrate(db_path, load_migrations(repo_root / "db/migrations"))
+    db = connect(db_path)
+    try:
+        _seed_daemon_profile_db(
+            db, profile_id=profile_id, workspace_id=workspace_id, runtime_epoch=runtime_epoch
+        )
+    finally:
+        db.close()
+
+    context = InboundContext(
+        profile_id, "pri_test1", 1, "local", "tenant1", "app1", "ses_test1", workspace_id
+    )
+    registry = SchemaRegistry.from_directory(repo_root / "contracts")
+    challenges = _PersistentChallengeStore(profile_dir / "challenges.json")
+    writer = Writer(db_path)
+    inbox = Inbox(writer, registry)
+    tasks = TaskStateService(writer)
+    ops = OperationService(writer, challenges, registry)
+    approvals = ApprovalService(writer, challenges, registry)
+    dispatcher = DispatchService(writer, registry)
+    recovery = RecoveryService(writer, registry)
+    cancellation = CancellationService(writer)
+    artifacts = ArtifactStore(writer, profile_dir / "blobs")
+
+    tokens = ScopedTokenStore()
+    token_path = profile_dir / "owner_cli.token"
+    owner_token = tokens.issue(profile_id=profile_id, principal_id="pri_test1", scope="owner_cli")
+    if token_path.is_file() and not token_path.is_symlink():
+        saved = token_path.read_text(encoding="utf-8").strip()
+        if saved:
+            from openbot.adapters.local_api.server import TokenGrant
+
+            tokens._tokens[saved] = TokenGrant(saved, profile_id, "pri_test1", "owner_cli")
+            owner_token = saved
+
+    fd_tok = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd_tok, (owner_token + "\n").encode("utf-8"))
+    finally:
+        os.close(fd_tok)
+
+    api = LocalControlApiServer(
+        profile_id=profile_id,
+        default_context=context,
+        writer=writer,
+        registry=registry,
+        tokens=tokens,
+        inbox=inbox,
+        tasks=tasks,
+        operations=ops,
+        approvals=approvals,
+        recovery=recovery,
+        cancellation=cancellation,
+        artifacts=artifacts,
+        challenges=challenges,
+        dispatcher=dispatcher,
+    )
+    daemon = LoopbackHttpDaemon(api, host="127.0.0.1", port=port)
+    session_meta = {
+        "profile_id": profile_id,
+        "workspace_id": workspace_id,
+        "host": daemon.address,
+        "pid": os.getpid(),
+        "runtime_epoch": runtime_epoch,
+    }
+    session_path = profile_dir / "daemon_session.json"
+    fd_ses = os.open(session_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd_ses, (json.dumps(session_meta, sort_keys=True) + "\n").encode("utf-8"))
+    finally:
+        os.close(fd_ses)
+
+    def _handle_stop(signum: int, _frame: object) -> None:
+        del signum
+        threading.Thread(target=daemon.close, daemon=True).start()
+
+    import threading
+
+    signal.signal(signal.SIGTERM, _handle_stop)
+    signal.signal(signal.SIGINT, _handle_stop)
+    print(json.dumps(session_meta, sort_keys=True), flush=True)
+    try:
+        daemon.serve_forever()
+    finally:
+        writer.close()
+        sup_lock.release()
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    if argv is not None and len(argv) == 1 and argv[0] in {"version", "health"}:
-        code, out = run_cli_command(argv)
+    eff_argv = list(sys.argv[1:] if argv is None else argv)
+    for arg in eff_argv:
+        flag_name = arg.split("=", 1)[0]
+        if flag_name in _FORBIDDEN_FLAGS:
+            code, out = run_cli_command(eff_argv)
+            print(out)
+            return code
+    parser = build_cli_parser()
+    args = parser.parse_args(eff_argv)
+    if args.group is None:
+        parser.print_help()
+        return 2
+    if args.group == "daemon" and args.action == "serve":
+        try:
+            return _serve_daemon_process(
+                profile_dir=args.profile_dir,
+                profile_id=args.profile_id,
+                workspace_id=args.workspace_id,
+                port=args.port,
+                runtime_epoch=args.epoch,
+            )
+        except PermissionError as exc:
+            print(json.dumps({"code": "DAEMON_LOCK_OR_PERMISSION_ERROR", "message": str(exc)}))
+            return 3
+    code, out = run_cli_command(eff_argv)
+    if out:
         print(out)
-        return code
-    parser = argparse.ArgumentParser(prog="openbot")
-    parser.add_argument("command", choices=("version", "health"))
-    args = parser.parse_args(argv)
-    code, out = run_cli_command([args.command])
-    print(out)
     return code
