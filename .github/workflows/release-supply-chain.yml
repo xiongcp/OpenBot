@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 jobs:
   supply-chain-and-bundle-audit:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Verify SPDX SBOM, notices, and checksums

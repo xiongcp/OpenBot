@@ -6,6 +6,8 @@ from typing import Literal
 
 type CiTier = Literal["pull_request", "nightly", "release"]
 
+_RETIRED_RUNNER_LABELS = ("macos-14", "macos-13", "macos-12", "ubuntu-20.04")
+
 
 @dataclass(frozen=True, slots=True)
 class CiTierEvaluation:
@@ -40,6 +42,11 @@ class TieredCiGateEvaluator:
         missing = [name for name in required if not (wf_dir / name).is_file()]
         if missing:
             raise PermissionError(f"MISSING_REQUIRED_WORKFLOWS: {', '.join(missing)}")
+        for name in required:
+            text = (wf_dir / name).read_text("utf-8")
+            for label in _RETIRED_RUNNER_LABELS:
+                if label in text:
+                    raise PermissionError(f"RETIRED_RUNNER_LABEL_FORBIDDEN: {name} uses {label}")
         return required
 
     def evaluate_tier(
