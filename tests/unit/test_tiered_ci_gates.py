@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -83,3 +85,23 @@ def test_tiered_ci_gates_run_security_in_pr_and_block_on_injected_failure_or_ski
         tier="pull_request", inject_security_failure=True, allow_skip_failed=False
     )
     assert blocked.gate_passed is False
+
+    win_mypy = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--platform",
+            "win32",
+            str(ROOT / "services/core/src/openbot/application/scheduler.py"),
+            str(ROOT / "services/core/src/openbot/tools/executors/supervision_port.py"),
+            str(ROOT / "services/core/src/openbot/application/macos_gate.py"),
+            str(ROOT / "services/core/src/openbot/application/vertical_slice.py"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert win_mypy.returncode == 0, win_mypy.stdout + win_mypy.stderr

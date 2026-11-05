@@ -92,12 +92,16 @@ class MacOSNativePlatformGate:
             [sys.executable, "-c", "import time; time.sleep(0.05)"],
             start_new_session=True,
         )
+        if sys.platform != "win32":
+            worker_pgid = os.getpgid(proc.pid)
+        else:
+            worker_pgid = proc.pid
         sup.register_worker(
             worker_id="wrk_mac",
             operation_id="op_mac",
             attempt_id="att_mac",
             pid=proc.pid,
-            pgid=os.getpgid(proc.pid),
+            pgid=worker_pgid,
             process_start_token="tok_mac",
         )
         rep = sup.reclaim_worker("wrk_mac", current_start_token="tok_mac", grace_ms=100)

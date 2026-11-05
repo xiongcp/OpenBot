@@ -369,12 +369,16 @@ class M1VerticalSliceHarness:
             [sys.executable, "-c", "import time; time.sleep(0.05)"],
             start_new_session=True,
         )
+        if sys.platform != "win32":
+            slice_pgid = os.getpgid(proc.pid)
+        else:
+            slice_pgid = proc.pid
         sup.register_worker(
             worker_id="wrk_slice_1",
             operation_id=op_id,
             attempt_id=attempt_id,
             pid=proc.pid,
-            pgid=os.getpgid(proc.pid),
+            pgid=slice_pgid,
             process_start_token="tok_slice_1",
         )
         reclaim_report = sup.reclaim_worker(

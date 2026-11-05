@@ -4,11 +4,12 @@ import hmac
 import os
 import secrets
 import sqlite3
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-if os.name == "posix":
+if sys.platform != "win32":
     import fcntl
 
 from openbot.application.resources import ResourceBusyError, ResourceCoordinator
@@ -41,11 +42,12 @@ class SingleInstanceSupervisorLock:
     def acquire_and_mint_handoff(self, *, runtime_epoch: str, boot_id: str) -> DaemonHandoffTicket:
         if self._fd is not None:
             raise PermissionError("Supervisor instance already holds profile lock")
-        if os.name != "posix":
-            raise PermissionError("CAPABILITY_UNAVAILABLE: POSIX flock required")
         fd = os.open(self._path, os.O_CREAT | os.O_RDWR, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if sys.platform != "win32":
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            else:
+                raise PermissionError("CAPABILITY_UNAVAILABLE: POSIX flock required")
         except BlockingIOError as exc:
             os.close(fd)
             raise PermissionError(
@@ -78,7 +80,7 @@ class SingleInstanceSupervisorLock:
     def release(self) -> None:
         if self._fd is not None:
             try:
-                if os.name == "posix":
+                if sys.platform != "win32":
                     fcntl.flock(self._fd, fcntl.LOCK_UN)
             finally:
                 os.close(self._fd)

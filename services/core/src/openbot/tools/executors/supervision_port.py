@@ -2,6 +2,7 @@
 
 import os
 import signal
+import sys
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -94,12 +95,13 @@ class WorkerReclaimReport:
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
-    try:
-        waited_pid, _ = os.waitpid(pid, os.WNOHANG)
-        if waited_pid == pid:
-            return False
-    except ChildProcessError:
-        pass
+    if sys.platform != "win32":
+        try:
+            waited_pid, _ = os.waitpid(pid, os.WNOHANG)
+            if waited_pid == pid:
+                return False
+        except ChildProcessError:
+            pass
     try:
         os.kill(pid, 0)
         return True
@@ -175,7 +177,10 @@ class ProcessSupervisorService:
         forced_sent = False
         if _pid_alive(ident.pid):
             try:
-                os.killpg(ident.pgid, signal.SIGTERM)
+                if sys.platform != "win32":
+                    os.killpg(ident.pgid, signal.SIGTERM)
+                else:
+                    os.kill(ident.pid, signal.SIGTERM)
                 graceful_sent = True
             except (ProcessLookupError, PermissionError):
                 try:
@@ -191,16 +196,23 @@ class ProcessSupervisorService:
                     break
                 time.sleep(0.01)
 
+        if sys.platform != "win32":
+            hard_sig: int = signal.SIGKILL
+        else:
+            hard_sig = signal.SIGTERM
         if _pid_alive(ident.pid) or any(_pid_alive(p) for p in ident.known_descendant_pids):
             try:
-                os.killpg(ident.pgid, signal.SIGKILL)
+                if sys.platform != "win32":
+                    os.killpg(ident.pgid, hard_sig)
+                else:
+                    os.kill(ident.pid, hard_sig)
                 forced_sent = True
             except (ProcessLookupError, PermissionError):
                 pass
             for d_pid in (ident.pid, *ident.known_descendant_pids):
                 if _pid_alive(d_pid):
                     try:
-                        os.kill(d_pid, signal.SIGKILL)
+                        os.kill(d_pid, hard_sig)
                         forced_sent = True
                     except ProcessLookupError:
                         pass
