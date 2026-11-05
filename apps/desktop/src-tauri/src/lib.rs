@@ -1,4 +1,6 @@
 mod control;
+pub mod stream;
+pub mod tray;
 use control::{valid_id, Control, Preview, Settings};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -126,6 +128,86 @@ async fn client_decide(
     let nonce = challenge["nonce"].as_str().ok_or("CHALLENGE_UNAVAILABLE")?;
     control.call("POST",&format!("/v1/approvals/{approval_id}/decide"),Some(json!({"decision":decision,"expected_version":expected_version,"expected_binding_hash":binding_hash,"nonce":nonce})))
 }
+#[tauri::command]
+async fn client_bootstrap_status(control: State<'_, Control>) -> Result<Value> {
+    control.bootstrap_status()
+}
+#[tauri::command]
+async fn client_submit_evidence(
+    control: State<'_, Control>,
+    operation_id: String,
+    content: String,
+) -> Result<Value> {
+    valid_id(&operation_id, "op_")?;
+    if content.trim().is_empty() || content.len() > 16384 {
+        return Err("EVIDENCE_INVALID".into());
+    }
+    control.call(
+        "POST",
+        &format!("/v1/operations/{operation_id}/evidence"),
+        Some(json!({"content": content, "mime": "text/plain"})),
+    )
+}
+#[tauri::command]
+async fn client_reconcile_operation(
+    control: State<'_, Control>,
+    operation_id: String,
+    expected_version: u64,
+    outcome: String,
+    evidence_artifact_ids: Vec<String>,
+) -> Result<Value> {
+    valid_id(&operation_id, "op_")?;
+    if ![
+        "CONFIRMED_SUCCEEDED",
+        "CONFIRMED_NOT_EXECUTED",
+        "KEEP_UNKNOWN",
+    ]
+    .contains(&outcome.as_str())
+        || expected_version == 0
+        || evidence_artifact_ids.len() > 8
+    {
+        return Err("RECONCILE_INVALID".into());
+    }
+    for aid in &evidence_artifact_ids {
+        valid_id(aid, "art_")?;
+    }
+    control.call(
+        "POST",
+        &format!("/v1/operations/{operation_id}/reconcile"),
+        Some(json!({
+            "expected_version": expected_version,
+            "outcome": outcome,
+            "evidence_artifact_ids": evidence_artifact_ids,
+        })),
+    )
+}
+#[tauri::command]
+async fn client_emergency_stop(control: State<'_, Control>) -> Result<Value> {
+    let runs = control.call("GET", "/v1/client/runs", None)?;
+    let mut cancelled = Vec::new();
+    if let Some(arr) = runs["runs"].as_array() {
+        for item in arr {
+            let st = item["state"].as_str().unwrap_or("");
+            if ["RUNNING", "QUEUED", "WAITING_APPROVAL", "PAUSED"].contains(&st) {
+                if let (Some(tid), Some(ver)) =
+                    (item["task_id"].as_str(), item["version"].as_u64())
+                {
+                    if control
+                        .call(
+                            "POST",
+                            &format!("/v1/tasks/{tid}/cancel"),
+                            Some(json!({"expected_version": ver})),
+                        )
+                        .is_ok()
+                    {
+                        cancelled.push(tid.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    Ok(json!({"emergency_stopped_tasks": cancelled}))
+}
 pub fn run() {
     let args: Vec<_> = std::env::args_os().collect();
     let profile = if args.len() == 3 && args[1] == "--profile-dir" {
@@ -149,7 +231,11 @@ pub fn run() {
             client_preview_settings,
             client_apply_settings,
             client_decide,
-            client_reconnect
+            client_reconnect,
+            client_bootstrap_status,
+            client_submit_evidence,
+            client_reconcile_operation,
+            client_emergency_stop
         ])
         .setup(|app| {
             tauri::WebviewWindowBuilder::new(

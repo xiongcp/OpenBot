@@ -105,6 +105,21 @@ impl Control {
         let settings = connection.call("GET", "/v1/client/settings", None)?;
         connection.call("POST", "/v1/tasks", Some(json!({"goal":goal,"workspace_id":connection.session.workspace_id,"network_mode":settings["config"]["mode"]})))
     }
+    pub fn bootstrap_status(&self) -> Result<Value> {
+        let profile_exists = self.profile.is_dir();
+        let session_ready = self.profile.join("daemon_session.json").is_file()
+            && self.profile.join("owner_cli.token").is_file();
+        let daemon_alive = self
+            .connect()
+            .and_then(|c| c.call("GET", "/v1/health", None))
+            .is_ok();
+        Ok(json!({
+            "profile_dir": self.profile.to_string_lossy(),
+            "profile_exists": profile_exists,
+            "session_ready": session_ready,
+            "daemon_alive": daemon_alive,
+        }))
+    }
 }
 impl Connection {
     fn call(&self, method: &str, path: &str, body: Option<Value>) -> Result<Value> {

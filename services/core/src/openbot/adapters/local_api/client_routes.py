@@ -1,5 +1,7 @@
 """Additive, scoped client DTOs; all effects stay in the existing core services."""
 
+import difflib
+import hashlib
 import re
 import sqlite3
 from typing import Any
@@ -60,7 +62,8 @@ class ClientRoutes:
             row = db.execute(
                 "SELECT a.operation_id,a.status,a.version,a.binding_hash,a.expires_at,"
                 "o.task_id,o.workspace_id,o.tool_id,o.data_class,o.destination_json,"
-                "o.canonical_args_json,t.manifest_json FROM approvals a "
+                "o.canonical_args_json,t.manifest_json,o.resource_snapshot_json,"
+                "o.workspace_generation FROM approvals a "
                 "JOIN operations o ON o.operation_id=a.operation_id "
                 "JOIN tool_registry t ON t.tool_id=o.tool_id AND t.tool_version=o.tool_version "
                 "AND t.manifest_digest=o.tool_manifest_digest WHERE a.approval_id=?",
@@ -70,6 +73,37 @@ class ClientRoutes:
                 raise PermissionError("APPROVAL_UNAVAILABLE")
             task_record(db, self.state.context, row[5])
             manifest = strict_json(row[11])
+            raw_args = strict_json(row[10]) if row[10] else {}
+            res_snap = strict_json(row[12]) if row[12] else {}
+            ws_gen_row = db.execute(
+                "SELECT generation FROM workspaces WHERE workspace_id=?", (row[6],)
+            ).fetchone()
+            current_gen = int(ws_gen_row[0]) if ws_gen_row else int(row[13])
+            drift = current_gen != int(row[13])
+            diff_lines: list[str] = []
+            old_sha: str | None = None
+            new_sha: str | None = None
+            target_path = ""
+            if row[8] != "SECRET" and isinstance(raw_args, dict):
+                target_path = str(raw_args.get("path", raw_args.get("subpath", "")))
+                files_snap = res_snap.get("files", []) if isinstance(res_snap, dict) else []
+                if files_snap and isinstance(files_snap[0], dict):
+                    old_sha = str(files_snap[0].get("sha256", "")).removeprefix("sha256:")
+                if "old_snippet" in raw_args and "new_snippet" in raw_args:
+                    old_s = str(raw_args["old_snippet"])
+                    new_s = str(raw_args["new_snippet"])
+                    if old_sha is None:
+                        old_sha = hashlib.sha256(old_s.encode("utf-8")).hexdigest()
+                    new_sha = hashlib.sha256(new_s.encode("utf-8")).hexdigest()
+                    diff_lines = [
+                        self._safe(ln.rstrip("\r\n"))
+                        for ln in difflib.unified_diff(
+                            old_s.splitlines(keepends=True),
+                            new_s.splitlines(keepends=True),
+                            fromfile=f"a/{target_path or 'file'}",
+                            tofile=f"b/{target_path or 'file'}",
+                        )
+                    ]
             return {
                 "schema_version": "1.1",
                 "approval_id": approval_id,
@@ -87,6 +121,11 @@ class ClientRoutes:
                 "resource_summary": row[6],
                 "args_preview": "[REDACTED_SECRET]" if row[8] == "SECRET" else self._safe(row[10]),
                 "truncated": len(row[10]) > 4096,
+                "target_path": target_path,
+                "old_sha256": old_sha,
+                "new_sha256": new_sha,
+                "diff_lines": diff_lines,
+                "precondition_drift": drift,
             }
 
         return self.state.writer.read(query)

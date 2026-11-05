@@ -5,8 +5,28 @@
   font-synthesis:none;
   --green:#146a53;
   --border:#dfe5dc;
-  --muted:#75847c;
-  --amber:#b87926
+  --muted:#4e5f57;
+  --amber:#b87926;
+  --surface:#ffffff;
+  --sidebar-bg:#142d25;
+  --sidebar-fg:#dce6df
+}
+:root[data-theme="dark"] {
+  color:#e4f2ec;
+  background:#0b1915;
+  --green:#3dd6a3;
+  --border:#1e3a31;
+  --muted:#a6c2b7;
+  --amber:#f5b14c;
+  --surface:#122620;
+  --sidebar-bg:#07120f;
+  --sidebar-fg:#e4f2ec
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after {
+    animation-duration:0.01ms!important;
+    transition-duration:0.01ms!important
+  }
 }
 * {
   box-sizing:border-box
