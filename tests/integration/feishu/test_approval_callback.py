@@ -36,10 +36,17 @@ def test_feishu_approval_callback_verifies_operator_ignores_forged_and_rejects_c
         approvals=approvals,
         tasks=tasks,
     )
+    updated_cards: list[tuple[str, dict[str, object]]] = []
+
+    def _record_card_update(msg_id: str, card_doc: dict[str, object]) -> bool:
+        updated_cards.append((msg_id, card_doc))
+        return True
+
     handler = FeishuApprovalCallbackHandler(
         expected_tenant_key="ten_1",
         expected_app_id="app_1",
         use_case=use_case,
+        card_updater=_record_card_update,
     )
 
     # Create task & propose operation
@@ -99,11 +106,23 @@ def test_feishu_approval_callback_verifies_operator_ignores_forged_and_rejects_c
     valid_cb = {
         **forged_cb,
         "header": {"event_id": "cb_2", "tenant_key": "ten_1", "app_id": "app_1"},
-        "event": {**forged_cb["event"], "operator": {"open_id": "ou_owner_real"}},
+        "event": {
+            **forged_cb["event"],
+            "operator": {"open_id": "ou_owner_real"},
+            "context": {"open_message_id": "om_card_msg_1"},
+        },
     }
     res_ok = handler.handle_callback(valid_cb)
     assert res_ok.approved is True
     assert res_ok.operation_state == "READY"
+    assert res_ok.decision == "APPROVE"
+    assert res_ok.resolved_card_json is not None
+    assert all(el.get("tag") != "action" for el in res_ok.resolved_card_json["elements"])
+    assert res_ok.callback_response is not None
+    assert res_ok.callback_response["card"]["type"] == "raw"
+    assert res_ok.callback_response["card"]["data"] == res_ok.resolved_card_json
+    assert len(updated_cards) == 1
+    assert updated_cards[0][0] == "om_card_msg_1"
 
     # 4. Old card on a CANCELLED task is rejected
     task2_id = json.loads(
