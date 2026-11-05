@@ -11,3 +11,5 @@ No model endpoint, API credential, raw callback, hidden reasoning or arbitrary t
 配置收紧在每次新模型请求和派发前复验；SDK 与应用均不隐式重试。超时或回执不明保持 UNKNOWN/RECONCILING；审批不复活，持有资源等待核对。金额无可靠价格来源时显示不可用。
 
 Full verification / 完整验证: `.venv-m1/bin/python scripts/verify.py --phase M1 --output-dir /tmp/openbot-client-verification --run-id agent-runtime-20261105`: all eight checks passed; 383 passed, 2 explicitly gated native-container skips. Logs remain outside the repository.
+
+Durable observation regression / 持久记录观察回归: a later full suite exposed a test race between the SUCCEEDED task transaction and its subsequent RUN_FINISHED trace transaction. The test now waits for RUN_FINISHED before checking both facts; no assertions were removed. RED: full suite observed the missing trace event. GREEN: seven targeted tests and full suite 396 passed / 2 explicit native skips, eight checks passed.

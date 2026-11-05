@@ -167,7 +167,10 @@ def test_runtime_uses_real_core_approval_claim_dispatch_and_verified_artifact(
     try:
         runtime.start(task)
         decide(local_api_env, state, task)
-        wait_for(lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED")
+        wait_for(
+            lambda: any(event["kind"] == "RUN_FINISHED" for event in state.trace(task)["events"])
+        )
+        assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
         events = state.trace(task)["events"]
         kinds = [e["kind"] for e in events]
         assert all(
