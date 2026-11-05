@@ -50,6 +50,10 @@ def test_m1_vertical_slice_five_crash_points_and_duplicate_inputs_never_double_e
         else:
             assert outcome["fault_executor_effect_count"] == 1
         assert outcome["blind_replay_count"] == 0
+        assert outcome["killed_pid"] > 0
+        assert outcome["db_reopened_count"] >= 1
+        if crash_point in {"after_dispatch_before_effect", "after_effect_before_receipt"}:
+            assert outcome["post_crash_operation_state"] == "UNKNOWN"
         assert outcome["resolved_operation_state"] == "SUCCEEDED"
         assert outcome["resolved_task_state"] in {"QUEUED", "SUCCEEDED"}
     finally:

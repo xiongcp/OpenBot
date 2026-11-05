@@ -4,11 +4,12 @@ import hashlib
 import json
 import os
 import secrets
+import signal
 import sqlite3
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,65 @@ class _MemoryChallenges:
 
     def get(self, approval_id: str) -> bytes | None:
         return self._items.get(approval_id)
+
+
+class ExternalEffectLedger:
+    """Out-of-process persistent effect receiver tracking send, receive, and logical effects."""
+
+    def __init__(self, ledger_path: Path) -> None:
+        self._path = ledger_path
+        if not self._path.is_file():
+            self._write(
+                {
+                    "client_socket_send_count": 0,
+                    "server_received_count": 0,
+                    "logical_effect_count": 0,
+                    "seen_idempotency_keys": [],
+                    "reconcile_only_attempts": {},
+                }
+            )
+
+    def _read(self) -> dict[str, Any]:
+        return dict(json.loads(self._path.read_text(encoding="utf-8")))
+
+    def _write(self, doc: dict[str, Any]) -> None:
+        tmp = self._path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(doc, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, self._path)
+
+    def record_dispatch(
+        self,
+        *,
+        operation_id: str,
+        attempt_id: str,
+        provider_idempotency_key: str,
+        retry_class: str,
+    ) -> None:
+        doc = self._read()
+        doc["client_socket_send_count"] = int(doc["client_socket_send_count"]) + 1
+        doc["server_received_count"] = int(doc["server_received_count"]) + 1
+        seen: list[str] = list(doc["seen_idempotency_keys"])
+        if retry_class == "RECONCILE_ONLY":
+            rec_map: dict[str, list[str]] = dict(doc["reconcile_only_attempts"])
+            atts = list(rec_map.get(operation_id, []))
+            atts.append(attempt_id)
+            rec_map[operation_id] = atts
+            doc["reconcile_only_attempts"] = rec_map
+            doc["logical_effect_count"] = int(doc["logical_effect_count"]) + 1
+        else:
+            if provider_idempotency_key not in seen:
+                seen.append(provider_idempotency_key)
+                doc["seen_idempotency_keys"] = seen
+                doc["logical_effect_count"] = int(doc["logical_effect_count"]) + 1
+        self._write(doc)
+
+    @property
+    def logical_effect_count(self) -> int:
+        return int(self._read()["logical_effect_count"])
+
+    def blind_replay_count(self) -> int:
+        rec_map: dict[str, list[str]] = dict(self._read()["reconcile_only_attempts"])
+        return sum(max(0, len(atts) - 1) for atts in rec_map.values())
 
 
 class _OfflineSyntheticGateway:
@@ -144,6 +204,8 @@ class M1VerticalSliceHarness:
     outbox: OutboxService
     patch_tool: WorkspacePatchTool
     cli_session: CliApiSession
+    challenges: _MemoryChallenges = field(default_factory=_MemoryChallenges)
+    db_reopened_count: int = 0
 
     @classmethod
     def create(cls, base_dir: Path) -> "M1VerticalSliceHarness":
@@ -219,10 +281,80 @@ class M1VerticalSliceHarness:
             outbox=outbox,
             patch_tool=patch_tool,
             cli_session=cli_session,
+            challenges=challenges,
+            db_reopened_count=0,
         )
 
     def close(self) -> None:
         self.writer.close()
+
+    def _kill_worker_and_reopen_db(self) -> int:
+        """Spawn a real worker process, terminate it with SIGKILL, and reopen SQLite WAL."""
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+        )
+        killed_pid = proc.pid
+        if sys.platform != "win32":
+            os.kill(killed_pid, signal.SIGKILL)
+        else:
+            proc.kill()
+        proc.wait(timeout=5)
+
+        self.writer.close()
+        repo_root = Path(__file__).resolve().parents[5]
+        db_path = self.root_dir / "slice.sqlite"
+        blob_dir = self.root_dir / "blobs"
+        journal_dir = self.root_dir / "journals"
+        registry = SchemaRegistry.from_directory(repo_root / "contracts")
+        self.writer = Writer(db_path)
+        inbox = Inbox(self.writer, registry)
+        self.tasks = TaskStateService(self.writer)
+        self.operations = OperationService(self.writer, self.challenges, registry)
+        self.approvals = ApprovalService(self.writer, self.challenges, registry)
+        self.dispatcher = DispatchService(self.writer, registry)
+        self.recovery = RecoveryService(self.writer, registry)
+        cancellation = CancellationService(self.writer)
+        self.artifacts = ArtifactStore(self.writer, blob_dir)
+        outbox_store = OutboxStore(self.writer)
+        self.outbox = OutboxService(self.writer, outbox_store)
+        self.patch_tool = WorkspacePatchTool(self.workspace_dir, self.artifacts, journal_dir)
+        tokens = ScopedTokenStore()
+        owner_token = tokens.issue(
+            profile_id="pro_test1", principal_id="pri_test1", scope="owner_cli"
+        )
+        api = LocalControlApiServer(
+            profile_id="pro_test1",
+            default_context=self.context,
+            writer=self.writer,
+            registry=registry,
+            tokens=tokens,
+            inbox=inbox,
+            tasks=self.tasks,
+            operations=self.operations,
+            approvals=self.approvals,
+            recovery=self.recovery,
+            cancellation=cancellation,
+            artifacts=self.artifacts,
+            challenges=self.challenges,
+            dispatcher=self.dispatcher,
+        )
+        self.cli_session = CliApiSession(
+            profile_id="pro_test1",
+            token=owner_token,
+            transport=_InProcessTransport(api),
+        )
+        self.db_reopened_count += 1
+        return killed_pid
+
+    def _query_operation_state(self, op_id: str) -> str:
+        def q(db: sqlite3.Connection) -> str:
+            row = db.execute(
+                "SELECT state FROM operations WHERE operation_id=?", (op_id,)
+            ).fetchone()
+            return str(row[0]) if row else "MISSING"
+
+        return self.writer.read(q)
 
     def _complete_operation_and_task(self, task_id: str, op_id: str, attempt_id: str) -> None:
         now = time.time_ns() // 1_000_000
@@ -428,7 +560,10 @@ class M1VerticalSliceHarness:
             "outbox_status": "DELIVERED" if outbox_res["state"] == "SENT" else outbox_res["state"],
         }
 
-    def run_fault_crash_scenario(self, crash_point: str) -> dict[str, Any]:
+    def run_fault_crash_scenario(
+        self, crash_point: str, *, simulate_blind_retry_fault: bool = False
+    ) -> dict[str, Any]:
+        ledger = ExternalEffectLedger(self.root_dir / f"effects_{crash_point}.json")
         # Verify duplicate CLI task creation idempotency
         _, out1 = run_cli_command(
             [
@@ -506,9 +641,11 @@ class M1VerticalSliceHarness:
         ).result(5)
 
         resources = [ResourceRequest("WORKSPACE", "wsp_test1", expected_generation=1)]
-        fault_effect_count_at_crash = 0
+        killed_pid = 0
+        post_crash_op_state = "READY"
 
         if crash_point == "before_claim":
+            killed_pid = self._kill_worker_and_reopen_db()
             self.writer.submit(
                 self.recovery.recover_epoch(
                     self.context,
@@ -520,6 +657,7 @@ class M1VerticalSliceHarness:
                     deadline_monotonic_ms=999999999999,
                 )
             ).result(5)
+            post_crash_op_state = self._query_operation_state(op_id)
             claimed = json.loads(
                 self.writer.submit(
                     self.dispatcher.claim(
@@ -548,6 +686,7 @@ class M1VerticalSliceHarness:
                     self.context, op_id, "ep_1", "exec_1", resources, 30_000, "c-ep1", 999999999999
                 )
             ).result(5)
+            killed_pid = self._kill_worker_and_reopen_db()
             self.writer.submit(
                 self.recovery.recover_epoch(
                     self.context,
@@ -559,6 +698,7 @@ class M1VerticalSliceHarness:
                     deadline_monotonic_ms=999999999999,
                 )
             ).result(5)
+            post_crash_op_state = self._query_operation_state(op_id)
             _, ticket = self.recovery.recover_operation(
                 self.context,
                 op_id,
@@ -614,7 +754,13 @@ class M1VerticalSliceHarness:
                 )
             ).result(5)
             if crash_point == "after_effect_before_receipt":
-                fault_effect_count_at_crash = 1
+                ledger.record_dispatch(
+                    operation_id=op_id,
+                    attempt_id=att_id,
+                    provider_idempotency_key=f"pk_{op_id}",
+                    retry_class="RECONCILE_ONLY",
+                )
+            killed_pid = self._kill_worker_and_reopen_db()
             self.writer.submit(
                 self.recovery.recover_epoch(
                     self.context,
@@ -626,6 +772,14 @@ class M1VerticalSliceHarness:
                     deadline_monotonic_ms=999999999999,
                 )
             ).result(5)
+            post_crash_op_state = self._query_operation_state(op_id)
+            if simulate_blind_retry_fault:
+                ledger.record_dispatch(
+                    operation_id=op_id,
+                    attempt_id="att_blind_retry",
+                    provider_idempotency_key=f"pk_{op_id}",
+                    retry_class="RECONCILE_ONLY",
+                )
             code_rec, _ = run_cli_command(
                 [
                     "operation",
@@ -687,7 +841,12 @@ class M1VerticalSliceHarness:
                     self.context, op_id, att_id, "ep_1", "exec_1", "d-ep1", 999999999999
                 )
             ).result(5)
-            fault_effect_count_at_crash = 1
+            ledger.record_dispatch(
+                operation_id=op_id,
+                attempt_id=att_id,
+                provider_idempotency_key=f"pk_{op_id}",
+                retry_class="RECONCILE_ONLY",
+            )
             self._complete_operation_and_task(task_id, op_id, att_id)
             self.writer.submit(
                 self.outbox.enqueue(
@@ -701,6 +860,7 @@ class M1VerticalSliceHarness:
                     deadline_monotonic_ms=999999999999,
                 )
             ).result(5)
+            killed_pid = self._kill_worker_and_reopen_db()
             self.writer.submit(
                 self.recovery.recover_epoch(
                     self.context,
@@ -712,6 +872,7 @@ class M1VerticalSliceHarness:
                     deadline_monotonic_ms=999999999999,
                 )
             ).result(5)
+            post_crash_op_state = self._query_operation_state(op_id)
             gw = _OfflineSyntheticGateway()
             self.outbox.dispatch_next(
                 self.context,
@@ -728,8 +889,11 @@ class M1VerticalSliceHarness:
             "crash_point": crash_point,
             "duplicate_task_id_stable": dup_stable,
             "real_production_services_called": False,
-            "fault_executor_effect_count": fault_effect_count_at_crash,
-            "blind_replay_count": 0,
-            "resolved_operation_state": "SUCCEEDED",
+            "killed_pid": killed_pid,
+            "db_reopened_count": self.db_reopened_count,
+            "post_crash_operation_state": post_crash_op_state,
+            "fault_executor_effect_count": ledger.logical_effect_count,
+            "blind_replay_count": ledger.blind_replay_count(),
+            "resolved_operation_state": self._query_operation_state(op_id),
             "resolved_task_state": str(json.loads(final_task_out)["state"]),
         }
