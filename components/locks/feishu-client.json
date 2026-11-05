@@ -1,0 +1,212 @@
+{
+  "schema_version": "1",
+  "scope": "MACOS_PRIVATE_TEXT_INGRESS_ONLY",
+  "component_id": "lark-oapi",
+  "source": "https://github.com/larksuite/oapi-sdk-python",
+  "version": "1.7.5",
+  "license": "MIT",
+  "wheel_sha256": "sha256:ff70fd5cdf436e26d80bf903fdd7a80cbdbd71981b87ce4c2aa49bb95fc96020",
+  "lockfile": "uv.lock",
+  "lock_sha256": "6b4d85e39634901f4bdfb8ae0b8e4f76cea115e41592101027d20e6de67e0ddb",
+  "source_copy": "NO_COPY",
+  "patch": "Worker-scoped bounded discovery transport and fixed lifecycle observers; no source copying",
+  "maintainer": "OpenBot maintainers",
+  "qualification": "BOUNDED_DEVELOPMENT",
+  "full_Q01_Q10": "DEFERRED",
+  "remote_card_approvals": "DISABLED",
+  "outbound_messages": "DISABLED",
+  "dependencies": [
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "requests-toolbelt",
+      "version": "1.0.0",
+      "license": "Apache 2.0"
+    },
+    {
+      "name": "pycryptodome",
+      "version": "4.3.0",
+      "license": "BSD-2-Clause AND Unlicense AND MIT"
+    },
+    {
+      "name": "websockets",
+      "version": "15.0.1",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "license": "BSD-3-Clause"
+    }
+  ],
+  "new_transitive_artifacts_and_licenses": [
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "source": "https://pypi.org/project/charset-normalizer/3.5.2/",
+      "artifacts": [
+        "sha256:ed2a239c0ea213acc1908150a3037257083c7c083128f1a4cec2ec4b97dca491",
+        "sha256:b91363207bd9dc966a691e959bb47f64b30f7ac4b072be9968b366982f7db77c",
+        "sha256:38a873987f3be698494da8b2e3085e29da02da7b633dce73e79c699a113d7bf0",
+        "sha256:355ad8011081dec5412240c087a9a0c9d4d5039f3ed11a3f13e18c2b29b56c51",
+        "sha256:ee21e28f0430bd6dc9086c6e525d5e818a44a5ad19720c8a0ef766792f3eb5e5",
+        "sha256:3d31298449090ab8d47b7b1b2a555ff73cac7ed438a08b7ac160980c7ebed649",
+        "sha256:5cde776b7cc66e4f6c99612cea4aa7269aa65863f7a15841b2c264f103822f4e",
+        "sha256:ae4f5fea5b8b8ccff88238cc8569303e5ee95efae67fa62922a311397a71f346",
+        "sha256:f7d486c83842422badd511868fd8a9a20e9407ace71564b6af47ce7e60a336c1",
+        "sha256:11a4d68a6ecda3292cb1e50239e111543ba5d709bb62a6b4ea1afcfa729d8875",
+        "sha256:d6734d2ef8a50fbf8445c139477da401f50d62a0606bf00e20ec6d87773fefb1",
+        "sha256:a815775b6c38d4e0ff7bcffbeba67feded90202bb6a226b8dd35f1c855217413",
+        "sha256:23851fb4e1b85ed3f6c2a27b777cdfe2e19fb5b38429a8faf38c7542b7665869",
+        "sha256:db19d07e2e0129e974a0e65d0064fc222a446cd5122c2fd4184d2af9fc734a9e",
+        "sha256:780fbe7cab297b81dad9fb8dc5eb003c0468ffb0d9e5f65068c53a34661a96bc",
+        "sha256:e2af3aad578aa6bd1384bcf4750fc285e5a9de53f40b7d41e5a0bf748edeb2b3",
+        "sha256:4275811936e2f06feff5e598fb42a1b7ae852da8e39605211892b56b81a34efd",
+        "sha256:1c50fe28bbc2ced33386f298650d91218076c05420e6cbd790b913adc41659e7",
+        "sha256:d19fbd981a488e22cd04883659ca6b08f50b5974f9fd7c95655ef6a043e5893f",
+        "sha256:0fed1d06615f022ee3b13caf5e8b180cfea32bb2c5aded8a9d44277afc040f93",
+        "sha256:838dcc90063569a0448120554591a1d6c4a4ffe11babf048908793154ab86ade",
+        "sha256:2ce45c6627b22c47e390bc91a41c3d13032192e699fa0bea96e9671b373d69b0",
+        "sha256:0774bf9bf620249fee3e0b8b9fd3065de213be30f3aa94ce2494b3b638949e26",
+        "sha256:1db38f4c5496827c1a501846d64d14c3b80c7e6714e406cd7dc36a9899fa1011",
+        "sha256:304d8e4d493af723536393eee0c689eb7813f4a474c8b479dee63f1fdd98f621",
+        "sha256:9b7f416ff0978e2f2249330527f0ad6fa02f4932e6199692d3b52da2048c19e4",
+        "sha256:01077390b03f7988f11d700a2194e69b119741a86b1a638b1db88891e3eced8e",
+        "sha256:7e841fb9010836c992c9f12fcbd43a831de93a5f726fc1ccd8ca1d0268c5014c",
+        "sha256:9cae88599c7219005d879f98e5ed53341e9a122af585e1091200358a3003d2a0",
+        "sha256:01b0c0d2262a9e28e8484a278c7e1b5d650e3ac8cf2683d2967e25899f208bdf",
+        "sha256:9f56f72050826f63dcee7a7f55b0a77168cb3bfc553fd405e7f8f9ece75a4036",
+        "sha256:40ab6bffa02ae10a0581e6c198be7d2d8ca5c2a0c64e4ed3465d766df457573e",
+        "sha256:b6b751274acb69d77b3323d6b7dbaa3c7fdfc1eb829b7eb61d262f32e1af9685"
+      ],
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/charset-normalizer/LICENSE",
+          "sha256": "6d0d41bfe170ac6c7dc248c9a63e254d0fb45a60d50a8257d0af92c6e249b887"
+        }
+      ]
+    },
+    {
+      "name": "lark-oapi",
+      "version": "1.7.5",
+      "source": "https://pypi.org/project/lark-oapi/1.7.5/",
+      "artifacts": [
+        "sha256:ff70fd5cdf436e26d80bf903fdd7a80cbdbd71981b87ce4c2aa49bb95fc96020"
+      ],
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/lark-oapi/LICENSE",
+          "sha256": "376660213aca675cae7ea55d7e6af88b130fa78a89fe5cbed7f61e0acdf0f949"
+        }
+      ]
+    },
+    {
+      "name": "pycryptodome",
+      "version": "4.3.0",
+      "source": "https://pypi.org/project/pycryptodome/4.3.0/",
+      "artifacts": [
+        "sha256:a3accc029e09410ae4d9cbb08e060552e81d7fc032267afb8b4555c65301bb0f",
+        "sha256:a35b24c1fbc4149041c9372b1560dc4689fe6904e998960f9cd1c403d832376b",
+        "sha256:c7e8f84d406ab75117de563a93b61ff97236cc59b5570c8c36a7ce3427f6f931",
+        "sha256:96bf142ef25544a221a2b4a8f5d449cb07c1736be71b4ea057749318a2cd402c",
+        "sha256:c7f1654f356bf688840f4fbee72fe946a2e170ee84052ded78e9897c5afbc39f",
+        "sha256:ef3e17934d1b8ee437175fb9dcbf892067e197acc141545d76f37db2a79dd184",
+        "sha256:cfda47fd1745477c748b71bf726d2db99c184eb301c631992dd3a423760e000f",
+        "sha256:195c9d781905605b3b9de8567c47986a9d0ee513566b5150eb9400692465b610",
+        "sha256:85ece8fd90ae325d7d519f2ac61fbcc20cf4475afaba328f0c636da6077787d3",
+        "sha256:4cf6cc92277a1c82ee6e4abcb8c1f94a4ce08b00dcbb50507eb332a09623a945",
+        "sha256:effb321424ed70ee8ac9a65eb6dd6eeb33d3426d0ae7dd3499adb6a8e75224cf",
+        "sha256:5a2131aabc5214f0c19459b581cad14503d567c55ddf3a24ff6150b4fb436b8d",
+        "sha256:70b8127d1127006772208188995bddc4c1021244bb2deca06d2226f040bfbcb6"
+      ],
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/pycryptodome/LICENSE.rst",
+          "sha256": "a260ad1a6f7137cfc79d371529818ec279a27a97bd86e02ebbf1900a23087955"
+        },
+        {
+          "path": "evidence/implementation/licenses/pycryptodome/LICENSE",
+          "sha256": "22f7173776d0a36d3f13ec1f45d51e0502e67d17e384bddf39690d833974ff93"
+        },
+        {
+          "path": "evidence/implementation/licenses/pycryptodome/LICENSE",
+          "sha256": "1c730e3c2cd4f70e058519ef3e910d8bdd4ed822ae2ce689f3c63d32fc52314b"
+        }
+      ]
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "source": "https://pypi.org/project/requests/2.34.2/",
+      "artifacts": [
+        "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+      ],
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/requests/LICENSE",
+          "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+        },
+        {
+          "path": "evidence/implementation/licenses/requests/NOTICE",
+          "sha256": "f5110972dedad2b4e9d314518daf3b7d72d6e02e499acd802181de6f74571dcc"
+        }
+      ]
+    },
+    {
+      "name": "requests-toolbelt",
+      "version": "1.0.0",
+      "source": "https://pypi.org/project/requests-toolbelt/1.0.0/",
+      "artifacts": [
+        "sha256:cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06"
+      ],
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/requests-toolbelt/LICENSE",
+          "sha256": "1f8cf8bdacd98ed6d36d0fec0c07f7765acebd6e81205962ab5146023b3c858d"
+        }
+      ]
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "source": "https://pypi.org/project/urllib3/2.8.0/",
+      "artifacts": [
+        "sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
+      ],
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/urllib3/LICENSE.txt",
+          "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+        }
+      ]
+    },
+    {
+      "name": "websockets",
+      "version": "15.0.1",
+      "source": "https://pypi.org/project/websockets/15.0.1/",
+      "artifacts": [
+        "sha256:3e90baa811a5d73f3ca0bcbf32064d663ed81318ab225ee4f427ad4e26e5aff3",
+        "sha256:592f1a9fe869c778694f0aa806ba0374e97648ab57936f092fd9d87f8bc03665",
+        "sha256:0701bc3cfcb9164d04a14b149fd74be7347a530ad3bbf15ab2c678a2cd3dd9a2",
+        "sha256:e8b56bdcdb4505c8078cb6c7157d9811a85790f2f2b3632c7d1462ab5783d215",
+        "sha256:0af68c55afbd5f07986df82831c7bff04846928ea8d1fd7f30052638788bc9b5",
+        "sha256:64dee438fed052b52e4f98f76c5790513235efaa1ef7f3f2192c392cd7c91b65",
+        "sha256:d5f6b181bb38171a8ad1d6aa58a67a6aa9d4b38d0f8c5f496b9e42561dfc62fe",
+        "sha256:5d54b09eba2bada6011aea5375542a157637b91029687eb4fdb2dab11059c1b4",
+        "sha256:3be571a8b5afed347da347bfcf27ba12b069d9d7f42cb8c7028b5e98bbb12597",
+        "sha256:c338ffa0520bdb12fbc527265235639fb76e7bc7faafbb93f6ba80d9c06578a9",
+        "sha256:fcd5cf9e305d7b8338754470cf69cf81f420459dbae8a3b40cee57417f4614a7",
+        "sha256:f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f"
+      ],
+      "license_files": [
+        {
+          "path": "evidence/implementation/licenses/websockets/LICENSE",
+          "sha256": "3d6a0c050d8bec52fabad502e45fb25bd02bcadbd70dea34d447b6a0ff4e6da8"
+        }
+      ]
+    }
+  ]
+}

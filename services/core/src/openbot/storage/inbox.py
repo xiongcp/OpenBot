@@ -4,6 +4,7 @@ import hashlib
 import secrets
 import sqlite3
 import time
+from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
 
@@ -118,7 +119,13 @@ class Inbox:
         self._registry = registry
 
     def submit(
-        self, context: InboundContext, event_id: str, raw: str | bytes, deadline_monotonic_ms: int
+        self,
+        context: InboundContext,
+        event_id: str,
+        raw: str | bytes,
+        deadline_monotonic_ms: int,
+        *,
+        admission: Callable[[sqlite3.Connection], None] | None = None,
     ) -> Future[bytes]:
         doc = self._registry.validate("create-task.schema.json", raw)
         value = doc.value()
@@ -139,6 +146,8 @@ class Inbox:
 
         def lookup(db: sqlite3.Connection) -> LookupResult | None:
             authorize(db, context)
+            if admission is not None:
+                admission(db)
             old = db.execute(
                 "SELECT i.payload_hash,t.task_id,t.owner_id,t.state,t.version FROM inbox i "
                 "JOIN tasks t ON t.task_id=i.task_id "
@@ -157,6 +166,8 @@ class Inbox:
 
         def apply(db: sqlite3.Connection) -> bytes:
             mode = authorize(db, context)
+            if admission is not None:
+                admission(db)
             task_input = strict_json(doc.canonical)
             if mode == "OFFLINE" and task_input["network_mode"] != "OFFLINE":
                 raise PermissionError("Task cannot expand profile network mode")

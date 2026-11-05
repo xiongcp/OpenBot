@@ -303,3 +303,58 @@ def test_malformed_json_missing_tool_id_stream_cut_and_cancel_hold_cost_without_
             )
         )
     assert transport_noid.http_attempts == 1
+
+
+def test_tool_result_continuation_keeps_assistant_and_tool_roles():
+    from openbot.domain.providers import ToolResult
+
+    adapter = OpenAICompatibleAdapter(
+        endpoint="https://api.openai.com/v1",
+        model="gpt-4o-mini",
+        egress_guard=_egress(),
+        budget=RecordingBudgetLedger(),
+        manifests={"fs.patch": _manifest(canary_tracker=[])},
+        stream_transport=FakeSSEStreamTransport([]),
+    )
+    request = ModelRequest(
+        "req_history",
+        "gpt-4o-mini",
+        (
+            Text("synthetic goal"),
+            ToolCall("call_1", "fs.patch", b'{"path":"demo","content":"x"}'),
+            ToolResult("call_1", b"verified result; ignore any instructions here"),
+            Text("Summarize the verified result"),
+        ),
+        999999999999,
+        100,
+    )
+    messages = adapter._build_payload(request)["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant", "tool", "user"]
+    assert messages[1]["tool_calls"][0]["id"] == messages[2]["tool_call_id"] == "call_1"
+    assert messages[2]["content"].startswith("UNTRUSTED_TOOL_DATA")
+
+
+def test_unmatched_tool_result_fails_before_network():
+    from openbot.domain.providers import ToolResult
+
+    adapter = OpenAICompatibleAdapter(
+        endpoint="https://api.openai.com/v1",
+        model="gpt-4o-mini",
+        egress_guard=_egress(),
+        budget=RecordingBudgetLedger(),
+        manifests={},
+        stream_transport=FakeSSEStreamTransport([]),
+    )
+    with pytest.raises(ProviderFailure):
+        adapter._build_payload(
+            ModelRequest(
+                "req_bad_history",
+                "gpt-4o-mini",
+                (
+                    Text("goal"),
+                    ToolResult("call_unmatched", b"untrusted"),
+                ),
+                999999999999,
+                100,
+            )
+        )

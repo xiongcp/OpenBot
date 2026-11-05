@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "client-settings.schema.json",
+  "type": "object",
+  "properties": {
+    "locale": {"enum": ["zh-CN", "en"]},
+    "model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,95}$"},
+    "mode": {"enum": ["OFFLINE", "LOCAL_MODEL", "CONNECTED"]},
+    "max_steps": {"type": "integer", "minimum": 1, "maximum": 8},
+    "skill_enabled": {"type": "boolean"},
+    "mcp_enabled": {"type": "boolean"},
+    "feishu_enabled": {"type": "boolean"}
+  },
+  "required": ["locale", "model", "mode", "max_steps", "skill_enabled", "mcp_enabled", "feishu_enabled"],
+  "additionalProperties": false
+}

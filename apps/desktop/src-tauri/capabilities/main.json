@@ -1,0 +1,1 @@
+{"identifier":"main-local-control","description":"Fixed local client commands / 固定本地客户端命令","local":true,"windows":["main"],"permissions":["allow-client-control"]}

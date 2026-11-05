@@ -7,7 +7,15 @@ from typing import Any, Protocol
 
 from openbot.boundaries import accept_model_call
 from openbot.contracts import canonicalize, strict_json
-from openbot.domain.providers import Block, ModelRequest, ModelResponse, RequestBudget, Text
+from openbot.domain.providers import (
+    Block,
+    ModelRequest,
+    ModelResponse,
+    RequestBudget,
+    Text,
+    ToolCall,
+    ToolResult,
+)
 from openbot.domain.tools import ToolManifest
 from openbot.policy.egress import EgressGuard, EgressRequest
 from openbot.providers.openai import ProviderFailure, _sse_data
@@ -119,7 +127,61 @@ class OpenAICompatibleAdapter:
         return frozenset({"text_stream", "function_proposals"})
 
     def _build_payload(self, request: ModelRequest) -> dict[str, Any]:
-        content = "\n".join(b.text for b in request.blocks if isinstance(b, Text))
+        messages: list[dict[str, Any]] = []
+        pending: str | None = None
+        seen: set[str] = set()
+        if len(request.blocks) > 64:
+            raise ProviderFailure("Model history exceeds block limit")
+        for block in request.blocks:
+            if isinstance(block, Text) and pending is None:
+                messages.append({"role": "user", "content": block.text})
+            elif isinstance(block, ToolCall) and pending is None:
+                if (
+                    not block.call_id
+                    or len(block.call_id) > 128
+                    or block.call_id in seen
+                    or block.tool_name not in self._manifests
+                ):
+                    raise ProviderFailure("Invalid history tool call")
+                accept_model_call(
+                    canonicalize(
+                        {"tool_name": block.tool_name, "args": strict_json(block.arguments)}
+                    ),
+                    self._manifests[block.tool_name],
+                    block.call_id,
+                )
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": block.call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": block.tool_name,
+                                    "arguments": block.arguments.decode("utf-8"),
+                                },
+                            }
+                        ],
+                    }
+                )
+                pending = block.call_id
+                seen.add(block.call_id)
+            elif isinstance(block, ToolResult) and block.call_id == pending:
+                if len(block.result) > 16384:
+                    raise ProviderFailure("Tool history result exceeds limit")
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": pending,
+                        "content": "UNTRUSTED_TOOL_DATA\n" + block.result.decode("utf-8"),
+                    }
+                )
+                pending = None
+            else:
+                raise ProviderFailure("Unsupported or unmatched history block")
+        if pending is not None or not messages or len(canonicalize(messages)) > 65536:
+            raise ProviderFailure("Incomplete or oversized model history")
         tools_list = [
             {
                 "type": "function",
@@ -132,7 +194,7 @@ class OpenAICompatibleAdapter:
         ]
         payload: dict[str, Any] = {
             "model": self._model,
-            "messages": [{"role": "user", "content": content}],
+            "messages": messages,
             "stream": True,
             "max_completion_tokens": 256,
         }

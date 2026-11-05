@@ -198,6 +198,8 @@ def build_cli_parser() -> argparse.ArgumentParser:
     p_dserve.add_argument("--workspace-id", default="wsp_test1")
     p_dserve.add_argument("--port", type=int, default=0)
     p_dserve.add_argument("--epoch", default="ep_1")
+    p_dserve.add_argument("--workspace-root", type=Path, default=None)
+    p_dserve.add_argument("--model-credentials", action="store_true")
 
     # task group
     p_task = sub.add_parser("task")
@@ -581,6 +583,8 @@ def _serve_daemon_process(
     workspace_id: str,
     port: int,
     runtime_epoch: str,
+    workspace_root: Path | None = None,
+    model_credentials: tuple[str, str] | None = None,
 ) -> int:
     from openbot.application.cancellation import CancellationService
     from openbot.application.dispatch import DispatchService
@@ -596,7 +600,7 @@ def _serve_daemon_process(
     from openbot.storage.writer import Writer
 
     profile_dir = profile_dir.resolve()
-    profile_dir.mkdir(parents=True, exist_ok=True)
+    profile_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     repo_root = Path(__file__).resolve().parents[4]
 
     sup_lock = SingleInstanceSupervisorLock(profile_dir / "daemon.lock", profile_id=profile_id)
@@ -609,6 +613,24 @@ def _serve_daemon_process(
         _seed_daemon_profile_db(
             db, profile_id=profile_id, workspace_id=workspace_id, runtime_epoch=runtime_epoch
         )
+        if workspace_root is not None:
+            workspace_root = workspace_root.resolve(strict=True)
+            if not workspace_root.is_dir():
+                raise PermissionError("CLIENT_WORKSPACE_REQUIRED")
+            binding = "sha256:" + hashlib.sha256(str(workspace_root).encode()).hexdigest()
+            old = db.execute(
+                "SELECT root_ref FROM workspaces WHERE workspace_id=?", (workspace_id,)
+            ).fetchone()
+            if old is None or (
+                old[0] != binding and db.execute("SELECT count(*) FROM tasks").fetchone()[0]
+            ):
+                raise PermissionError("CLIENT_WORKSPACE_BINDING_CHANGED")
+            if old[0] != binding:
+                db.execute(
+                    "UPDATE workspaces SET root_ref=?,generation=generation+1,"
+                    "version=version+1 WHERE workspace_id=?",
+                    (binding, workspace_id),
+                )
     finally:
         db.close()
 
@@ -627,6 +649,41 @@ def _serve_daemon_process(
     cancellation = CancellationService(writer)
     artifacts = ArtifactStore(writer, profile_dir / "blobs")
 
+    client_routes = None
+    runtime = None
+    if workspace_root is not None:
+        from openbot.adapters.local_api.client_routes import ClientRoutes
+        from openbot.application.agent_runtime import AgentRuntime
+        from openbot.application.client_state import ClientState
+        from openbot.application.feishu_ingress import FeishuIngress
+        from openbot.application.runtime_factory import model_factory
+        from openbot.observability.redaction import RedactionPipeline
+        from openbot.tools.mcp.container_read import ContainerReadTool
+
+        redactor = RedactionPipeline(registered_secrets=model_credentials or ())
+        state = ClientState(writer, context, redactor)
+        lock = json.loads((repo_root / "components/locks/mcp-demo.json").read_text())
+        tool = ContainerReadTool(
+            image=lock["image"],
+            server=repo_root / lock["server_path"],
+            server_sha256=lock["server_sha256"],
+        )
+        runtime = AgentRuntime(
+            state=state,
+            tasks=tasks,
+            operations=ops,
+            dispatcher=dispatcher,
+            artifacts=artifacts,
+            registry=registry,
+            workspace=workspace_root,
+            runtime_epoch=runtime_epoch,
+            tool=tool,
+            model_factory=model_factory(
+                model_credentials, lambda: state.settings()["config"]["mode"]
+            ),
+        )
+        client_routes = ClientRoutes(state, runtime, FeishuIngress(state, inbox, runtime))
+
     tokens = ScopedTokenStore()
     token_path = profile_dir / "owner_cli.token"
     owner_token = tokens.issue(profile_id=profile_id, principal_id="pri_test1", scope="owner_cli")
@@ -644,6 +701,21 @@ def _serve_daemon_process(
     finally:
         os.close(fd_tok)
 
+    if client_routes is not None and hasattr(os, "O_NOFOLLOW"):
+        gateway_token = tokens.issue(
+            profile_id=profile_id, principal_id=context.principal_id, scope="feishu_gateway"
+        )
+        gateway_path = profile_dir / "feishu_gateway.token"
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        fd_gateway = os.open(gateway_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | nofollow, 0o600)
+        try:
+            fchmod = getattr(os, "fchmod", None)
+            if fchmod is not None:
+                fchmod(fd_gateway, 0o600)
+            os.write(fd_gateway, (gateway_token + "\n").encode())
+        finally:
+            os.close(fd_gateway)
+
     api = LocalControlApiServer(
         profile_id=profile_id,
         default_context=context,
@@ -659,6 +731,7 @@ def _serve_daemon_process(
         artifacts=artifacts,
         challenges=challenges,
         dispatcher=dispatcher,
+        client_routes=client_routes,
     )
     daemon = LoopbackHttpDaemon(api, host="127.0.0.1", port=port)
     session_meta = {
@@ -687,6 +760,8 @@ def _serve_daemon_process(
     try:
         daemon.serve_forever()
     finally:
+        if runtime is not None:
+            runtime.close()
         writer.close()
         sup_lock.release()
     return 0
@@ -707,12 +782,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if args.group == "daemon" and args.action == "serve":
         try:
+            from openbot.application.runtime_factory import read_model_credentials
+
+            if args.model_credentials and args.workspace_root is None:
+                raise PermissionError("MODEL_CREDENTIALS_REQUIRE_CLIENT_WORKSPACE")
+            credentials = read_model_credentials() if args.model_credentials else None
             return _serve_daemon_process(
                 profile_dir=args.profile_dir,
                 profile_id=args.profile_id,
                 workspace_id=args.workspace_id,
                 port=args.port,
                 runtime_epoch=args.epoch,
+                workspace_root=args.workspace_root,
+                model_credentials=credentials,
             )
         except PermissionError as exc:
             print(json.dumps({"code": "DAEMON_LOCK_OR_PERMISSION_ERROR", "message": str(exc)}))

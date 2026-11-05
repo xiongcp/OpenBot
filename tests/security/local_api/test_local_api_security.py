@@ -7,6 +7,32 @@ from tests.contracts.local_api.test_local_api_contracts import _headers, local_a
 __all__ = ["local_api_env"]
 
 
+def test_gateway_cannot_bypass_pairing_through_generic_task_api(local_api_env):
+    api, _, writer, _, _, _, _, _, gateway, _ = local_api_env
+    for method, path, body in (
+        ("POST", "/v1/tasks", '{"workspace_id":"wsp_test1","goal":"x","network_mode":"OFFLINE"}'),
+        ("GET", "/v1/tasks/tsk_unknown", ""),
+        ("GET", "/v1/client/runs", ""),
+    ):
+        response = api.handle(ApiRequest(method, path, headers=_headers(gateway), body=body))
+        assert response.status_code == 403
+    assert writer.read(lambda db: db.execute("SELECT count(*) FROM tasks").fetchone()[0]) == 0
+
+
+def test_owner_token_cannot_impersonate_default_principal(local_api_env):
+    api = local_api_env[0]
+    token = api._tokens.issue(profile_id="pro_test1", principal_id="pri_other", scope="owner_cli")
+    response = api.handle(
+        ApiRequest(
+            "POST",
+            "/v1/tasks",
+            headers=_headers(token),
+            body='{"workspace_id":"wsp_test1","goal":"x","network_mode":"OFFLINE"}',
+        )
+    )
+    assert response.status_code == 403
+
+
 def test_non_loopback_proxy_spoof_cross_origin_wrong_profile_and_scope_escalation_are_rejected(
     local_api_env,
 ):

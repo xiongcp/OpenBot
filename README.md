@@ -2,9 +2,11 @@
 
 [中文](README.md) | [English](README.en.md)
 
+2026-11-05 新增：[Agent 客户端、配置热更新与透明工作流双语设计](docs/superpowers/specs/2026-11-05-agent-client-design.md)，含执行因果图、Skill/MCP 证据范围及 Hermes 飞书参考。当前为待确认设计，不代表桌面客户端已实现。
+
 版本 1.2 · 2026年11月4日 · 根据《OpenBot 开源组件复用评估.pdf》修订
 
-实施进度：已在 macOS ARM64（Darwin arm64）完成 M0—M3 全部可实施任务的落地与验证，并完成飞书真实服务端 API、CardKit 2.0 序列校验与 WebSocket 长连接 101 握手实测（OB-047，凭据零落盘）；真实门禁与任务状态见 tasks/backlog.json、docs/getting-started.md、docs/troubleshooting.md、SECURITY.md 及 docs/evidence。缺少 Windows/Linux 原生实机（OB-005/070/071）的验收项保持诚实阻塞标记；M4 桌面签名与自动升级尚未实施。
+实施进度：仓库已包含 M0—M3 相关实现、资格验证模块与 macOS ARM64（Darwin arm64）本机证据，以及飞书服务端 API、CardKit 序列与 WebSocket 握手证据。模块与测试存在不等于完整 Agent 产品已串联：当前任务入口主要接收 inbox，真实 Skill/模型/Broker/MCP 运行编排仍需补齐，OB-082/083 客户端任务仍为 TODO。真实门禁与任务状态见 tasks/backlog.json 和 docs/evidence；Windows/Linux 原生验收、M4 桌面签名与自动升级分别保持未完成状态。
 
 本地验证：`uv sync --locked`，然后 `.venv/bin/python scripts/verify.py`。本机若继承 macOS 隐藏文件标记导致 editable `.pth` 被 Python 忽略，可用 `PYTHONPATH=services/core/src .venv/bin/python -m openbot version`；验证脚本显式设置源码路径，不修改系统 Python。
 

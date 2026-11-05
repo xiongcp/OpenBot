@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "scope": "SYNTHETIC_DEMO_ONLY",
+  "source_kind": "PROJECT_OWNED_NO_COPY",
+  "server_id": "openbot-demo-read",
+  "server_version": "1.0.0",
+  "server_path": "services/mcp_fixture/read_server.py",
+  "server_sha256": "8943e4c6810d6140b506d8755f6f74831bad378727165c784f0b60f8c41bd7e0",
+  "protocol_version": "2025-03-26",
+  "image": "python@sha256:848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32",
+  "upstream_tag_at_preparation": "python:3.12.12-alpine3.22",
+  "input_file": "demo.txt",
+  "max_input_bytes": 4096,
+  "network": "none",
+  "uid": "65532:65532",
+  "runtime_downloads": false,
+  "qualification_evidence": "docs/evidence/mcp-demo-container.md"
+}

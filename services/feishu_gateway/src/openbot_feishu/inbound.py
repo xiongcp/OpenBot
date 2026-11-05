@@ -167,9 +167,12 @@ class FeishuInboundAdapter:
         resp = self._client.post_task(
             idempotency_key=f"feishu_evt:{event_id}",
             body={
-                "workspace_id": self._cfg.workspace_id,
-                "goal": goal,
-                "network_mode": "OFFLINE",
+                "event_id": event_id,
+                "tenant_key": tenant_key,
+                "app_id": app_id,
+                "open_id": open_id,
+                "chat_id": str(msg.get("chat_id", "")),
+                "text": goal,
             },
         )
         elapsed_ms = int((time.monotonic() - t0) * 1000)

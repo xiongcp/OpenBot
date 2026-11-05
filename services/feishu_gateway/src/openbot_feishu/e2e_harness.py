@@ -31,7 +31,9 @@ class _HarnessGatewayClient:
                     "X-OpenBot-Profile": "pro_test1",
                     "Idempotency-Key": idempotency_key,
                 },
-                body=json.dumps(body).encode("utf-8"),
+                body=json.dumps(
+                    {"workspace_id": "wsp_test1", "goal": body["text"], "network_mode": "OFFLINE"}
+                ).encode("utf-8"),
             )
         )
 
