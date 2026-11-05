@@ -289,11 +289,34 @@ class M1VerticalSliceHarness:
         self.writer.close()
 
     def _kill_worker_and_reopen_db(self) -> int:
-        """Spawn a real worker process, terminate it with SIGKILL, and reopen SQLite WAL."""
+        """Spawn a real child process holding SQLite Writer, SIGKILL at barrier, and reopen WAL."""
+        repo_root = Path(__file__).resolve().parents[5]
+        db_path = self.root_dir / "slice.sqlite"
+        child_env = os.environ.copy()
+        child_env["PYTHONPATH"] = str(repo_root / "services/core/src")
+        child_code = (
+            "import sys, time; "
+            "from pathlib import Path; "
+            "from openbot.storage.writer import Writer; "
+            f"w = Writer(Path({str(db_path)!r})); "
+            "w.read(lambda db: db.execute('SELECT count(*) FROM operations').fetchone()[0]); "
+            "sys.stdout.write('HOLDING_WRITER\\n'); sys.stdout.flush(); "
+            "time.sleep(30)"
+        )
         proc = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
+            [sys.executable, "-c", child_code],
+            env=child_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
             start_new_session=True,
         )
+        assert proc.stdout is not None
+        ready_line = proc.stdout.readline().strip()
+        if ready_line != "HOLDING_WRITER":
+            proc.kill()
+            proc.wait(timeout=5)
+            raise RuntimeError(f"Child writer process failed barrier: {ready_line}")
         killed_pid = proc.pid
         if sys.platform != "win32":
             os.kill(killed_pid, signal.SIGKILL)
@@ -302,8 +325,6 @@ class M1VerticalSliceHarness:
         proc.wait(timeout=5)
 
         self.writer.close()
-        repo_root = Path(__file__).resolve().parents[5]
-        db_path = self.root_dir / "slice.sqlite"
         blob_dir = self.root_dir / "blobs"
         journal_dir = self.root_dir / "journals"
         registry = SchemaRegistry.from_directory(repo_root / "contracts")

@@ -284,7 +284,7 @@ class UserDaemonInstaller:
             ses.call(
                 "POST",
                 "/v1/runtime/recover-epoch",
-                body={"new_epoch": new_epoch, "old_epoch_isolated": True},
+                body={"new_epoch": new_epoch},
             )
         return res
 

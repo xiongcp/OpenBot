@@ -502,7 +502,7 @@ def test_installed_openbot_console_script_and_loopback_daemon_subprocess_e2e(
             ses.call(
                 "POST",
                 "/v1/runtime/recover-epoch",
-                body={"new_epoch": "ep_2", "old_epoch_isolated": True},
+                body={"new_epoch": "ep_2"},
             ).status_code
             == 200
         )

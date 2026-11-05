@@ -92,6 +92,16 @@ class WorkerReclaimReport:
     new_dispatch_allowed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class EpochIsolationProof:
+    supervisor_ref: str
+    boot_id: str
+    old_domain_isolated: bool
+    residual_pids: tuple[int, ...]
+    unreclaimed_containers: tuple[str, ...]
+    supervisor_reachable: bool = True
+
+
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -117,7 +127,74 @@ class ProcessSupervisorService:
     def __init__(self, *, runtime_epoch: str) -> None:
         self._epoch = runtime_epoch
         self._daemon_running = True
+        self._supervisor_reachable = True
         self._workers: dict[str, ManagedWorkerIdentity] = {}
+        self._unreclaimable_containers: set[str] = set()
+        self._simulated_residual_workers: dict[str, tuple[int, ...]] = {}
+
+    def set_supervisor_reachable(self, reachable: bool) -> None:
+        self._supervisor_reachable = reachable
+
+    def set_worker_recovery_fault(
+        self,
+        worker_id: str,
+        *,
+        residual_pids: tuple[int, ...] = (),
+        container_unreclaimable: bool = False,
+    ) -> None:
+        if residual_pids:
+            self._simulated_residual_workers[worker_id] = residual_pids
+        else:
+            self._simulated_residual_workers.pop(worker_id, None)
+        if container_unreclaimable:
+            self._unreclaimable_containers.add(worker_id)
+        else:
+            self._unreclaimable_containers.discard(worker_id)
+
+    def verify_and_isolate_epoch(
+        self,
+        *,
+        supervisor_ref: str = "sup_2",
+        boot_id: str = "boot_2",
+        grace_ms: int = 100,
+    ) -> EpochIsolationProof:
+        if not self._supervisor_reachable:
+            return EpochIsolationProof(
+                supervisor_ref=supervisor_ref,
+                boot_id=boot_id,
+                old_domain_isolated=False,
+                residual_pids=(),
+                unreclaimed_containers=(),
+                supervisor_reachable=False,
+            )
+        residuals: list[int] = []
+        bad_containers: list[str] = []
+        for wid, ident in list(self._workers.items()):
+            sim_res = self._simulated_residual_workers.get(wid, ())
+            c_ok = wid not in self._unreclaimable_containers
+            rep = self.reclaim_worker(
+                wid,
+                current_start_token=ident.process_start_token,
+                grace_ms=grace_ms,
+                simulated_residual_pids=sim_res,
+                container_reclaimed=c_ok,
+            )
+            for pid in rep.residual_pids:
+                if pid not in residuals:
+                    residuals.append(pid)
+            if not rep.container_reclaimed and ident.container_id:
+                bad_containers.append(ident.container_id)
+            elif not rep.container_reclaimed:
+                bad_containers.append(f"container:{wid}")
+        isolated = len(residuals) == 0 and len(bad_containers) == 0
+        return EpochIsolationProof(
+            supervisor_ref=supervisor_ref,
+            boot_id=boot_id,
+            old_domain_isolated=isolated,
+            residual_pids=tuple(residuals),
+            unreclaimed_containers=tuple(bad_containers),
+            supervisor_reachable=True,
+        )
 
     def register_worker(
         self,

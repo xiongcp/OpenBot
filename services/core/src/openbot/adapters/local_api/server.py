@@ -25,6 +25,7 @@ from openbot.contracts import ContractError, SchemaRegistry, canonicalize, stric
 from openbot.policy.approvals import ApprovalService
 from openbot.storage.inbox import InboundContext, Inbox
 from openbot.storage.writer import RequestConflict, Writer
+from openbot.tools.executors.supervision_port import ProcessSupervisorService
 
 type ApiScope = Literal["owner_cli", "feishu_gateway", "webview_readonly"]
 
@@ -103,6 +104,7 @@ class LocalControlApiServer:
         challenges: ChallengeStore,
         dispatcher: DispatchService | None = None,
         client_routes: ClientRoutes | None = None,
+        supervisor: ProcessSupervisorService | None = None,
         min_retained_event_seq: int = 1,
         max_body_bytes: int = 65_536,
     ) -> None:
@@ -121,8 +123,13 @@ class LocalControlApiServer:
         self._artifacts = artifacts
         self._challenges = challenges
         self._dispatcher = dispatcher
+        self._supervisor = supervisor or ProcessSupervisorService(runtime_epoch="ep_1")
         self._min_seq = min_retained_event_seq
         self._max_body = max_body_bytes
+
+    @property
+    def supervisor(self) -> ProcessSupervisorService:
+        return self._supervisor
 
     def _authenticate(self, req: ApiRequest) -> tuple[TokenGrant | None, ApiResponse | None]:
         # 1. Loopback IP check & proxy header rejection
@@ -345,13 +352,29 @@ class LocalControlApiServer:
                 if grant.scope != "owner_cli":
                     return _json_resp(403, {"code": "OWNER_SCOPE_ONLY"})
                 body_doc = dict(strict_json(req.body))
+                forbidden_keys = {"old_epoch_isolated", "fencing_proof", "executor_result"} & set(
+                    body_doc
+                )
+                if forbidden_keys:
+                    return _json_resp(
+                        403,
+                        {
+                            "code": "CLIENT_ISOLATION_ASSERTION_FORBIDDEN",
+                            "forbidden_fields": sorted(forbidden_keys),
+                        },
+                    )
+                boot_id = str(body_doc.get("boot_id", "boot_2"))
+                sup_ref = str(body_doc.get("supervisor_ref", "sup_2"))
+                proof = self._supervisor.verify_and_isolate_epoch(
+                    supervisor_ref=sup_ref, boot_id=boot_id
+                )
                 raw = self._writer.submit(
                     self._recovery.recover_epoch(
                         self._ctx,
                         str(body_doc["new_epoch"]),
-                        str(body_doc.get("boot_id", "boot_2")),
-                        str(body_doc.get("supervisor_ref", "sup_2")),
-                        old_epoch_isolated=bool(body_doc.get("old_epoch_isolated", True)),
+                        boot_id,
+                        sup_ref,
+                        old_epoch_isolated=proof.old_domain_isolated,
                         request_id=f"api_recep:{idem_key}",
                         deadline_monotonic_ms=deadline,
                     )

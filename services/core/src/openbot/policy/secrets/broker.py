@@ -47,6 +47,7 @@ class MacOSKeychainCliBackend:
     ) -> None:
         self._service = service_name
         self._bin = security_binary
+        self.last_argv: tuple[str, ...] = ()
 
     def _check_bin(self, secret_ref: str) -> None:
         if not Path(self._bin).is_file():
@@ -54,18 +55,16 @@ class MacOSKeychainCliBackend:
 
     def set_secret(self, secret_ref: str, value: bytes) -> None:
         self._check_bin(secret_ref)
+        if not value:
+            raise SecretUnavailableError(secret_ref, reason_code="EMPTY_SECRET_FORBIDDEN")
+        argv = (self._bin, "-i")
+        self.last_argv = argv
+        stdin_cmd = (
+            f'add-generic-password -U -s "{self._service}" -a "{secret_ref}" -X {value.hex()}\n'
+        )
         res = subprocess.run(
-            [
-                self._bin,
-                "add-generic-password",
-                "-U",
-                "-s",
-                self._service,
-                "-a",
-                secret_ref,
-                "-w",
-                value.decode("utf-8"),
-            ],
+            list(argv),
+            input=stdin_cmd,
             capture_output=True,
             text=True,
             timeout=10,
@@ -76,16 +75,18 @@ class MacOSKeychainCliBackend:
 
     def get_secret(self, secret_ref: str) -> bytes:
         self._check_bin(secret_ref)
+        argv = (
+            self._bin,
+            "find-generic-password",
+            "-s",
+            self._service,
+            "-a",
+            secret_ref,
+            "-w",
+        )
+        self.last_argv = argv
         res = subprocess.run(
-            [
-                self._bin,
-                "find-generic-password",
-                "-s",
-                self._service,
-                "-a",
-                secret_ref,
-                "-w",
-            ],
+            list(argv),
             capture_output=True,
             text=True,
             timeout=10,
@@ -144,6 +145,7 @@ class SecretBroker:
         self._handles: dict[str, SingleUseSecretHandle] = {}
         self._revoked_refs: set[str] = set()
         self._canaries: set[str] = set()
+        self._ephemeral_memory: dict[str, bytes] = {}
 
     def register_canary(self, secret_value: str) -> None:
         if secret_value:
@@ -151,6 +153,22 @@ class SecretBroker:
 
     def known_canaries(self) -> frozenset[str]:
         return frozenset(self._canaries)
+
+    def inject_ephemeral_secret(self, secret_ref: str, value: bytes) -> None:
+        """Inject non-echo secret into daemon memory only (cleared on daemon restart, V1-015)."""
+        self._require_active_ref(secret_ref)
+        if not value:
+            raise ValueError("Secret value must be non-empty")
+        self._ephemeral_memory[secret_ref] = value
+        self.register_canary(value.decode("utf-8", errors="ignore"))
+
+    def clear_ephemeral_secrets(self) -> None:
+        self._ephemeral_memory.clear()
+
+    def _read_secret_bytes(self, secret_ref: str) -> bytes:
+        if secret_ref in self._ephemeral_memory:
+            return self._ephemeral_memory[secret_ref]
+        return self._backend.get_secret(secret_ref)
 
     def _require_active_ref(self, secret_ref: str) -> None:
         if not secret_ref.startswith("keychain:"):
@@ -164,7 +182,7 @@ class SecretBroker:
             raise PermissionError(
                 "Feishu gateway compartment can only access keychain:feishu:* secrets"
             )
-        val = self._backend.get_secret(secret_ref)
+        val = self._read_secret_bytes(secret_ref)
         self.register_canary(val.decode("utf-8", errors="ignore"))
         return val
 
@@ -176,7 +194,7 @@ class SecretBroker:
                 f"Model gateway for selected_provider='{selected_provider}' "
                 f"cannot access {secret_ref}"
             )
-        val = self._backend.get_secret(secret_ref)
+        val = self._read_secret_bytes(secret_ref)
         self.register_canary(val.decode("utf-8", errors="ignore"))
         return val
 
@@ -189,7 +207,7 @@ class SecretBroker:
         if not attempt_id.strip() or ttl_ms <= 0:
             raise ValueError("Invalid attempt_id or ttl_ms")
         # Verify underlying secret is accessible in OS keychain without copying into handle
-        val = self._backend.get_secret(secret_ref)
+        val = self._read_secret_bytes(secret_ref)
         self.register_canary(val.decode("utf-8", errors="ignore"))
         now_mono = int(time.monotonic() * 1000)
         handle = SingleUseSecretHandle(
@@ -212,10 +230,12 @@ class SecretBroker:
         if now_mono >= handle.expires_monotonic_ms:
             raise PermissionError("Worker secret handle expired")
         self._require_active_ref(handle.secret_ref)
-        return self._backend.get_secret(handle.secret_ref)
+        return self._read_secret_bytes(handle.secret_ref)
 
     def rotate(self, secret_ref: str, new_value: bytes) -> None:
         self._require_active_ref(secret_ref)
+        if secret_ref in self._ephemeral_memory:
+            self._ephemeral_memory[secret_ref] = new_value
         self._backend.set_secret(secret_ref, new_value)
         self.register_canary(new_value.decode("utf-8", errors="ignore"))
         for hid, h in list(self._handles.items()):
@@ -224,6 +244,7 @@ class SecretBroker:
 
     def revoke(self, secret_ref: str) -> None:
         self._revoked_refs.add(secret_ref)
+        self._ephemeral_memory.pop(secret_ref, None)
         for hid, h in list(self._handles.items()):
             if h.secret_ref == secret_ref:
                 del self._handles[hid]
