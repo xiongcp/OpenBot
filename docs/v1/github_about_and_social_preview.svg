@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#0b1915"/>
+  <rect x="64" y="64" width="1152" height="512" rx="24" fill="#142d25" stroke="#3dd6a3" stroke-width="3"/>
+  <text x="120" y="210" font-family="system-ui, sans-serif" font-size="64" font-weight="bold" fill="#e4f2ec">OpenBot</text>
+  <text x="120" y="285" font-family="system-ui, sans-serif" font-size="30" fill="#a6c2b7">Local-First AI Task Assistant for macOS</text>
+  <text x="120" y="345" font-family="system-ui, sans-serif" font-size="26" fill="#dce6df">明确审批 · 受限四层电脑控制 · 可核对的执行结果</text>
+  <text x="120" y="460" font-family="monospace" font-size="22" fill="#3dd6a3">APPROVE  -&gt;  DISPATCH  -&gt;  VERIFY  (Apache-2.0)</text>
+</svg>

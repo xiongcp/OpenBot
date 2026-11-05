@@ -1,5 +1,6 @@
 """M3 MVP release acceptance gate and risk auditor (OB-080)."""
 
+import json
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -160,6 +161,32 @@ class V1BaselineContractGuard:
         if unknown:
             raise PermissionError(f"UNKNOWN_CONTRACT_FIELDS_REJECTED: {sorted(unknown)}")
         return {"protocol": server_protocol_version, "compatibility": "VERIFIED"}
+
+    def verify_publication_consistency(self, repo_root: Path) -> dict[str, Any]:
+        root = repo_root.resolve()
+        status_path = root / "docs/project-status.json"
+        manifest_path = root / "apps/website/public/releases.manifest.json"
+        license_path = root / "LICENSE"
+        if not status_path.is_file() or not manifest_path.is_file() or not license_path.is_file():
+            raise PermissionError("PUBLICATION_SOURCE_OF_TRUTH_MISSING")
+        status_doc = json.loads(status_path.read_text(encoding="utf-8"))
+        manifest_doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if status_doc.get("license") != "Apache-2.0":
+            raise PermissionError("PROJECT_LICENSE_MISMATCH")
+        if status_doc.get("primary_platform", {}).get("os") != "Darwin":
+            raise PermissionError("PRIMARY_PLATFORM_MISMATCH")
+        if manifest_doc.get("project") != status_doc.get("project"):
+            raise PermissionError("WEBSITE_MANIFEST_PROJECT_MISMATCH")
+        zh_page = (root / "apps/website/src/pages/zh/index.html").read_text(encoding="utf-8")
+        en_page = (root / "apps/website/src/pages/en/index.html").read_text(encoding="utf-8")
+        if "Apache-2.0" not in zh_page or "Apache-2.0" not in en_page:
+            raise PermissionError("WEBSITE_LICENSE_DECLARATION_MISMATCH")
+        return {
+            "project": status_doc["project"],
+            "license": status_doc["license"],
+            "capabilities_count": len(status_doc.get("capabilities", [])),
+            "bilingual_website_verified": True,
+        }
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,31 @@
+name: Bug report / 问题报告
+description: Report a reproducible issue using redacted details.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Do not attach API keys, tokens, cookies, raw databases, or private messages. / 请勿提交密钥、token、cookie、完整数据库或私人消息。"
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit SHA / 版本或提交 SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, CPU architecture, and installation method / 系统、架构与安装方式
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction steps / 最小复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence and UNKNOWN operation state / 脱敏证据与未决状态
+    validations:
+      required: false

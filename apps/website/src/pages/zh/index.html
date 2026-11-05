@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OpenBot — 让 AI 任务有权限边界，也有可核对的结果</title>
+  <link rel="canonical" href="https://openbot.dev/zh/"/>
+  <link rel="alternate" hreflang="en" href="https://openbot.dev/en/"/>
+</head>
+<body>
+  <header role="banner">
+    <nav aria-label="主导航">
+      <a href="/zh/">OpenBot</a>
+      <a href="#scenarios">核心场景</a>
+      <a href="#security">安全与隐私</a>
+      <a href="#download">下载与源码验证</a>
+      <a href="/en/" lang="en">English</a>
+    </nav>
+  </header>
+  <main>
+    <section id="hero">
+      <h1>让 AI 任务有权限边界，也有可核对的结果。</h1>
+      <p>面向 macOS Apple Silicon (Darwin arm64) 的本地优先 AI 任务助手：逐步审批、四层受限电脑控制、UNKNOWN 核对向导与零明文密钥暴露。</p>
+    </section>
+    <section id="scenarios" aria-label="七大受控场景">
+      <h2>受控产品能力（同步自 docs/project-status.json）</h2>
+      <ul>
+        <li>L1 工作区读写、Diff 审批工作台与三款无网隔离 MCP 容器工具</li>
+        <li>L2 受管 Playwright ARIA 语义快照与目标红框高亮预览</li>
+        <li>L3/L4 macOS AXUIElement 窗口观察、钥匙串黑名单与 100ms 物理键鼠抢占暂停</li>
+      </ul>
+    </section>
+    <section id="security" aria-label="安全与隐私">
+      <h2>安全、隐私与漏洞披露</h2>
+      <p>所有外部内容均标记为 TAINTED_EXTERNAL；密钥仅驻留 macOS Keychain 或非回显内存；开源许可为 Apache-2.0。</p>
+    </section>
+    <section id="download" aria-label="下载与验证">
+      <h2>从源码验证或检查发行清单</h2>
+      <pre><code>git clone https://github.com/xiongcp/OpenBot.git &amp;&amp; uv sync --locked &amp;&amp; .venv/bin/python scripts/verify.py</code></pre>
+    </section>
+  </main>
+</body>
+</html>

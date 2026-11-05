@@ -1,0 +1,16 @@
+name: Feature request / 功能建议
+description: Propose a bounded capability or workflow improvement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem and scenario / 用户场景与问题
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Security, approval, and recovery impact / 安全、审批与恢复边界影响
+    validations:
+      required: true

@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "project": "OpenBot",
+  "product_version": "1.0.0-rc.1",
+  "design_baseline_version": "1.2",
+  "license": "Apache-2.0",
+  "primary_platform": {
+    "os": "Darwin",
+    "arch": "arm64",
+    "status": "QUALIFIED_V1_SCOPE"
+  },
+  "deferred_platforms": [
+    {"os": "Darwin", "arch": "x86_64", "status": "POST_V1", "task_id": "V1-058"},
+    {"os": "Windows", "arch": "AMD64", "status": "POST_V1", "task_id": "V1-056"},
+    {"os": "Linux", "arch": "x86_64", "status": "POST_V1", "task_id": "V1-057"}
+  ],
+  "capabilities": [
+    {"id": "cap.control_plane", "status": "VERIFIED", "provenance": "NATIVE"},
+    {"id": "cap.workspace_tools", "status": "VERIFIED", "provenance": "NATIVE"},
+    {"id": "cap.mcp_container_pool", "status": "VERIFIED", "provenance": "SYNTHETIC"},
+    {"id": "cap.browser_hybrid_aci_l2", "status": "VERIFIED", "provenance": "SYNTHETIC"},
+    {"id": "cap.macos_ax_hybrid_aci_l3_l4", "status": "VERIFIED", "provenance": "NATIVE"},
+    {"id": "cap.multi_provider_streaming", "status": "VERIFIED", "provenance": "SYNTHETIC"},
+    {"id": "cap.feishu_cards_v2", "status": "VERIFIED", "provenance": "SYNTHETIC"},
+    {"id": "cap.verifiable_memory", "status": "VERIFIED", "provenance": "NATIVE"},
+    {"id": "cap.durable_cron_triggers", "status": "VERIFIED", "provenance": "NATIVE"},
+    {"id": "cap.desktop_client_v1", "status": "VERIFIED", "provenance": "NATIVE"}
+  ]
+}

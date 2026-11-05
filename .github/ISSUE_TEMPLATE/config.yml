@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability Disclosure / 安全漏洞私密报告
+    url: https://github.com/xiongcp/OpenBot/security/advisories/new
+    about: Report security vulnerabilities privately per SECURITY.md.
