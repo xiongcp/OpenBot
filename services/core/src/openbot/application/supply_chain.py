@@ -57,3 +57,20 @@ class ReleaseSupplyChainVerifier:
             json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         return artifacts
+
+    def verify_full_release_sbom_and_license(self) -> dict[str, object]:
+        root_license = self._root / "LICENSE"
+        if not root_license.is_file() or "Apache License" not in root_license.read_text("utf-8"):
+            raise PermissionError("ROOT_APACHE_LICENSE_MISSING")
+        rep = self.verify_all()
+        cargo_lock = self._root / "apps/desktop/src-tauri/Cargo.lock"
+        mcp_cat = self._root / "components/locks/mcp-catalog.json"
+        if not cargo_lock.is_file() or not mcp_cat.is_file():
+            raise PermissionError("NON_PYTHON_LOCK_OR_CATALOG_MISSING")
+        return {
+            "root_license": "Apache-2.0",
+            "sbom_standard": rep.sbom_standard,
+            "verified_artifacts_count": rep.verified_artifacts_count,
+            "cargo_lock_sha256": hashlib.sha256(cargo_lock.read_bytes()).hexdigest(),
+            "mcp_catalog_sha256": hashlib.sha256(mcp_cat.read_bytes()).hexdigest(),
+        }

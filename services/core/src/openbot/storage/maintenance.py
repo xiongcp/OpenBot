@@ -71,6 +71,17 @@ class DiskWaterlineGuard:
         return {"writable": True, "free_bytes": free_bytes, "min_free_bytes": self._min_free}
 
 
+@dataclass(frozen=True, slots=True)
+class UpgradeTransactionReport:
+    from_version: str
+    to_version: str
+    final_state: Literal["UPGRADED_ACTIVE", "ROLLED_BACK_TO_BACKUP"]
+    backup_manifest_sha256: str
+    preserved_unknown_operations: tuple[str, ...]
+    exported_plaintext_secrets: Literal[False] = False
+    replayed_unknown_actions: Literal[False] = False
+
+
 class DatabaseMaintenanceService:
     """Coordinate SQLite online backup with Artifact GC pins and safe post-restore state."""
 
@@ -338,3 +349,41 @@ class DatabaseMaintenanceService:
             raise
         finally:
             db.close()
+
+    def execute_upgrade_transaction(
+        self,
+        context: InboundContext,
+        *,
+        from_version: str,
+        to_version: str,
+        backup_dir: Path,
+        rollback_target_db: Path,
+        rollback_target_blobs: Path,
+        candidate_health_ok: bool,
+    ) -> UpgradeTransactionReport:
+        self.create_backup(context, backup_dir)
+        manifest_sha = hashlib.sha256((backup_dir / "manifest.json").read_bytes()).hexdigest()
+        if not candidate_health_ok:
+            restored = self.restore_backup(backup_dir, rollback_target_db, rollback_target_blobs)
+            return UpgradeTransactionReport(
+                from_version=from_version,
+                to_version=to_version,
+                final_state="ROLLED_BACK_TO_BACKUP",
+                backup_manifest_sha256=manifest_sha,
+                preserved_unknown_operations=restored.unknown_operations,
+            )
+        unknowns = self._writer.read(
+            lambda db: tuple(
+                str(r[0])
+                for r in db.execute(
+                    "SELECT operation_id FROM operations WHERE state='UNKNOWN'"
+                ).fetchall()
+            )
+        )
+        return UpgradeTransactionReport(
+            from_version=from_version,
+            to_version=to_version,
+            final_state="UPGRADED_ACTIVE",
+            backup_manifest_sha256=manifest_sha,
+            preserved_unknown_operations=unknowns,
+        )
