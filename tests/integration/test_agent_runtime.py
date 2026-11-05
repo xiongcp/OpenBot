@@ -5,7 +5,7 @@ import time
 
 import pytest
 from openbot.adapters.local_api.server import ApiRequest
-from openbot.domain.providers import ModelResponse, Text, ToolCall
+from openbot.domain.providers import ModelResponse, Text, ToolCall, ToolResult
 from openbot.storage.writer import RequestConflict
 
 from tests.contracts.local_api.test_local_api_contracts import _headers, local_api_env
@@ -31,6 +31,7 @@ class SyntheticModel:
 
     async def generate(self, request):
         self.calls += 1
+        self.last_request = request
         self.budget.reserve(request.request_id, request.reserved_cost_units)
         if self.on_request:
             self.on_request()
@@ -186,6 +187,7 @@ def test_runtime_uses_real_core_approval_claim_dispatch_and_verified_artifact(
             ]
         )
         assert sum(model.calls for model in models) == 2
+        assert any(isinstance(b, ToolResult) for b in models[1].last_request.blocks)
         assert runtime.tool.calls == 1
         assert (
             local_api_env[2].read(
@@ -326,5 +328,22 @@ def test_missing_isolation_fails_before_operation(local_api_env, tmp_path):
         wait_for(lambda: any(e["kind"] == "RUN_INTERRUPTED" for e in state.trace(task)["events"]))
         assert tool.calls == 0
         assert not any(e["kind"] == "TOOL_PROPOSED" for e in state.trace(task)["events"])
+    finally:
+        runtime.close()
+
+
+@pytest.mark.skipif(not hasattr(os, "O_NOFOLLOW"), reason="Requires POSIX demo-file guards")
+def test_repeated_completed_read_is_not_dispatched_again(local_api_env, tmp_path):
+    runtime, state, _ = make_runtime(local_api_env, tmp_path)
+    runtime.model_factory = lambda config, budget: SyntheticModel(budget, tool=True)
+    task = submit(local_api_env)
+    try:
+        runtime.start(task)
+        decide(local_api_env, state, task)
+        wait_for(
+            lambda: any(e["kind"] == "RUN_INTERRUPTED" for e in state.trace(task)["events"]),
+            timeout=1,
+        )
+        assert runtime.tool.calls == 1
     finally:
         runtime.close()

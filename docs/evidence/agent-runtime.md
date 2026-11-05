@@ -13,3 +13,13 @@ No model endpoint, API credential, raw callback, hidden reasoning or arbitrary t
 Full verification / 完整验证: `.venv-m1/bin/python scripts/verify.py --phase M1 --output-dir /tmp/openbot-client-verification --run-id agent-runtime-20261105`: all eight checks passed; 383 passed, 2 explicitly gated native-container skips. Logs remain outside the repository.
 
 Durable observation regression / 持久记录观察回归: a later full suite exposed a test race between the SUCCEEDED task transaction and its subsequent RUN_FINISHED trace transaction. The test now waits for RUN_FINISHED before checking both facts; no assertions were removed. RED: full suite observed the missing trace event. GREEN: seven targeted tests and full suite 396 passed / 2 explicit native skips, eight checks passed.
+
+## Tool continuation live gate / 工具结果续接真实门禁
+
+A real user-authorized model test exposed flattened tool history: after verified reads the model kept proposing the same read until the bounded step limit interrupted it. Three failing regressions demonstrated lost typed provenance and unmatched-result acceptance. The adapter now retains assistant/tool roles and rejects invalid history; the bounded demo refuses a repeated completed read.
+
+真实模型测试发现工具结果被压平成普通文字，模型重复提议读取。已补三项失败回归并修复角色与 call_id 关联；专用 demo 不会再次派发已完成读取。旧中断 Task 保留，测试通过正常取消后创建新 Task，未重放原 run。
+
+GREEN: `pytest tests/unit/test_openai_compatible_adapter.py tests/integration/test_agent_runtime.py -q`: 13 passed. Full verification `tool-history-20261105`: 399 passed / 2 explicit native skips; all eight checks passed.
+
+Live: `tsk_80323749dd19954d4502559814540c5a` reached SUCCEEDED with 12 factual trace events. Two actual gpt-5.5 SSE requests surrounded exactly one pinned Docker MCP read and owner decision; scoped output artifact and file hash verified. Approval remains CONSUMED. The synthetic result contains both Chinese and English. No outbound Feishu messages were sent. Local model endpoint/key are omitted from evidence and remain daemon memory only.

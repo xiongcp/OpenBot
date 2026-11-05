@@ -22,7 +22,15 @@ from openbot.application.skills import ReadOnlySkillLoader, SkillManifestSpec
 from openbot.application.state_machine import OutcomeSubmission, TaskStateService
 from openbot.artifacts.store import ArtifactStore
 from openbot.contracts import SchemaRegistry, canonicalize, strict_json
-from openbot.domain.providers import ModelRequest, ModelTransport, RequestBudget, Text, ToolCall
+from openbot.domain.providers import (
+    Block,
+    ModelRequest,
+    ModelTransport,
+    RequestBudget,
+    Text,
+    ToolCall,
+    ToolResult,
+)
 from openbot.domain.tools import Effect, RetryClass, ToolManifest
 from openbot.storage.writer import RequestConflict
 from openbot.tools.executors.sandbox import ContainerOwnership
@@ -430,6 +438,7 @@ class AgentRuntime:
             context = (
                 "Read-only skill instruction:\n" + skill.instructions_markdown + "\n" + context
             )
+        history: list[Block] = [Text(context)]
         for step in range(run["config"]["max_steps"]):
             self._check(task_id)
             active = self.state.settings()["config"]
@@ -447,7 +456,7 @@ class AgentRuntime:
                         ModelRequest(
                             ref,
                             run["config"]["model"],
-                            (Text(context),),
+                            tuple(history),
                             int(time.monotonic() * 1000) + 40_000,
                             4096,
                         )
@@ -470,10 +479,18 @@ class AgentRuntime:
             if calls:
                 if len(calls) != 1:
                     raise PermissionError("PARALLEL_TOOL_CALLS_FORBIDDEN")
-                context += (
-                    "\n"
-                    + self._tool_call(task_id, calls[0])
-                    + "\nRespond with the verified bilingual summary."
+                if any(isinstance(block, ToolResult) for block in history):
+                    raise PermissionError("REPEATED_COMPLETED_DEMO_READ")
+                result = self._tool_call(task_id, calls[0])
+                history.extend(
+                    (
+                        calls[0],
+                        ToolResult(calls[0].call_id, result.encode()),
+                        Text(
+                            "The read is complete. Summarize the verified result in "
+                            "Chinese and English without another tool request."
+                        ),
+                    )
                 )
                 continue
             text = self._safe("\n".join(b.text for b in response.blocks if isinstance(b, Text)))

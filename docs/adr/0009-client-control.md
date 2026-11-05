@@ -17,3 +17,5 @@ Tauri attaches to an existing daemon. Only fixed Rust commands can access contro
 Compatibility / 兼容: existing 23-table schema and original 14-operation contract remain unchanged; new client routes and schemas are additive. Native/signing/real-service qualification stays independent.
 
 Runtime result rule / 运行结果规则: the bounded runtime commits receipts only for its current DISPATCHING attempt and active epoch. A verified scoped artifact permits SUCCEEDED and releases the resource lease. Missing receipt records UNKNOWN with a reason and no finished timestamp, retains the lease, and moves a nonterminal Task to RECONCILING; consumed approval stays consumed. Remote token usage uses durable reservations; monetary cost remains explicitly unavailable without a qualified price source.
+
+Tool-result continuation / 工具结果续接: the existing typed ModelRequest blocks retain assistant ToolCall and matching ToolResult provenance in provider messages. Validated results are tool-role data, never appended as user authorization. Reject unmatched/repeated call IDs or unsupported block types before HTTP. A repeated identical completed demo read is not dispatched again.
