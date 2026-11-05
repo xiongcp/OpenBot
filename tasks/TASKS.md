@@ -3112,7 +3112,7 @@ U1《深度研究报告》PDF第13–15页MVP与CI；U2《架构设计与任务�
 
 **核验飞书真实租户协议与权限**
 
-阶段 M2 · 优先级 P0 · 状态 BLOCKED · 能力域 Integration · 规模 M
+阶段 M2 · 优先级 P0 · 状态 IN_PROGRESS · 能力域 Integration · 规模 M
 
 **需求** [RQ08](requirements_traceability.md#rq08)、[RQ12](requirements_traceability.md#rq12)
 

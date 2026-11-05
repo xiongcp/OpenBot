@@ -15,7 +15,8 @@
 
 ### 2. 跨平台与外部租户诚实放行结论
 - **`darwin_arm64_pilot_ready = True`**：macOS ARM64 本地受控试点全部门禁通过。
-- **`full_three_os_mvp_release_approved = False`**：因当前环境未提供原生 Windows/Linux 实机（`OB-005`/`OB-070`/`OB-071` `BLOCKED`）及真实飞书测试租户与云模型生产凭据（`OB-047`/`OB-056`），严格遵守架构不变量，不将单平台或本地契约通过宣称为全三平台 MVP 放行。
+- **真实飞书服务端协议与长连接已验证（`OB-047`）**：已完成 `open.feishu.cn` 鉴权、机器人信息、CardKit 2.0 创建/更新与 `code=300317` 序列校验、以及 `wss://msg-frontier.feishu.cn` TLS `101 Switching Protocols` 握手实测（所有凭据零落盘）。
+- **`full_three_os_mvp_release_approved = False`**：因当前环境未提供原生 Windows/Linux 实机（`OB-005`/`OB-070`/`OB-071` `BLOCKED`，按用户指示暂不执行）及手机端真人交互点击，严格遵守架构不变量，不将单平台试点宣称为全三平台 MVP 放行。
 - **`m4_signing_is_reverse_prerequisite = False`**：M4 桌面 Tauri UI、代码签名与自动升级不作为 M3 门禁的反向前置依赖。
 
 ---

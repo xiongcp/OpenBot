@@ -47,7 +47,7 @@
     {
       "path": "README.md",
       "before_sha256": "3720522366a1ba42ec93c9b4842a7d550a6db0822235d35afd251133ef091bf0",
-      "after_sha256": "04a14679e9e11f4ea2de7311b6fc521bba2c8717edce24b6478914199731add0",
+      "after_sha256": "c2bddfceed5b182a9124fcd0a25ec51625bd73463db8c8a35b4fdedb772cfc15",
       "included_in_patch": false,
       "omission_reason": "Original bytes not retained; review current file and hash"
     },
@@ -204,7 +204,7 @@
     {
       "path": "docs/demos/m3.md",
       "before_sha256": null,
-      "after_sha256": "f7612ea6027f6dedfdd78f07728eb7f7be2dc52e7099b1ed7132145f196217d8",
+      "after_sha256": "11f753dcb77ba5ba9acf3acd8cf024f6bc0471c9b7abb3d15baa14db4098e763",
       "included_in_patch": true
     },
     {
@@ -300,7 +300,7 @@
     {
       "path": "docs/integrations/feishu-contract.md",
       "before_sha256": null,
-      "after_sha256": "1a1e5ca2838f76901cc7edf1dfa6b4a6e5b5805d0f9a197b8eb92251b8523962",
+      "after_sha256": "72482aea033d2c86e6d3bd149ea967b4f2a284326f65e0113bc66951717be265",
       "included_in_patch": true
     },
     {
@@ -324,13 +324,13 @@
     {
       "path": "docs/releases/mvp-acceptance.md",
       "before_sha256": null,
-      "after_sha256": "c5c38ad047431bd020d4eb23fe4a0da3c59102bafeb7d6054de1a46dbf631768",
+      "after_sha256": "bbb7883d7251f42b45fd6f137414b039799d09dbaed49d7a09eb320a44f6ff5f",
       "included_in_patch": true
     },
     {
       "path": "docs/risks.md",
       "before_sha256": null,
-      "after_sha256": "ea27e311665f4e39155af862668da21a88e5eb9a49ba6e4a2328504876729234",
+      "after_sha256": "99fd62f539084c511ed447d37628da551f422847762d3dec0831bf6290921fab",
       "included_in_patch": true
     },
     {
@@ -414,7 +414,7 @@
     {
       "path": "evidence/implementation/database-design.log",
       "before_sha256": null,
-      "after_sha256": "9530d641c7f5d50b4c84cacb01e70e787be2ad7b1bc1ef01ce100460ea54d06b",
+      "after_sha256": "923f44d693bed724157abc3620914f52d4c8b149844840abd50eea17078f2cd3",
       "included_in_patch": false
     },
     {
@@ -438,7 +438,7 @@
     {
       "path": "evidence/implementation/format.log",
       "before_sha256": null,
-      "after_sha256": "85c160a2328f01ecbf799ea2e2d435203d0b65baa39f08e2190ee2f3fd6d5c7b",
+      "after_sha256": "fca2e7d68e05a6e985d8714320189112a186ee2f3b4b51d59b23ca4c386499b8",
       "included_in_patch": false
     },
     {
@@ -1194,13 +1194,13 @@
     {
       "path": "evidence/implementation/unit-contract-protocol.log",
       "before_sha256": null,
-      "after_sha256": "a2a7d3259a242000ea23674412f1ed7e6ed25187966d1640cfcc38acf800daf6",
+      "after_sha256": "f79f5dd27a44244d2eb749fdccb621a0f1d2c2895617094c2329553fa704366e",
       "included_in_patch": false
     },
     {
       "path": "evidence/implementation/verification.json",
       "before_sha256": null,
-      "after_sha256": "f8db3fec7b6bce4e77ffbd5e0f9772d8bf01ed15ad455d0a881d6b7bb5b8b4d4",
+      "after_sha256": "89cc16e4526934f6fa228f45dc913ea4ee057e0dc6e4bc192895b869964c3f93",
       "included_in_patch": false
     },
     {
@@ -1248,7 +1248,7 @@
     {
       "path": "progress.md",
       "before_sha256": null,
-      "after_sha256": "c829722d5440a6e9bf18f39a014594b21841758f12fcc1dbf2b05ff9630f4250",
+      "after_sha256": "c3936ba5d1f122f9b5979eae324857ac9ad101678c66e5ec366808769984ec69",
       "included_in_patch": true
     },
     {
@@ -1920,13 +1920,13 @@
     {
       "path": "tasks/TASKS.md",
       "before_sha256": "62011244f45e5fc158ac1528b2bf737a2bd80c937751744c1059e6899a7c43ae",
-      "after_sha256": "9ff30333c3012349316e4a86363d26242845966a9042b9c391c6501b7499a454",
+      "after_sha256": "074ffeed85aa7368d2a513d4c5a4473bacd631fa65a9d5ef52421a8473ced627",
       "included_in_patch": true
     },
     {
       "path": "tasks/backlog.json",
       "before_sha256": "343bc2c906a0f19539db16609498bf63f796069c75995944833089a6ae550e20",
-      "after_sha256": "cc14476dff0856623d3e910f30b5ca4f42626d83609c72f902a57efee23c32ef",
+      "after_sha256": "b6e4af31020c84e13fdbc8633f931324e73d414d0069b780f3f7b1cd40c7f1b1",
       "included_in_patch": true
     },
     {
@@ -2016,7 +2016,7 @@
     {
       "path": "tests/fixtures/feishu/sanitized_events.json",
       "before_sha256": null,
-      "after_sha256": "235ba2792d5161700a85d551dd0571fa4e743e792949a57fc3568dc8b098ef56",
+      "after_sha256": "9071aceac190e217d8042c4792344805d107defda664c466dd83dd4638ccf3c7",
       "included_in_patch": true
     },
     {
@@ -2311,6 +2311,12 @@
       "path": "tests/unit/test_feishu_health.py",
       "before_sha256": null,
       "after_sha256": "beae7180f33ec979d4c981e0e283f4727b177d62831a8439762ce42e60416948",
+      "included_in_patch": true
+    },
+    {
+      "path": "tests/unit/test_feishu_live_contract_fixtures.py",
+      "before_sha256": null,
+      "after_sha256": "bba0f427bbe4678bec5003c179be6edc824aad76ea57705e24f7b6df7ded0da3",
       "included_in_patch": true
     },
     {

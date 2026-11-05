@@ -41,5 +41,59 @@
         }
       }
     }
+  },
+  "live_tenant_probe_sanitized": {
+    "app_id_sha256_prefix": "24256e0cd6fa7df8",
+    "transport": "httpx==0.28.1 + stdlib ssl/websocket 101 handshake",
+    "token_exchange": {
+      "endpoint": "POST /open-apis/auth/v3/tenant_access_token/internal",
+      "http_status": 200,
+      "code": 0,
+      "expire_seconds": 7200,
+      "latency_ms": 147.88
+    },
+    "bot_info": {
+      "endpoint": "GET /open-apis/bot/v3/info/",
+      "http_status": 200,
+      "code": 0,
+      "activate_status": 2,
+      "latency_ms": 169.04
+    },
+    "ws_endpoint_discovery": {
+      "endpoint": "POST /callback/ws/endpoint",
+      "http_status": 200,
+      "code": 0,
+      "ws_host": "msg-frontier.feishu.cn",
+      "ws_upgrade_status_line": "HTTP/1.1 101 Switching Protocols",
+      "discovery_latency_ms": 102.11,
+      "tls_upgrade_handshake_ms": 208.38,
+      "client_config": {
+        "ReconnectCount": -1,
+        "ReconnectInterval": 90,
+        "ReconnectNonce": 25,
+        "PingInterval": 90
+      }
+    },
+    "cardkit_v1": {
+      "create_card_code": 0,
+      "create_latency_ms": 230.84,
+      "update_seq_1_code": 0,
+      "update_seq_1_latency_ms": 259.43,
+      "stale_sequence_code": 300317,
+      "stale_sequence_msg": "ErrMsg: sequence number compare failed; ",
+      "nil_body_code": 200610
+    },
+    "error_contracts": {
+      "invalid_token": {
+        "http_status": 400,
+        "code": 99991668,
+        "msg": "user access token not support"
+      },
+      "missing_scope_tenant_readonly": {
+        "http_status": 400,
+        "code": 99991672,
+        "required_scope": "tenant:tenant:readonly"
+      }
+    }
   }
 }
