@@ -237,17 +237,20 @@ def supervise(
                     body: dict[str, Any] = {"stage": stage}
                     if pending_reactions:
                         body["task_ids"] = list(pending_reactions.keys())
-                    resp = session.call("POST", "/v1/feishu/health", body=body)
-                    if resp.status_code == 200:
-                        finished = resp.json().get("finished", {})
-                        for tid, state in finished.items():
-                            if tid in pending_reactions:
-                                mid, rid = pending_reactions.pop(tid)
-                                try:
-                                    reactor.remove(mid, rid)
-                                    print(f"FEISHU_REACTION_REMOVED_{state}", flush=True)
-                                except Exception:
-                                    pass
+                    try:
+                        resp = session.call("POST", "/v1/feishu/health", body=body)
+                        if resp.status_code == 200:
+                            finished = resp.json().get("finished", {})
+                            for tid, state in finished.items():
+                                if tid in pending_reactions:
+                                    mid, rid = pending_reactions.pop(tid)
+                                    try:
+                                        reactor.remove(mid, rid)
+                                        print(f"FEISHU_REACTION_REMOVED_{state}", flush=True)
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
                     last_heartbeat = time.monotonic()
                 for _key, _ in selector.select(timeout=0.5):
                     chunk = os.read(child.stdout.fileno(), 16384)
