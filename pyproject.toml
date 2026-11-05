@@ -17,16 +17,18 @@ dependencies = [
 
 [project.scripts]
 openbot = "openbot.cli:main"
+openbot-feishu = "openbot_feishu.live_gateway:main"
 
 [dependency-groups]
 dev-contracts = ["pytest==8.4.2", "ruff==0.14.10", "mypy==1.19.1", "types-jsonschema==4.26.0.20260202"]
 provider-openai = ["openai==2.26.0", "httpx==0.28.1"]
+feishu = ["lark-oapi==1.7.5"]
 
 [tool.uv]
 default-groups = ["dev-contracts"]
 
 [tool.setuptools.packages.find]
-where = ["services/core/src"]
+where = ["services/core/src", "services/feishu_gateway/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
