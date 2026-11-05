@@ -3,16 +3,66 @@
 import hashlib
 import io
 import json
+import os
 import platform
 import re
 import secrets
 import subprocess
 import tarfile
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def resolve_docker_cli_and_socket(
+    *,
+    home_dir: Path | None = None,
+    cli_candidates: Sequence[Path] | None = None,
+    explicit_host: str | None = None,
+) -> tuple[str, str]:
+    eff_home = (home_dir or Path.home()).resolve()
+    bins = (
+        tuple(cli_candidates)
+        if cli_candidates is not None
+        else (Path("/opt/homebrew/bin/docker"), Path("/usr/local/bin/docker"))
+    )
+    chosen_bin: Path | None = None
+    for cand in bins:
+        if cand.is_file() and os.access(cand, os.X_OK) and not cand.is_symlink():
+            chosen_bin = cand
+            break
+    if chosen_bin is None:
+        for cand in bins:
+            if cand.is_file() and os.access(cand, os.X_OK):
+                chosen_bin = cand
+                break
+    if chosen_bin is None:
+        raise PermissionError("CAPABILITY_UNAVAILABLE: local docker CLI binary not found")
+
+    if explicit_host is not None:
+        if not explicit_host.startswith("unix://"):
+            raise PermissionError(
+                f"CAPABILITY_UNAVAILABLE: non-unix Docker host forbidden ({explicit_host})"
+            )
+        sock_path = Path(explicit_host.removeprefix("unix://")).resolve()
+        if not sock_path.is_relative_to(eff_home) or not sock_path.exists():
+            raise PermissionError(
+                f"CAPABILITY_UNAVAILABLE: unowned or missing Docker socket ({explicit_host})"
+            )
+        return str(chosen_bin), f"unix://{sock_path}"
+
+    for rel_sock in (
+        ".docker/run/docker.sock",
+        ".orbstack/run/docker.sock",
+        ".colima/default/docker.sock",
+    ):
+        candidate_sock = eff_home / rel_sock
+        if candidate_sock.exists():
+            return str(chosen_bin), f"unix://{candidate_sock}"
+    raise PermissionError("CAPABILITY_UNAVAILABLE: no active user-owned Docker socket found")
 
 
 def validate_receipt_tar(raw):
@@ -45,7 +95,9 @@ def validate_receipt_tar(raw):
 
 
 class NativeFixture:
-    def __init__(self, root, asset):
+    def __init__(
+        self, root, asset, *, docker_bin: str | None = None, docker_host: str | None = None
+    ):
         self.root = root
         self.image = asset["repo_digest"]
         if not re.fullmatch(r"alpine@sha256:[0-9a-f]{64}", self.image):
@@ -53,25 +105,30 @@ class NativeFixture:
         self.run_id = secrets.token_hex(16)
         self.label = "openbot.native-poc=" + self.run_id
         config = root / "docker-config"
-        config.mkdir()
+        config.mkdir(mode=0o700)
+        if docker_bin is None or docker_host is None:
+            resolved_bin, resolved_host = resolve_docker_cli_and_socket(explicit_host=docker_host)
+            docker_bin = docker_bin or resolved_bin
+            docker_host = resolved_host
         self.env = {
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
             "HOME": str(config),
             "DOCKER_CONFIG": str(config),
         }
         self.prefix = [
-            "/usr/local/bin/docker",
+            docker_bin,
             "--config",
             str(config),
             "--host",
-            "unix:///Users/Zhuanz/.docker/run/docker.sock",
+            docker_host,
         ]
         self.containers = []
         self.names = []
         self.trace = []
-        for name in ["input", "output"]:
-            (root / name).mkdir()
-        (root / "output").chmod(0o777)
+        for name in ["input", "output", "verified_exports"]:
+            (root / name).mkdir(mode=0o700)
+        (root / "output").chmod(0o700)
+        (root / "verified_exports").chmod(0o700)
         (root / "input/fixture.txt").write_text("synthetic input\n")
         (root / "input/fixture.txt").chmod(0o644)
         (root / "input").chmod(0o755)
@@ -147,7 +204,11 @@ class NativeFixture:
                 raise ValueError("Export stream exceeded limit")
             if process.wait(timeout=5):
                 raise ValueError("Export client failed")
-            return validate_receipt_tar(raw)
+            validated = validate_receipt_tar(raw)
+            out_file = self.root / "verified_exports" / f"{identifier[:12]}.receipt"
+            out_file.write_bytes(validated)
+            out_file.chmod(0o600)
+            return validated
         finally:
             if process.poll() is None:
                 process.kill()

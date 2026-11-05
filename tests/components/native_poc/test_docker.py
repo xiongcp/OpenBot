@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.components.native_poc.docker_poc import run_poc, validate_receipt_tar
+from tests.components.native_poc.docker_poc import (
+    resolve_docker_cli_and_socket,
+    run_poc,
+    validate_receipt_tar,
+)
 
 
 def archive(name="receipt", content=b"synthetic receipt\n", kind=tarfile.REGTYPE):
@@ -40,6 +44,65 @@ def test_stopped_container_export_validates_bytes_before_writing_files():
 def test_untrusted_container_export_is_rejected(data):
     with pytest.raises(ValueError):
         validate_receipt_tar(data)
+
+
+def test_portable_docker_cli_and_socket_discovery_and_security_guards(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+
+    # Layout 1: Homebrew CLI + Docker Desktop user socket
+    brew_bin = tmp_path / "opt/homebrew/bin/docker"
+    brew_bin.parent.mkdir(parents=True)
+    brew_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    brew_bin.chmod(0o755)
+    dd_sock = fake_home / ".docker/run/docker.sock"
+    dd_sock.parent.mkdir(parents=True)
+    dd_sock.write_text("", encoding="utf-8")
+
+    cli1, sock1 = resolve_docker_cli_and_socket(
+        home_dir=fake_home,
+        cli_candidates=(brew_bin,),
+    )
+    assert cli1 == str(brew_bin)
+    assert sock1 == f"unix://{dd_sock}"
+
+    # Layout 2: /usr/local/bin/docker + OrbStack user socket
+    dd_sock.unlink()
+    orb_sock = fake_home / ".orbstack/run/docker.sock"
+    orb_sock.parent.mkdir(parents=True)
+    orb_sock.write_text("", encoding="utf-8")
+    local_bin = tmp_path / "usr/local/bin/docker"
+    local_bin.parent.mkdir(parents=True)
+    local_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    local_bin.chmod(0o755)
+
+    cli2, sock2 = resolve_docker_cli_and_socket(
+        home_dir=fake_home,
+        cli_candidates=(local_bin,),
+    )
+    assert cli2 == str(local_bin)
+    assert sock2 == f"unix://{orb_sock}"
+
+    # Reject remote tcp:// or another user's socket or missing socket
+    for bad_host in (
+        "tcp://192.168.1.10:2375",
+        "ssh://user@remote",
+        "unix:///Users/Zhuanz/.docker/run/docker.sock",
+        "unix:///var/run/docker.sock",
+    ):
+        with pytest.raises(PermissionError, match="CAPABILITY_UNAVAILABLE"):
+            resolve_docker_cli_and_socket(
+                home_dir=fake_home,
+                cli_candidates=(local_bin,),
+                explicit_host=bad_host,
+            )
+
+    orb_sock.unlink()
+    with pytest.raises(PermissionError, match="CAPABILITY_UNAVAILABLE"):
+        resolve_docker_cli_and_socket(
+            home_dir=fake_home,
+            cli_candidates=(local_bin,),
+        )
 
 
 @pytest.mark.native_container
