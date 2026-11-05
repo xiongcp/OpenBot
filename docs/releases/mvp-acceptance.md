@@ -19,6 +19,18 @@
 - **`full_three_os_mvp_release_approved = False`**：因当前环境未提供原生 Windows/Linux 实机（`OB-005`/`OB-070`/`OB-071` `BLOCKED`，按用户指示暂不执行）及手机端真人交互点击，严格遵守架构不变量，不将单平台试点宣称为全三平台 MVP 放行。
 - **`m4_signing_is_reverse_prerequisite = False`**：M4 桌面 Tauri UI、代码签名与自动升级不作为 M3 门禁的反向前置依赖。
 
+### 3. 能力矩阵（区分 `implementation_status` 与 `verification_status`）
+
+| 子系统 / 门禁 | `implementation_status` | `verification_status` | 证据层级与边界说明 |
+|---|---|---|---|
+| 本地控制面 CLI 与 Loopback HTTP API (`MVP-006`) | `IMPLEMENTED` | `NATIVE_OS` | 已通过独立子进程 `openbot daemon serve` 与 `task/approval/operation` 实测 |
+| SQLite 23 表、单写者、在线备份与满盘保护 (`MVP-009`) | `IMPLEMENTED` | `NATIVE_OS` | 真实 `SIGKILL`、WAL 重开、备份恢复与 `max_page_count` 满盘拦截已验证 |
+| macOS Keychain、LaunchAgent 与 APFS 守卫 (`MVP-007`/`008`) | `IMPLEMENTED` | `NATIVE_OS` | `/usr/bin/security` 真实 canary、`/usr/bin/plutil -lint` 与 symlink 拦截已验证 |
+| Browser 跨进程锁与 MCP stdio 流式上限 (`MVP-010`/`011`) | `IMPLEMENTED` | `NATIVE_OS` | 跨进程 `flock`、Chromium headless DOM 导出与真实 stdio 子进程已验证 |
+| 云模型与本地 Ollama 双 Provider (`MVP-012`) | `IMPLEMENTED` | `SPLIT_QUALIFICATION` | 区分 `synthetic_provider_contract`、`sdk_loopback_contract`、`real_cloud_provider` 与 `real_local_ollama_runner` |
+| Windows / Linux 原生 M3 门禁 (`OB-070`/`OB-071`) | `PARTIAL` | `NOT_RUN` / `BLOCKED_ENV` | CI 已覆盖 `contracts` 收集与设计校验，原生系统隔离保持 `BLOCKED_ENV` |
+| M4 Tauri 桌面 UI、代码签名公证与自动更新 (`OB-073`/`074`) | `TODO` | `NOT_APPLICABLE` | 属于 M4 桌面分发阶段，不在 M3 CLI/daemon MVP 声明范围内 |
+
 ---
 
 ## English Summary

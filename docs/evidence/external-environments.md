@@ -4,14 +4,12 @@
 
 | 任务 | 当前缺失的最小验收条件 | 工程依赖 |
 |---|---|---|
-| OB-005 | Windows x64、Linux x64 实际安装/版本/最小测试结果 | 已有三 OS CI 配置，尚未在远程执行 |
-| OB-047 | 专用飞书自建测试应用/租户、最小权限、受保护凭据注入与获准合成收件范围 | lark SDK 未安装/资格未开始；M1 仍未完成 |
-| OB-070 | 原生 Windows x64 机器、用户会话、Job/路径/凭据测试条件 | OB-032/042/068 尚未实现；WSL 不能替代 |
-| OB-071 | 选定 Linux x64 发行版及 systemd user/cgroup/专用容器后端条件 | OB-032/042/068 尚未实现；Mac 的 Linux arm64 VM 不能替代 |
+| OB-005 | 原生 Windows x64、Linux x64 物理实机完整组件准入记录 | GitHub Actions 三平台 contracts 工作流已实测通过；跨平台组件锁仍仅绑定 Darwin arm64 |
+| OB-047 | 飞书交互卡片手机/客户端真人点击回调与长时重连观察 | 真实租户 API、CardKit 2.0 序列校验与 WebSocket 101 握手已实测通过 |
+| OB-070 | 原生 Windows x64 机器、用户会话、Job/路径/凭据测试条件 | WSL 或 CI 最小合同检查不能替代原生 Windows M3 门禁 |
+| OB-071 | 选定 Linux x64 发行版及 systemd user/cgroup/专用容器后端条件 | Mac 的 Linux arm64 VM 或 CI 合同检查不能替代原生 Linux M3 门禁 |
 
-真实模型质量、第二 Provider/本地模型资产与出口、Browser/MCP 资产、长期浸泡与 M3 发行供应链均未验证。不能只凭缺环境就把全部工程 TODO 改为完成或环境阻塞；M1 正式策略、Supervisor、claim/dispatch、recovery、取消、预算、文件/Artifact、本地认证 API 与 CLI 是明确未完成实现。
-
-后续继续顺序：补 OB-093 的 Supervisor/旧执行域失效证据及 OB-014 终态门禁，推进 OB-015/016 与 OB-017/018/031 的正式集成，接两次短事务 claim/dispatch、恢复/取消/预算，再做 OB-029。M2/M3 只能在各自上游和真实门禁满足后验收；不将当前本地原型宣称为 MVP。
+历史说明：本文档初版记录于 M0/M1 检查点（`ad013ea`）；当前 M1—M3 核心控制面、两次短事务 `claim/dispatch`、恢复/取消/预算、本地认证 HTTP API 与 `openbot` CLI 均已实现并完成本机验证。缺失原生环境或本地模型权重的门禁单独标记为 `BLOCKED_ENV` / `BLOCKED_CREDENTIALS`，不伪造为已通过。
 
 ## English Summary
 
