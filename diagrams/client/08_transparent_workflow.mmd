@@ -1,0 +1,22 @@
+flowchart TB
+    U["用户 / User"] --> D["macOS 客户端 / Desktop client"]
+    U --> F["飞书 / Feishu"]
+    D --> R["受限 Rust IPC / Restricted Rust IPC"]
+    R --> A["认证 API / Authenticated API"]
+    F --> G["WebSocket、配对与去重 / WebSocket, pairing and dedup"]
+    G --> A
+    A --> C["配置 revision、任务与策略 / Config revision, task and policy"]
+    C --> S["记录 Skill 来源与 hash / Record skill origin and hash"]
+    S --> M["模型请求与工具提案 / Model request and proposal"]
+    M --> B["Broker：授权、claim、派发复核 / Authorization, claim, dispatch checks"]
+    B --> T["受控 MCP 与工具 / Governed MCP and tools"]
+    T --> V{"结果核对 / Outcome verification"}
+    V -->|"确认 / Confirmed"| OK["结果与产物 / Result and artifacts"]
+    V -->|"不明 / Uncertain"| UN["UNKNOWN / RECONCILING"]
+    C --> E[("持久事件、审计、outbox / Durable events, audit, outbox")]
+    B --> E
+    OK --> E
+    UN --> E
+    E --> P["脱敏只读投影 / Redacted read-only projection"]
+    P --> R
+    P --> G

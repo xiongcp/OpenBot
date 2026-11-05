@@ -2,13 +2,15 @@
 
 [中文](README.md) | [English](README.en.md)
 
-Design baseline **v1.2 · November 4, 2026**. This repository contains the original engineering design package and an implementation checkpoint. It has **not passed OB-029** and is **not an M3 MVP**.
+2026-11-05: [Bilingual agent client, configuration activation and transparent workflow design](docs/superpowers/specs/2026-11-05-agent-client-design.md), including execution diagrams, skill/MCP evidence boundaries and Hermes Feishu references. This is a proposed design, not a completed desktop client.
+
+Design baseline **v1.2 · November 4, 2026**. This repository contains the engineering design package, M0–M3 implementation/qualification modules and local macOS ARM64 evidence. Module existence and test results do not establish a complete agent product or full M3 acceptance. Exact task states and qualification limits live in `tasks/backlog.json` and `docs/evidence`.
 
 ## Current implementation
 
-M0 includes a minimal Python package, strict JSON/Schema/JCS contracts, deterministic fixtures, and the OB-091 SQLite crash-protocol PoC. M1 includes SQLite migrations, a bounded single writer, scoped durable inbox, partial Task state services, immutable proposals and internal approval decisions, OpenAI/httpx fault contracts, and native macOS Docker primitives.
+The repository includes strict JSON/Schema/JCS contracts, deterministic fixtures, the OB-091 SQLite crash-protocol PoC, SQLite migrations, a bounded writer, scoped inbox, Task/Operation/Attempt services, immutable approvals, an authenticated local API, CLI and qualification modules for providers, tools, browser, MCP and Feishu.
 
-Approval only makes an Operation READY. The current services do not provide the production claim/dispatch/recovery loop, authenticated control API, or an end-to-end CLI workflow. The design catalog remains NOT_RUN. Exact local development dependencies and limited qualification evidence live separately in `components/admissions`; passing tests does not enable runtime capabilities.
+Approval only makes an Operation READY. The current daemon primarily accepts tasks into its inbox; the real skill/model/Broker/MCP execution orchestration still needs integration. Desktop tasks OB-082/083 remain TODO. Existing Feishu API, CardKit and WebSocket evidence does not prove every live workflow. Native Windows/Linux acceptance, desktop signing and automatic application updates remain incomplete. Exact dependencies and qualification evidence live in `components/admissions`; design recommendations and passing tests do not enable runtime capabilities.
 
 See the [bilingual checkpoint and work split](docs/handoff/2026-11-04-checkpoint.md), [Claude Code OB-093 assignment](prompts/07_claude_code_ob093.md), and [Integrator continuation prompt](prompts/08_integrator_resume.md). Each prompt has equivalent Chinese and English versions; execute one version.
 

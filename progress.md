@@ -98,6 +98,17 @@
 - 推进 OB-080（完成 MVP 发布验收与风险登记）：实现 MvpReleaseAcceptanceGate、中英双语 docs/releases/mvp-acceptance.md 与 docs/risks.md（签核 Darwin arm64 本地试点就绪 darwin_arm64_pilot_ready=True、security_critical_failures=0，同时因缺少 Windows/Linux 原生实机与真实飞书租户诚实判定 full_three_os_mvp_release_approved=False，且 m4_signing_is_reverse_prerequisite=False）；新增单元测试通过，M0 增至 299 passed/3 skipped，M1 增至 318 passed/1 skipped。至此 M0—M3 阶段所有可本地实施任务全部完成并推送。
 - 推进 OB-047（核验飞书真实租户协议与权限）：使用专用测试自建应用凭据（仅驻留内存，零明文落盘）对 open.feishu.cn 与 wss://msg-frontier.feishu.cn 完成真实分段探测（import 79.19ms、token 147.88ms、bot/v3/info 169.04ms、WS 端点发现 102.11ms、TLS+WS 101 Switching Protocols 握手 208.38ms、im/v1/chats 314.48ms、CardKit 2.0 创建 230.84ms、sequence=1 更新 259.43ms、重复 sequence=1 返回 code=300317、缺 tenant:tenant:readonly 返回 code=99991672），将脱敏真实响应写入 tests/fixtures/feishu/sanitized_events.json 与双语 docs/integrations/feishu-contract.md，新增 tests/unit/test_feishu_live_contract_fixtures.py 验证通过（M0 增至 300 passed/3 skipped，M1 增至 319 passed/1 skipped），OB-047 由 BLOCKED 更新为 IN_PROGRESS。
 
+## 2026-11-05 客户端与透明执行 / Client and transparent execution
+
+- 已只读核对 PDF、当前 Git 状态、客户端任务、配置/API/可观测性与官方 Hermes/飞书/Tauri 文档。
+- 已收到测试凭据使用与逐项 commit/push 授权；未将任何真实凭据写入工作区。
+- 正在补 Git 敏感文件回归并形成双语设计；历史汇总不是本轮测试结果。
+- 敏感文件规则回归 RED 14 failed / 6 passed，GREEN 与相关回归共 25 passed；lint/format 通过。完整验证首次因沙箱禁止 loopback bind 出现 3 failed / 15 errors，已发起授权环境重跑，未将其报告为通过。
+- 授权环境完整验证 8/8 通过，346 passed / 1 skipped。敏感文件保护原子提交 65f8666757a61beea2e7fcfb96f1b6e72b98224f 已推送至 codex/agent-client-observability，远端 SHA 一致；GitHub contracts run 41975808103 completed/success。
+- 双语客户端设计及 Mermaid 图已写入，独立审阅提出的 4 个实现范围缺口已补充；已发起一次设计确认。真实模型流式、飞书 token/bot/discovery 探测通过，未外发消息，SDK 仅临时锁定准备。
+- 只读飞书 WebSocket 监听已连接，已通知用户发送指定合成消息；真人消息匹配尚待结果。新图放入 diagrams/client，保留原 7 张基线图；三项设计/组件/数据库检查通过。
+- 已同步中英文 README 的真实范围：模块和测试不能当作完整 Agent 编排或客户端完成证据；记录了本轮真实探测的脱敏数值。
+
 ## English Progress Summary
 
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
