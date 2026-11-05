@@ -1,3 +1,5 @@
+import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,24 @@ def test_packaging_auditor_blocks_secrets_and_caches_and_forbids_first_use_downl
 ) -> None:
     assert (ROOT / "packaging/runtime-assets.json").is_file()
     assert (ROOT / "docs/runtime-dependencies.md").is_file()
-    assert (ROOT / "scripts/build/build_pilot_bundle.py").is_file()
+    pilot_script = ROOT / "scripts/build/build_pilot_bundle.py"
+    assert pilot_script.is_file()
+
+    ignore_check = subprocess.run(
+        ["git", "-C", str(ROOT), "check-ignore", "-q", "scripts/build/build_pilot_bundle.py"],
+        capture_output=True,
+        check=False,
+    )
+    assert ignore_check.returncode != 0
+
+    spec = importlib.util.spec_from_file_location("build_pilot_bundle", pilot_script)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    manifest = mod.build_manifest()
+    assert manifest["stage"] == "M3_UNSIGNED_PILOT"
+    assert manifest["signed_m4_release_claimed"] is False
+    assert manifest["first_use_silent_download_permitted"] is False
 
     auditor = PackagingBundleAuditor(ROOT / "packaging/runtime-assets.json")
     clean_bundle = tmp_path / "bundle_clean"
