@@ -24,6 +24,7 @@ from openbot.adapters.local_api.server import (
     LoopbackHttpDaemon,
     ScopedTokenStore,
 )
+from openbot.application.doctor import DoctorService
 
 _ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _ANSI_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
@@ -190,6 +191,11 @@ def build_cli_parser() -> argparse.ArgumentParser:
     p_health.add_argument("--require-daemon", action="store_true")
     p_health.add_argument("--json", action="store_true")
 
+    p_doc = sub.add_parser("doctor")
+    p_doc.add_argument("--profile-dir", type=Path, default=None)
+    p_doc.add_argument("--fix-safe", action="store_true")
+    p_doc.add_argument("--json", action="store_true")
+
     p_daemon = sub.add_parser("daemon")
     daemon_sub = p_daemon.add_subparsers(dest="action", required=True)
     p_dserve = daemon_sub.add_parser("serve")
@@ -304,6 +310,15 @@ def run_cli_command(
 
     if argv[0] == "version":
         return 0, __version__
+    if argv[0] == "doctor":
+        parser = build_cli_parser()
+        parsed_doc = parser.parse_args(argv)
+        eff_dir = parsed_doc.profile_dir or Path(
+            os.environ.get("OPENBOT_PROFILE_DIR", str(Path.home() / ".openbot/default"))
+        )
+        rep = DoctorService(eff_dir).run_diagnostics(fix_safe=bool(parsed_doc.fix_safe))
+        code = 0 if rep["status"] == "PASS" else 1
+        return code, _format_output(rep, as_json=as_json)
     if argv[0] == "health":
         require_daemon = "--require-daemon" in argv
         eff_session = session

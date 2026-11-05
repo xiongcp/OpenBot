@@ -46,8 +46,17 @@ class WriterCommand:
 
 
 class Writer:
-    def __init__(self, path: Path, *, quotas: dict[str, int] | None = None):
+    def __init__(
+        self,
+        path: Path,
+        *,
+        quotas: dict[str, int] | None = None,
+        checkpoint_every_n_writes: int = 500,
+    ):
         self._path = path
+        self._checkpoint_threshold = max(1, checkpoint_every_n_writes)
+        self._writes_since_checkpoint = 0
+        self._checkpoint_count = 0
         self._quotas = dict(
             quotas
             if quotas is not None
@@ -133,6 +142,22 @@ class Writer:
             return query(db)
         finally:
             db.close()
+
+    @property
+    def wal_checkpoint_count(self) -> int:
+        return self._checkpoint_count
+
+    def _maybe_checkpoint_wal(self, db: sqlite3.Connection, *, force: bool = False) -> None:
+        if not force and self._writes_since_checkpoint < self._checkpoint_threshold:
+            return
+        if db.in_transaction:
+            return
+        try:
+            db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            self._writes_since_checkpoint = 0
+            self._checkpoint_count += 1
+        except sqlite3.Error:
+            pass
 
     def _take(self) -> tuple[WriterCommand, Future[bytes]] | None:
         with self._condition:
@@ -226,6 +251,11 @@ class Writer:
                         raise
                 else:
                     future.set_result(result)
+                    self._writes_since_checkpoint += 1
+                    with self._condition:
+                        is_idle = not any(self._queues.values())
+                    if is_idle or self._writes_since_checkpoint >= self._checkpoint_threshold:
+                        self._maybe_checkpoint_wal(db, force=is_idle)
         except BaseException as exc:
             self._failure = exc
         finally:

@@ -102,6 +102,46 @@ class EpochIsolationProof:
     supervisor_reachable: bool = True
 
 
+@dataclass(frozen=True, slots=True)
+class CrashWatchdogStatus:
+    mode: Literal["ACTIVE_SUPERVISION", "SAFE_MAINTENANCE_MODE"]
+    recent_crashes_in_window: int
+    next_backoff_ms: int
+    auto_restart_allowed: bool
+
+
+class SupervisorCrashStormWatchdog:
+    """Trip into SAFE_MAINTENANCE_MODE if >3 crashes occur within 5 minutes (V1-068)."""
+
+    def __init__(
+        self, *, window_ms: int = 300_000, max_crashes: int = 3, base_backoff_ms: int = 1000
+    ) -> None:
+        self._window_ms = window_ms
+        self._max_crashes = max_crashes
+        self._base_backoff_ms = base_backoff_ms
+        self._crash_timestamps_ms: list[int] = []
+        self._maintenance_tripped = False
+
+    def record_crash(self, *, now_ms: int) -> CrashWatchdogStatus:
+        cutoff = now_ms - self._window_ms
+        self._crash_timestamps_ms = [t for t in self._crash_timestamps_ms if t >= cutoff]
+        self._crash_timestamps_ms.append(now_ms)
+        count = len(self._crash_timestamps_ms)
+        if count > self._max_crashes:
+            self._maintenance_tripped = True
+        backoff = self._base_backoff_ms * (2 ** max(0, count - 1))
+        return CrashWatchdogStatus(
+            mode="SAFE_MAINTENANCE_MODE" if self._maintenance_tripped else "ACTIVE_SUPERVISION",
+            recent_crashes_in_window=count,
+            next_backoff_ms=0 if self._maintenance_tripped else backoff,
+            auto_restart_allowed=not self._maintenance_tripped,
+        )
+
+    def reset_maintenance_mode(self) -> None:
+        self._maintenance_tripped = False
+        self._crash_timestamps_ms.clear()
+
+
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False

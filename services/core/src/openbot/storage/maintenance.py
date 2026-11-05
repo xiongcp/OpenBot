@@ -49,6 +49,28 @@ class RestoreVerificationReport:
     reconfiguration_required: bool
 
 
+class DiskWaterlineGuard:
+    """Hard-block write dispatches when disk free space drops below 512MB (V1-070)."""
+
+    MIN_FREE_BYTES: int = 512 * 1024 * 1024
+
+    def __init__(self, target_path: Path, *, min_free_bytes: int = MIN_FREE_BYTES) -> None:
+        self._path = target_path.resolve()
+        self._min_free = min_free_bytes
+
+    def check_writable(self, *, simulated_free_bytes: int | None = None) -> dict[str, int | bool]:
+        free_bytes = (
+            simulated_free_bytes
+            if simulated_free_bytes is not None
+            else shutil.disk_usage(self._path if self._path.exists() else self._path.parent).free
+        )
+        if free_bytes < self._min_free:
+            raise PermissionError(
+                f"DISK_LOW_WATERLINE_TRIPPED: free={free_bytes} < required={self._min_free}"
+            )
+        return {"writable": True, "free_bytes": free_bytes, "min_free_bytes": self._min_free}
+
+
 class DatabaseMaintenanceService:
     """Coordinate SQLite online backup with Artifact GC pins and safe post-restore state."""
 
