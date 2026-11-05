@@ -172,6 +172,124 @@ class FeishuPlainCardBuilder:
             },
         )
 
+    def build_approval_card_v2(
+        self,
+        *,
+        approval_id: str,
+        task_id: str,
+        tool_name: str,
+        data_class: str,
+        impact_summary: str,
+        diff_lines: tuple[str, ...] = (),
+        old_sha256: str | None = None,
+        new_sha256: str | None = None,
+        budget_used_pct: int = 0,
+        expires_at_iso: str = "",
+        truncated: bool = False,
+        expected_version: int = 1,
+        binding_hash: str = "",
+        nonce: str = "",
+    ) -> RenderedApprovalCard:
+        """Feishu 2.0 card with collapsible Diff summary and budget progress (V1-082)."""
+        if data_class in {"SENSITIVE", "SECRET"} or truncated:
+            return self.build_approval_card(
+                approval_id=approval_id,
+                task_id=task_id,
+                tool_name=tool_name,
+                data_class=data_class,
+                impact_summary=impact_summary,
+                truncated=truncated,
+                expected_version=expected_version,
+                binding_hash=binding_hash,
+                nonce=nonce,
+            )
+        base = self.build_approval_card(
+            approval_id=approval_id,
+            task_id=task_id,
+            tool_name=tool_name,
+            data_class=data_class,
+            impact_summary=impact_summary,
+            truncated=False,
+            expected_version=expected_version,
+            binding_hash=binding_hash,
+            nonce=nonce,
+        )
+        card = dict(base.card_json)
+        elements = list(card.get("elements", []))
+        short_old = (old_sha256 or "none")[:8]
+        short_new = (new_sha256 or "none")[:8]
+        diff_preview_text = "\n".join(diff_lines[:24]) if diff_lines else "(no diff lines)"
+        extra_elements: list[dict[str, Any]] = [
+            {
+                "tag": "collapsible_panel",
+                "expanded": False,
+                "header": {
+                    "title": {
+                        "tag": "plain_text",
+                        "content": f"📄 Diff 摘要 ({short_old} → {short_new})",
+                    }
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "text": {"tag": "plain_text", "content": diff_preview_text},
+                    }
+                ],
+            },
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "plain_text",
+                    "content": f"📊 预算进度: {budget_used_pct}% | 有效期至: {expires_at_iso}",
+                },
+            },
+        ]
+        card["elements"] = [elements[0], *extra_elements, *elements[1:]]
+        return RenderedApprovalCard(
+            approval_id=approval_id,
+            mode="REMOTE_INTERACTIVE",
+            remote_approve_enabled=True,
+            requires_cardkit=False,
+            card_json=card,
+        )
+
+    def build_stale_or_expired_card_v2(
+        self,
+        *,
+        approval_id: str,
+        task_id: str,
+        tool_name: str,
+        reason: Literal["EXPIRED", "TARGET_DRIFTED"],
+    ) -> RenderedApprovalCard:
+        return RenderedApprovalCard(
+            approval_id=approval_id,
+            mode="RESOLVED",
+            remote_approve_enabled=False,
+            requires_cardkit=False,
+            card_json={
+                "config": {"wide_screen_mode": True},
+                "header": {
+                    "title": {
+                        "tag": "plain_text",
+                        "content": f"🛑 目标已变更或审批已过期，已为您拦截执行 ({approval_id})",
+                    },
+                    "template": "red",
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "plain_text",
+                            "content": (
+                                f"任务 {task_id} / 工具 {tool_name} 因 {reason} 被安全拦截，"
+                                "请基于最新状态重新生成提案。"
+                            ),
+                        },
+                    }
+                ],
+            },
+        )
+
     def build_result_card(
         self,
         *,

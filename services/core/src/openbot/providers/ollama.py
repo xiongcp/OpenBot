@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 from urllib.parse import urlparse
 
+from openbot.boundaries import accept_model_call
+from openbot.contracts import canonicalize
+from openbot.domain.providers import Block, ModelRequest, ModelResponse, RequestBudget, Text
+from openbot.domain.tools import ToolManifest
+
 
 @dataclass(frozen=True, slots=True)
 class LocalModelEndpointAttestation:
@@ -160,3 +165,47 @@ class OllamaLocalProviderAdapter:
             cloud_fallback_attempted=False,
             authority_granted=False,
         )
+
+    def generate_model_response(
+        self,
+        request: ModelRequest,
+        *,
+        budget: RequestBudget,
+        privacy_mode: Literal["LOCAL_MODEL", "OFFLINE", "CONNECTED"],
+        manifests: dict[str, ToolManifest] | None = None,
+    ) -> ModelResponse:
+        del privacy_mode
+        if request.model != self._att.model_id:
+            raise PermissionError("LOCAL_MODEL_ID_MISMATCH")
+        budget.reserve(request.request_id, request.reserved_cost_units)
+        prompt = "\n".join(b.text for b in request.blocks if isinstance(b, Text))
+        try:
+            resp = self._transport.post_chat(
+                {
+                    "model": self._att.model_id,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                }
+            )
+        except Exception as exc:
+            budget.unknown(request.request_id)
+            raise PermissionError("LOCAL_RUNNER_FAILED_ZERO_CLOUD_FALLBACK") from exc
+        blocks: list[Block] = []
+        if resp.content:
+            blocks.append(Text(resp.content))
+        if resp.tool_calls:
+            if not self._att.supports_structured_tools or not manifests:
+                budget.unknown(request.request_id)
+                raise PermissionError("CAPABILITY_UNAVAILABLE_NO_TOOL_SUPPORT")
+            for idx, tc in enumerate(resp.tool_calls):
+                fn = dict(tc.get("function", {}))
+                t_name = str(fn.get("name", ""))
+                t_args = dict(fn.get("arguments", {}))
+                if t_name not in manifests:
+                    budget.unknown(request.request_id)
+                    raise PermissionError(f"UNREGISTERED_LOCAL_TOOL: {t_name}")
+                call_id = str(tc.get("id", f"local_call_{idx}"))
+                env = canonicalize({"tool_name": t_name, "args": t_args})
+                blocks.append(accept_model_call(env, manifests[t_name], call_id))
+        budget.settle(request.request_id, resp.prompt_tokens, resp.eval_tokens)
+        return ModelResponse(tuple(blocks), resp.prompt_tokens, resp.eval_tokens, False)
