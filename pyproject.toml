@@ -31,7 +31,7 @@ where = ["services/core/src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-pythonpath = ["services/core/src", "services/feishu_gateway/src"]
+pythonpath = [".", "services/core/src", "services/feishu_gateway/src"]
 markers = [
   "sdk: actual optional SDK against synthetic loopback HTTP",
   "native_container: explicitly enabled Docker Desktop synthetic isolation PoC",
