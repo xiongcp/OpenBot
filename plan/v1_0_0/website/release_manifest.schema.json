@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed website release content manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project",
+    "stage",
+    "stable_release",
+    "beta_release",
+    "source_repository",
+    "notice"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "project": {
+      "const": "OpenBot"
+    },
+    "stage": {
+      "enum": [
+        "development",
+        "alpha",
+        "beta",
+        "stable"
+      ]
+    },
+    "source_repository": {
+      "type": "string",
+      "format": "uri"
+    },
+    "notice": {
+      "type": "string"
+    },
+    "stable_release": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/release"
+        }
+      ]
+    },
+    "beta_release": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/release"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "channel",
+        "source_sha",
+        "published_at",
+        "release_notes_url",
+        "assets"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "channel": {
+          "enum": [
+            "beta",
+            "stable"
+          ]
+        },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "release_notes_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "assets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/asset"
+          }
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch",
+        "min_os",
+        "url",
+        "sha256",
+        "size_bytes",
+        "signature",
+        "notarization",
+        "capabilities",
+        "limitations"
+      ],
+      "properties": {
+        "os": {
+          "const": "macos"
+        },
+        "arch": {
+          "enum": [
+            "arm64",
+            "x86_64"
+          ]
+        },
+        "min_os": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "signature": {
+          "enum": [
+            "VERIFIED"
+          ]
+        },
+        "notarization": {
+          "enum": [
+            "VERIFIED"
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

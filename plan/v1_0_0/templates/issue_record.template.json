@@ -1,0 +1,20 @@
+{
+  "issue_id": null,
+  "title": null,
+  "severity": null,
+  "related_task_ids": [],
+  "base_sha": null,
+  "reproduction": null,
+  "root_cause": null,
+  "fix_summary": null,
+  "test_runs": [],
+  "introduced_by_sha": null,
+  "verified_on_sha": null,
+  "target_repository": "xiongcp/OpenBot",
+  "target_ref": null,
+  "push_status": "NOT_ATTEMPTED",
+  "remote_sha": null,
+  "ci_runs": [],
+  "state": "OPEN",
+  "remaining_limits": []
+}

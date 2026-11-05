@@ -7,6 +7,160 @@ from typing import Any, Literal
 
 from openbot.application.supply_chain import ReleaseSupplyChainVerifier
 
+type EvidenceProvenanceKind = Literal["SOURCE", "SYNTHETIC", "NATIVE", "LIVE_EXTERNAL"]
+type RunLifecycleState = Literal["IN_PROGRESS", "COMPLETE", "FAILED"]
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformQualificationClaim:
+    os_name: Literal["Darwin", "Windows", "Linux"]
+    arch: str
+    contracts_passed: bool
+    native_installer_verified: bool
+    native_supervision_verified: bool
+    native_keychain_verified: bool
+
+
+@dataclass(frozen=True, slots=True)
+class V1ScopeEvaluation:
+    release_target: Literal["v1.0.0-macos-arm64"]
+    supported_platforms: tuple[str, ...]
+    original_m3_three_os_complete: Literal[False]
+    deferred_platforms: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceRunRecord:
+    run_id: str
+    source_sha: str
+    tree_sha: str
+    dirty_worktree: bool
+    lockfile_sha256: str
+    artifact_sha256: str | None
+    provenance_kind: EvidenceProvenanceKind
+    machine_id: str
+    lifecycle_state: RunLifecycleState
+    exit_code: int | None
+    log_sha256: str
+    test_ids: tuple[str, ...]
+    client_self_reported_pass: bool = False
+
+
+class V1BaselineContractGuard:
+    """Enforce V1-001..006 scope, evidence provenance, threat boundaries, and API compatibility."""
+
+    def evaluate_v1_scope(
+        self, claims: tuple[PlatformQualificationClaim, ...]
+    ) -> V1ScopeEvaluation:
+        supported: list[str] = []
+        deferred: list[str] = ["Darwin-x86_64", "Windows-AMD64", "Linux-x86_64"]
+        for claim in claims:
+            key = f"{claim.os_name}-{claim.arch}"
+            full_native = (
+                claim.contracts_passed
+                and claim.native_installer_verified
+                and claim.native_supervision_verified
+                and claim.native_keychain_verified
+            )
+            if claim.os_name in {"Windows", "Linux"} and not (
+                claim.native_installer_verified
+                and claim.native_supervision_verified
+                and claim.native_keychain_verified
+            ):
+                if full_native:
+                    raise PermissionError("CONTRACTS_ONLY_CANNOT_CLAIM_NATIVE_OS_SUPPORT")
+                continue
+            if key == "Darwin-arm64" and full_native:
+                supported.append(key)
+        if not supported:
+            raise PermissionError("V1_MACOS_ARM64_QUALIFICATION_INCOMPLETE")
+        return V1ScopeEvaluation(
+            release_target="v1.0.0-macos-arm64",
+            supported_platforms=tuple(supported),
+            original_m3_three_os_complete=False,
+            deferred_platforms=tuple(deferred),
+        )
+
+    def register_and_verify_evidence_runs(
+        self,
+        *,
+        candidate_sha: str,
+        expected_artifact_sha256: str,
+        required_test_ids: tuple[str, ...],
+        runs: tuple[EvidenceRunRecord, ...],
+        require_distinct_native_machines: int = 1,
+    ) -> dict[str, Any]:
+        if not re.fullmatch(r"[0-9a-f]{40}", candidate_sha):
+            raise PermissionError("INVALID_CANDIDATE_SHA")
+        seen_run_ids: set[str] = set()
+        covered_tests: set[str] = set()
+        native_machines: set[str] = set()
+
+        for rec in runs:
+            if rec.run_id in seen_run_ids:
+                raise PermissionError(f"EVIDENCE_RUN_ID_REUSE_FORBIDDEN: {rec.run_id}")
+            seen_run_ids.add(rec.run_id)
+            if rec.client_self_reported_pass:
+                raise PermissionError("SELF_REPORTED_BOOLEAN_EVIDENCE_FORBIDDEN")
+            if rec.lifecycle_state != "COMPLETE" or rec.exit_code != 0:
+                raise PermissionError(f"EVIDENCE_RUN_NOT_COMPLETE_AND_PASSING: {rec.run_id}")
+            if rec.dirty_worktree or rec.source_sha != candidate_sha:
+                raise PermissionError(f"EVIDENCE_STALE_OR_DIRTY_SHA: {rec.run_id}")
+            if rec.artifact_sha256 is not None and rec.artifact_sha256 != expected_artifact_sha256:
+                raise PermissionError(f"EVIDENCE_ARTIFACT_DIGEST_MISMATCH: {rec.run_id}")
+            if not re.fullmatch(r"[0-9a-f]{64}", rec.log_sha256):
+                raise PermissionError(f"EVIDENCE_LOG_DIGEST_INVALID: {rec.run_id}")
+            if rec.provenance_kind == "NATIVE":
+                if rec.machine_id.startswith("mock") or rec.machine_id.startswith("synthetic"):
+                    raise PermissionError("MOCK_REPORT_CANNOT_CLAIM_NATIVE_MACHINE")
+                native_machines.add(rec.machine_id)
+            covered_tests.update(rec.test_ids)
+
+        missing_tests = set(required_test_ids) - covered_tests
+        if missing_tests:
+            raise PermissionError(f"EVIDENCE_MISSING_REQUIRED_TESTS: {sorted(missing_tests)}")
+        if len(native_machines) < require_distinct_native_machines:
+            raise PermissionError("INSUFFICIENT_DISTINCT_NATIVE_MACHINES")
+        return {
+            "candidate_sha": candidate_sha,
+            "verified_runs": len(runs),
+            "covered_test_count": len(covered_tests),
+            "native_machines": tuple(sorted(native_machines)),
+        }
+
+    def verify_ingress_boundary(
+        self,
+        *,
+        source_surface: str,
+        target_action: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if "old_epoch_isolated" in payload or "revive_consumed_grant" in payload:
+            raise PermissionError("UNTRUSTED_RECOVERY_OR_GRANT_OVERRIDE_FORBIDDEN")
+        if source_surface in {"model_output", "tool_output", "mcp_metadata", "web_dom", "memory"}:
+            raise PermissionError(f"TAINTED_SURFACE_CANNOT_AUTHORIZE: {source_surface}")
+        if source_surface == "worker_ipc" and target_action.startswith("owner_"):
+            raise PermissionError("RESTRICTED_WORKER_CANNOT_CALL_OWNER_ADMIN_API")
+        if source_surface == "tauri_ipc" and "raw_url" in payload:
+            raise PermissionError("ARBITRARY_IPC_URL_FORBIDDEN")
+
+    def verify_api_version_compatibility(
+        self,
+        *,
+        client_protocol_version: str,
+        server_protocol_version: str = "1.0",
+        payload_fields: frozenset[str],
+        allowed_fields: frozenset[str],
+    ) -> dict[str, str]:
+        c_parts = client_protocol_version.split(".")
+        s_parts = server_protocol_version.split(".")
+        if len(c_parts) != 2 or c_parts[0] != s_parts[0]:
+            raise PermissionError(f"INCOMPATIBLE_PROTOCOL_MAJOR_VERSION: {client_protocol_version}")
+        unknown = payload_fields - allowed_fields
+        if unknown:
+            raise PermissionError(f"UNKNOWN_CONTRACT_FIELDS_REJECTED: {sorted(unknown)}")
+        return {"protocol": server_protocol_version, "compatibility": "VERIFIED"}
+
 
 @dataclass(frozen=True, slots=True)
 class MvpReleaseDecision:

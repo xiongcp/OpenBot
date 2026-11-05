@@ -1,0 +1,17 @@
+{
+  "candidate_id": null,
+  "source_sha": null,
+  "tree_sha": null,
+  "dirty": null,
+  "scope_decision_ref": null,
+  "application_version": null,
+  "protocol_version": null,
+  "db_schema_version": null,
+  "asset_manifests": [],
+  "artifacts": [],
+  "required_test_ids": [],
+  "test_runs": [],
+  "gate_results": [],
+  "publication_status": "DRAFT",
+  "release_authorization": null
+}

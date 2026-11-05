@@ -53,6 +53,12 @@ class TieredCiGateEvaluator:
                 raise PermissionError(
                     f"SETUP_PYTHON_UNAVAILABLE_PATCH_BUILD: {name} uses setup-python 3.12.12"
                 )
+            if name != "pr.yml":
+                if "main" not in text or "mvp/macos-hardening" not in text:
+                    raise PermissionError(
+                        f"WORKFLOW_MISSING_BRANCH_TRIGGERS: {name} must trigger on main and "
+                        "mvp/macos-hardening"
+                    )
         return required
 
     def evaluate_tier(

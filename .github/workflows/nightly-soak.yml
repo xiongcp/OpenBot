@@ -1,7 +1,7 @@
 name: nightly-soak
 on:
   push:
-    branches: [mvp/macos-hardening]
+    branches: [main, 'release/**', 'v1.*', mvp/macos-hardening]
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:

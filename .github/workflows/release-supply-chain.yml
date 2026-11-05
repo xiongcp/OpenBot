@@ -1,7 +1,8 @@
 name: release-gate
 on:
   push:
-    branches: [mvp/macos-hardening]
+    branches: [main, 'release/**', 'v1.*', mvp/macos-hardening]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read

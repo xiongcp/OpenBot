@@ -1,0 +1,14 @@
+flowchart TD
+  CLI["CLI"] --> API["认证本地 API"]
+  UI["Tauri 薄客户端"] --> API
+  IM["飞书入口"] --> API
+  API --> RUN["调度与有界 AgentRuntime"]
+  RUN <--> MODEL["模型网关与预算"]
+  RUN --> BROKER["Broker 审批与派发"]
+  SUP["可信 Supervisor"] --> BROKER
+  BROKER --> TOOL["受管执行器"]
+  TOOL --> VERIFY["结果验证与 UNKNOWN 核对"]
+  RUN --> DB["Writer 与权威状态"]
+  VERIFY --> DB
+  DB --> TRACE["脱敏事实投影"]
+  TRACE --> UI

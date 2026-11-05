@@ -1,0 +1,111 @@
+{
+  "repository": "xiongcp/OpenBot",
+  "review_date": "2026-11-05",
+  "timezone": "Asia/Shanghai",
+  "main_sha": "2028229123a6fc1d44ec54a1c905ef4c9f09fa05",
+  "development_branch": "codex/agent-client-observability",
+  "development_sha": "12074191a9c609a310cc5579eb548021b78305c1",
+  "development_ahead": 0,
+  "repo_metadata": {
+    "description": null,
+    "homepage": null,
+    "topics": [],
+    "license": null,
+    "has_pages": false
+  },
+  "releases": [],
+  "open_pull_requests": [],
+  "task_status_counts": {
+    "DONE": 4,
+    "BLOCKED": 3,
+    "VERIFIED": 12,
+    "IN_PROGRESS": 67,
+    "TODO": 10
+  },
+  "ci": {
+    "run_id": 42005019676,
+    "sha": "2028229123a6fc1d44ec54a1c905ef4c9f09fa05",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "os": "macos-15",
+        "arch": "arm64",
+        "passed": 399,
+        "skipped": 2,
+        "deselected": 0,
+        "job_id": 127169467135
+      },
+      {
+        "os": "ubuntu-24.04",
+        "arch": "x86_64",
+        "passed": 399,
+        "skipped": 2,
+        "deselected": 0,
+        "job_id": 127169466748
+      },
+      {
+        "os": "windows-2022",
+        "arch": "AMD64",
+        "passed": 399,
+        "skipped": 2,
+        "deselected": 0,
+        "job_id": 127169467112
+      }
+    ],
+    "limitations": [
+      "Two native_container Docker isolation tests skipped by default unless explicitly enabled",
+      "No new live user-Mac signed bundle installation or live external tenant approval executed by this read-only audit"
+    ]
+  },
+  "review_scope": "Read-only source, metadata and existing CI audit. No code changes, commits, pushes, merges, tags or deployment performed.",
+  "full_review_base_sha": "2993593a5bd010b85d76a6ca9e279fc4977718dc",
+  "incremental_review": {
+    "base_sha": "620311b4d141f3c964c90cc1a6db980dedecf365",
+    "head_sha": "2028229123a6fc1d44ec54a1c905ef4c9f09fa05",
+    "commits": 14,
+    "findings": [
+      "PR #2 merged codex/agent-client-observability (12074191) into main (20282291).",
+      "Added services/core/src/openbot/agent_runtime.py connecting bounded agent approval and execution with durable completion trace and tool result role preservation.",
+      "Added services/core/src/openbot/adapters/local_api/client_routes.py exposing scoped daemon control APIs, binding principals, restricting gateway tokens, and catching RequestConflict before ValueError.",
+      "Added apps/desktop/ bilingual native workflow client slice and .github/workflows/desktop-client.yml.",
+      "Added services/feishu_gateway/src/openbot_feishu/live_gateway.py (shared ingress, local pairing, receipt reaction cleanup, heartbeat protection) and locked lark-oapi==1.7.5 + services/feishu_gateway/src in pyproject.toml.",
+      "Remaining v1.0.0 work: harden supervisor epoch isolation proof (remove old_epoch_isolated bool trust), out-of-process daemon SIGKILL harness, remove Keychain security -w argv secret exposure, full MCP/Browser production boundaries, reloadable PatchCommitJournal, signed .app/.dmg installer, notarization, migration/upgrade state machine, license resolution, and apps/website."
+    ]
+  },
+  "previous_ci": {
+    "run_id": 41979113332,
+    "sha": "2993593a5bd010b85d76a6ca9e279fc4977718dc",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "os": "macos-15",
+        "arch": "arm64",
+        "passed": 341,
+        "skipped": 3,
+        "job_id": 127084828454
+      },
+      {
+        "os": "ubuntu-24.04",
+        "arch": "x86_64",
+        "passed": 339,
+        "skipped": 3,
+        "deselected": 1,
+        "job_id": 127084828105
+      },
+      {
+        "os": "windows-2022",
+        "arch": "AMD64",
+        "scope": "tests/contracts",
+        "passed": 41,
+        "job_id": 127084828332
+      }
+    ],
+    "limitations": [
+      "Two optional OpenAI SDK modules skipped",
+      "Native Docker qualification skipped",
+      "No new user-Mac test performed by this review"
+    ]
+  },
+  "previous_main_sha": "98ee0365a335ed297337c3c0c9aaf9cbf3d5883e",
+  "development_merged_into_main_pr": 2
+}

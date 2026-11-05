@@ -1,0 +1,8 @@
+flowchart TD
+  SRC["冻结源码候选"] --> BUILD["构建最终签名公证制品"]
+  BUILD --> QA["真实 Mac 与产品门禁"]
+  FACT["能力和版本事实源"] --> DOC["文档 官网 发行草稿"]
+  DOC --> GATE["候选证据与一致性校验"]
+  QA --> GATE
+  GATE --> RELEASE["受控发布 v1.0.0"]
+  RELEASE --> VERIFY["公开下载复检与补丁"]

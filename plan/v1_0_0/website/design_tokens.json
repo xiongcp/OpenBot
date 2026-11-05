@@ -1,0 +1,31 @@
+{
+  "colors": {
+    "ink": "#17364B",
+    "muted": "#536879",
+    "accent": "#087E8B",
+    "surface": "#FFFFFF",
+    "background": "#F5F8FA",
+    "border": "#D5E0E7",
+    "success": "#24734B",
+    "warning": "#8C5900",
+    "danger": "#B3343A"
+  },
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32,
+    48,
+    64
+  ],
+  "radius": [
+    8,
+    12,
+    16
+  ],
+  "max_content_width_px": 1200,
+  "font_stack": "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+  "notice": "Proposed tokens. Verify contrast and actual text/background pairs before claiming WCAG conformance."
+}

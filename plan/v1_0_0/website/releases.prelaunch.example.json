@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "project": "OpenBot",
+  "stage": "development",
+  "stable_release": null,
+  "beta_release": null,
+  "source_repository": "https://github.com/xiongcp/OpenBot",
+  "notice": "No published binary is claimed. This content manifest is not a Tauri updater manifest."
+}

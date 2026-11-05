@@ -1,0 +1,73 @@
+{
+  "file": "OpenBot_MVP_to_v1_0_0_Plan_v1_0.pdf",
+  "pages": 34,
+  "rendered_pages": 34,
+  "bounds_or_glyph_anomalies": [],
+  "sparse_pages_to_review": [],
+  "visual_review": "PASSED",
+  "toc": [
+    [
+      1,
+      "01 当前状态与真正剩下的工作",
+      3
+    ],
+    [
+      1,
+      "02 MVP 范围、v1.0.0 定义与排程",
+      5
+    ],
+    [
+      1,
+      "03 架构补齐与接口设计",
+      8
+    ],
+    [
+      1,
+      "04 客户端与用户流程设计",
+      11
+    ],
+    [
+      1,
+      "05 严格测试、证据与问题修复",
+      12
+    ],
+    [
+      1,
+      "06 v1.0.0 安装、升级与发布设计",
+      15
+    ],
+    [
+      1,
+      "07 GitHub 描述、Markdown 与社区入口",
+      17
+    ],
+    [
+      1,
+      "08 官网信息架构、内容与视觉设计",
+      19
+    ],
+    [
+      1,
+      "09 开发执行、逐项提交与首周清单",
+      21
+    ],
+    [
+      1,
+      "10 任务索引与依赖顺序",
+      23
+    ],
+    [
+      1,
+      "11 来源、附件与使用边界",
+      26
+    ],
+    [
+      1,
+      "12 设计图与线框：目标运行架构",
+      31
+    ]
+  ],
+  "visual_review_scope": "All 34 rendered pages checked via Chromium vertical fill analyzer and visual inspection after syncing to main@2028229123a6fc1d44ec54a1c905ef4c9f09fa05 (PR #2 merged, CI run 42005019676).",
+  "product_test_status": "NOT_RUN",
+  "artifact_sha256": "6abd8519104b16ef580eef038437357cf418c325d5d888eb8d42b001f07f8857"
+}

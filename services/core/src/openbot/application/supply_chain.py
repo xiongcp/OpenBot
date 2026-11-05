@@ -41,3 +41,19 @@ class ReleaseSupplyChainVerifier:
             verified_artifacts_count=len(checksums),
             includes_non_python_assets=has_non_py,
         )
+
+    def sync_checksums(self) -> dict[str, str]:
+        """Recompute and persist SHA-256 digests for all controlled release artifacts (V1-008)."""
+        checksums_path = self._root / "release/checksums.json"
+        doc = json.loads(checksums_path.read_text("utf-8"))
+        artifacts = dict(doc.get("artifacts", {}))
+        for rel_path in list(artifacts):
+            target = self._root / rel_path
+            if not target.is_file():
+                raise PermissionError(f"CONTROLLED_ARTIFACT_MISSING: {rel_path}")
+            artifacts[rel_path] = hashlib.sha256(target.read_bytes()).hexdigest()
+        doc["artifacts"] = artifacts
+        checksums_path.write_text(
+            json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        return artifacts

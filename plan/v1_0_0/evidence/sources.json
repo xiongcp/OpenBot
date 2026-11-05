@@ -1,0 +1,253 @@
+{
+  "R01": {
+    "title": "main 中英 README",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/98ee0365a335ed297337c3c0c9aaf9cbf3d5883e/README.md",
+      "https://github.com/xiongcp/OpenBot/blob/98ee0365a335ed297337c3c0c9aaf9cbf3d5883e/README.en.md"
+    ]
+  },
+  "R02": {
+    "title": "活动分支与差异",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/README.md",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/README.en.md",
+      "https://github.com/xiongcp/OpenBot/compare/98ee0365a335ed297337c3c0c9aaf9cbf3d5883e...2993593a5bd010b85d76a6ca9e279fc4977718dc"
+    ]
+  },
+  "R03": {
+    "title": "ClientState 实现与证据",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/application/client_state.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/docs/evidence/client-state.md"
+    ]
+  },
+  "R04": {
+    "title": "客户端方案、计划与合同",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/docs/superpowers/specs/2026-11-05-agent-client-design.md",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/docs/superpowers/plans/2026-11-05-agent-client.md",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/contracts/client-control.md"
+    ]
+  },
+  "R05": {
+    "title": "当前产品版本与依赖",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/pyproject.toml"
+    ]
+  },
+  "R06": {
+    "title": "原96项任务状态与验收",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/tasks/backlog.json"
+    ]
+  },
+  "R07": {
+    "title": "仓库元数据与发行查询",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot",
+      "https://api.github.com/repos/xiongcp/OpenBot",
+      "https://github.com/xiongcp/OpenBot/releases"
+    ]
+  },
+  "R08": {
+    "title": "最终核对的活动分支CI及三个job",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/actions/runs/41981655070",
+      "https://github.com/xiongcp/OpenBot/actions/runs/41981655070/job/127092890943",
+      "https://github.com/xiongcp/OpenBot/actions/runs/41981655070/job/127092891097",
+      "https://github.com/xiongcp/OpenBot/actions/runs/41981655070/job/127092891078"
+    ]
+  },
+  "R09": {
+    "title": "工作流实际分平台命令",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/.github/workflows/pr.yml"
+    ]
+  },
+  "R10": {
+    "title": "恢复入口与恢复服务",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/adapters/local_api/server.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/application/recovery.py"
+    ]
+  },
+  "R11": {
+    "title": "垂直切片与崩溃方法",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/application/vertical_slice.py"
+    ]
+  },
+  "R12": {
+    "title": "Keychain与SecretBroker",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/policy/secrets/broker.py"
+    ]
+  },
+  "R13": {
+    "title": "MCP传输与隔离计划",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/tools/mcp/client.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/tools/mcp/executor.py"
+    ]
+  },
+  "R14": {
+    "title": "Browser会话/网络/动作",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/tools/executors/browser/session.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/tools/executors/browser/network_policy.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/tools/browser/actions.py"
+    ]
+  },
+  "R15": {
+    "title": "实际探针与尚未覆盖的业务流程",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/docs/evidence/2026-11-05-client-live-probes.md"
+    ]
+  },
+  "R16": {
+    "title": "现有bundle构建脚本",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/scripts/build/build_pilot_bundle.py"
+    ]
+  },
+  "R17": {
+    "title": "Rust监督契约片段与固定树",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/native/supervisor/src/process_tree.rs",
+      "https://github.com/xiongcp/OpenBot/tree/2993593a5bd010b85d76a6ca9e279fc4977718dc"
+    ]
+  },
+  "R18": {
+    "title": "许可记录冲突",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/docs/adr/0001-scope-baseline.md",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/release/SBOM/spdx-pilot.spdx.json",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/THIRD_PARTY_NOTICES.md"
+    ]
+  },
+  "R19": {
+    "title": "现有SBOM与校验元数据",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/release/SBOM/spdx-pilot.spdx.json",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/release/checksums.json"
+    ]
+  },
+  "R20": {
+    "title": "用户daemon安装与启动",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/application/daemon_installer.py"
+    ]
+  },
+  "R21": {
+    "title": "已有结果验证和预算服务",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/application/state_machine.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/application/budgets.py"
+    ]
+  },
+  "R22": {
+    "title": "模型流式适配器期限与取消",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/providers/openai_compatible.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/providers/openai.py"
+    ]
+  },
+  "R23": {
+    "title": "文件补丁及恢复日志",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/tools/workspace/patch.py",
+      "https://github.com/xiongcp/OpenBot/blob/2993593a5bd010b85d76a6ca9e279fc4977718dc/services/core/src/openbot/tools/workspace/commit_journal.py"
+    ]
+  },
+  "R24": {
+    "title": "交付前增量：真实MCP容器及审批预览修复",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/compare/2993593a5bd010b85d76a6ca9e279fc4977718dc...620311b4d141f3c964c90cc1a6db980dedecf365",
+      "https://github.com/xiongcp/OpenBot/blob/620311b4d141f3c964c90cc1a6db980dedecf365/services/core/src/openbot/tools/mcp/container_read.py",
+      "https://github.com/xiongcp/OpenBot/blob/620311b4d141f3c964c90cc1a6db980dedecf365/docs/evidence/mcp-demo-container.md",
+      "https://github.com/xiongcp/OpenBot/blob/620311b4d141f3c964c90cc1a6db980dedecf365/docs/evidence/approval-preview-hash.md",
+      "https://github.com/xiongcp/OpenBot/blob/620311b4d141f3c964c90cc1a6db980dedecf365/tests/components/native_poc/test_mcp_container.py",
+      "https://github.com/xiongcp/OpenBot/blob/620311b4d141f3c964c90cc1a6db980dedecf365/components/locks/mcp-demo.json"
+    ]
+  },
+  "W01": {
+    "title": "Semantic Versioning 2.0.0",
+    "urls": [
+      "https://semver.org/"
+    ]
+  },
+  "W02": {
+    "title": "MCP固定版本生命周期（对照已锁版本）",
+    "urls": [
+      "https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle",
+      "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle"
+    ]
+  },
+  "W03": {
+    "title": "Tauri安全边界",
+    "urls": [
+      "https://v2.tauri.app/security/",
+      "https://v2.tauri.app/security/capabilities/"
+    ]
+  },
+  "W04": {
+    "title": "WCAG 2.2",
+    "urls": [
+      "https://www.w3.org/TR/WCAG22/"
+    ]
+  },
+  "W05": {
+    "title": "Apple SMAppService",
+    "urls": [
+      "https://developer.apple.com/documentation/servicemanagement/smappservice"
+    ]
+  },
+  "W06": {
+    "title": "Apple公证与Developer ID",
+    "urls": [
+      "https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution",
+      "https://developer.apple.com/developer-id/"
+    ]
+  },
+  "W07": {
+    "title": "Tauri updater 签名与格式",
+    "urls": [
+      "https://v2.tauri.app/plugin/updater/"
+    ]
+  },
+  "W08": {
+    "title": "GitHub artifact attestations 边界",
+    "urls": [
+      "https://docs.github.com/en/actions/concepts/security/artifact-attestations"
+    ]
+  },
+  "W09": {
+    "title": "GitHub Releases",
+    "urls": [
+      "https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases"
+    ]
+  },
+  "W10": {
+    "title": "GitHub 仓库许可说明",
+    "urls": [
+      "https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository"
+    ]
+  },
+  "W11": {
+    "title": "Starlight 多语言文档",
+    "urls": [
+      "https://starlight.astro.build/guides/i18n/"
+    ]
+  },
+  "R25": {
+    "title": "main 最新合入快照（PR #2 合并至 20282291）与新增 Runtime/Client/Desktop/Feishu 切片",
+    "urls": [
+      "https://github.com/xiongcp/OpenBot/commit/2028229123a6fc1d44ec54a1c905ef4c9f09fa05",
+      "https://github.com/xiongcp/OpenBot/compare/620311b4d141f3c964c90cc1a6db980dedecf365...2028229123a6fc1d44ec54a1c905ef4c9f09fa05",
+      "https://github.com/xiongcp/OpenBot/actions/runs/42005019676",
+      "https://github.com/xiongcp/OpenBot/blob/2028229123a6fc1d44ec54a1c905ef4c9f09fa05/services/core/src/openbot/agent_runtime.py",
+      "https://github.com/xiongcp/OpenBot/blob/2028229123a6fc1d44ec54a1c905ef4c9f09fa05/services/core/src/openbot/adapters/local_api/client_routes.py",
+      "https://github.com/xiongcp/OpenBot/blob/2028229123a6fc1d44ec54a1c905ef4c9f09fa05/pyproject.toml"
+    ]
+  }
+}

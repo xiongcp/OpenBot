@@ -1,0 +1,36 @@
+name: Bug report / 问题报告
+description: Report a reproducible issue using redacted details.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "请勿提交密钥、token、cookie、完整数据库或私人消息。安全问题请按 SECURITY.md 的渠道报告。"
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit / 版本或提交
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, architecture and installation method / 系统、架构和安装方式
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction / 最小复现
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result / 预期与实际
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence and unknown effects / 脱敏证据与未确定的效果
+      description: Include safe task identifiers and whether an external action may already have happened.
