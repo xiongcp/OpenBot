@@ -155,12 +155,21 @@ class LocalControlApiServer:
         prof_hdr = lower_headers.get("x-openbot-profile", self._profile_id)
         if prof_hdr != self._profile_id or grant.profile_id != self._profile_id:
             return None, _json_resp(403, {"code": "PROFILE_MISMATCH"})
+        if grant.principal_id != self._ctx.principal_id:
+            return None, _json_resp(403, {"code": "PRINCIPAL_MISMATCH"})
         return grant, None
 
     def handle(self, req: ApiRequest) -> ApiResponse:
         grant, err = self._authenticate(req)
         if err is not None or grant is None:
             return err or _json_resp(401, {"code": "UNAUTHORIZED"})
+
+        if grant.scope == "feishu_gateway" and req.path not in {
+            "/v1/feishu/config",
+            "/v1/feishu/events",
+            "/v1/feishu/health",
+        }:
+            return _json_resp(403, {"code": "GATEWAY_SCOPE_FORBIDDEN"})
 
         if req.method != "GET" and grant.scope == "webview_readonly":
             return _json_resp(403, {"code": "READONLY_SCOPE_FORBIDDEN"})
