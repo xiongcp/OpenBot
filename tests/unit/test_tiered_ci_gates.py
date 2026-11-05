@@ -93,6 +93,7 @@ def test_tiered_ci_gates_run_security_in_pr_and_block_on_injected_failure_or_ski
             "mypy",
             "--platform",
             "win32",
+            "--follow-imports=silent",
             str(ROOT / "services/core/src/openbot/application/scheduler.py"),
             str(ROOT / "services/core/src/openbot/tools/executors/supervision_port.py"),
             str(ROOT / "services/core/src/openbot/application/macos_gate.py"),

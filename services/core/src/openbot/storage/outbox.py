@@ -404,7 +404,9 @@ class OutboxStore:
         raw = self._writer.submit(
             WriterCommand(request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup)
         ).result(
-            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            timeout=min(
+                300.0, max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            )
         )
         parsed = strict_json(raw)
         claimed = parsed["claimed"]

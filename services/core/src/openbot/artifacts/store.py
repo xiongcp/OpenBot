@@ -325,7 +325,10 @@ class ArtifactStore:
                     request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup
                 )
             ).result(
-                timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+                timeout=min(
+                    300.0,
+                    max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05),
+                )
             )
         except BaseException:
             final_path.unlink(missing_ok=True)
@@ -526,7 +529,9 @@ class ArtifactStore:
         raw = self._writer.submit(
             WriterCommand(request_id, fingerprint, "normal", deadline_monotonic_ms, apply, lookup)
         ).result(
-            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            timeout=min(
+                300.0, max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            )
         )
         res = dict(strict_json(raw))
         for key in res.get("tombstoned_keys", []):

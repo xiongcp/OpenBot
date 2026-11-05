@@ -389,7 +389,9 @@ class OutboxService:
                 deadline_monotonic_ms=deadline_monotonic_ms,
             )
         ).result(
-            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            timeout=min(
+                300.0, max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            )
         )
         return dict(strict_json(raw))
 

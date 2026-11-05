@@ -181,7 +181,9 @@ class ApprovalService:
         result = self._writer.submit(
             WriterCommand(request_id, fingerprint, "approval", deadline_monotonic_ms, apply, lookup)
         ).result(
-            timeout=max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            timeout=min(
+                300.0, max(0.001, (deadline_monotonic_ms - time.monotonic() * 1000) / 1000 + 0.05)
+            )
         )
         if strict_json(result)["approval_status"] == "REVOKED":
             raise PermissionError(
