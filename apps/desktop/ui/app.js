@@ -82,6 +82,18 @@ function renderDetails() {
   target.append(list);
   if (event.data.text) target.append(el('pre', event.data.text));
 }
+function renderPairing() {
+  const info = snapshot?.feishu, target = $('feishu-candidates'); target.replaceChildren();
+  text('feishu-stage', `${info?.app_id || '—'} · ${t(info?.stage || 'NOT_CONNECTED')}`);
+  if (!info?.candidates?.length) target.append(el('p', t('noCandidates'), 'muted'));
+  for (const candidate of info?.candidates || []) {
+    const card = el('article', null, 'approval-card'), list = el('dl');
+    for (const key of ['tenant_key','app_id','open_id','chat_id']) list.append(el('dt',t(key)),el('dd',candidate[key]));
+    const confirm = el('button',t('confirmPair'),'primary'); confirm.dataset.mutation = '';
+    confirm.addEventListener('click', () => action(() => invoke('client_confirm_pair', { candidateId: candidate.candidate_id })));
+    card.append(list,confirm); target.append(card);
+  }
+}
 function renderApprovals() {
   const list = $('approvals-list'); list.replaceChildren();
   const approvals = snapshot?.approvals?.approvals || [];
@@ -134,13 +146,15 @@ function render(force = false) {
   text('run-title', run?.goal || t('empty'));
   text('run-subtitle', run ? `${t('revision')} ${run.config_revision ?? '—'} · ${trace.events.find(e => e.kind === 'MODEL_REQUESTED')?.data.model || '—'}` : t('emptyHelp'));
   text('run-state', run ? t(run.state) : '—'); text('run-id', run?.run_id || '—');
+  $('start-task').hidden = !run || run.state !== 'QUEUED' || !!run.run_id;
+  renderPairing();
   $('cancel-task').hidden = !run || ['SUCCEEDED','FAILED','CANCELLED','PARTIAL'].includes(run.state);
   text('run-notice', run?.state === 'RECONCILING' ? t('unknown') : trace.missingParents.length ? t('missing') : t('reconcile'));
   $('run-notice').hidden = !run?.requires_reconciliation && !trace.missingParents.length && run?.state !== 'RECONCILING';
   const n = totals(trace.events); text('token-total', trace.events.length ? (n.input + n.output).toLocaleString() : '—');
   text('token-split', n.estimated ? t('estimate') : `${t('input')} ${n.input} / ${t('output')} ${n.output}`); text('tool-total', n.calls); text('event-count', trace.events.length);
   const health = snapshot?.health || {}, healthList = $('health-list'); healthList.replaceChildren();
-  for (const [name, ready] of [['daemon',connected],['model',health.credentials_configured],['isolation',health.executor_available],['feishu',health.gateway === 'connected']]) {
+  for (const [name, ready] of [['daemon',connected],['model',health.credentials_configured],['isolation',health.executor_available],['feishu',health.gateway === 'CONNECTED']]) {
     const row = el('div', null, 'health-row'); row.append(el('span', t(name)), el('span', t(ready ? 'ready' : 'unavailable'), ready ? 'ready' : 'unavailable')); healthList.append(row);
   }
   text('approval-count', snapshot?.approvals.approvals.length || 0);
@@ -181,6 +195,7 @@ $('task-form').addEventListener('submit', event => { event.preventDefault(); act
   $('task-dialog').close(); selectedTask = created.task_id; selectedEvent = null; trace = emptyTrace(); switchView('runs');
   await invoke('client_start', { taskId: created.task_id });
 }); });
+$('start-task').addEventListener('click', () => action(() => invoke('client_start', { taskId: selectedTask })));
 $('cancel-task').addEventListener('click', () => action(async () => {
   const run = snapshot.runs.runs.find(r => r.task_id === selectedTask);
   await invoke('client_cancel', { taskId: selectedTask, expectedVersion: run.version });

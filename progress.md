@@ -125,4 +125,6 @@
 
 - 2026-11-05: 已核验飞书指定真人合成文本完全匹配；tenant/app/sender 字段存在，零外发、零工具、未自动配对。原生 macOS CI 41988264209 success。执行中断原因回归 RED 1 failed / 7 passed，限定安全原因码后相关 22 passed，未知异常内容仍不持久化。
 
-- 2026-11-05: 飞书网关普通 Task 入口绕过与 token principal 混淆 RED 2 failed 后已封闭。现有入站集成迁移到新受限入口，未删除断言。完整验证 feishu-composition-20261105：406 passed / 2 native skips，8/8 checks；实际 WebSocket 到共享 Task 仍待现场联调。
+- 2026-11-05: 飞书网关普通 Task 入口绕过与 token principal 混淆 RED 2 failed 后已封闭。现有入站集成迁移到新受限入口，未删除断言。完整验证 feishu-composition-20261105：408 passed / 2 native skips，8/8 checks；实际 WebSocket 到共享 Task 仍待现场联调。
+
+- 自动审批拒绝移出失败测试和全目录自动修复；未执行该命令，保留全部回归并实现 SDK 消费者。新生命周期测试暴露 stdin 未 flush 的 BrokenPipe，修复后 4/4 网关单测通过。9d25a5d 的 CI 暴露旧入站测试仍走普通 Task 入口；后续共享入口提交迁移该集成，保留原去重/ACK/拒绝断言。

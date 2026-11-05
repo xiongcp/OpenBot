@@ -21,7 +21,7 @@ class _GatewayApiClient:
         return self._api.handle(
             ApiRequest(
                 "POST",
-                "/v1/tasks",
+                "/v1/feishu/events",
                 headers={
                     "Host": "127.0.0.1:41931",
                     "Authorization": f"Bearer {self._token}",
@@ -49,30 +49,32 @@ class _RecordingReactionClient:
 
 def test_feishu_inbound_acks_only_after_persist_and_rejects_group_stranger_and_oversized(
     local_api_env,
+    tmp_path,
 ) -> None:
     api, context, writer, _, _, _, _, _, gw_token, _ = local_api_env
-    pairing = PairingService(writer)
-    chal = pairing.create_local_challenge(
-        profile_id="pro_test1", expected_tenant_key="ten_1", expected_app_id="app_1"
-    )
-    cand = pairing.submit_remote_claim(
-        challenge_id=chal.challenge_id,
-        code=chal.code,
-        tenant_key="ten_1",
-        app_id="app_1",
-        open_id="ou_owner_new",
-        display_name="Owner",
-    )
-    pairing.confirm_candidate_locally(
-        context, cand.candidate_id, request_id="inb-pair-1", deadline_monotonic_ms=999999999999
-    )
+    from openbot.adapters.local_api.client_routes import ClientRoutes
+    from openbot.application.feishu_ingress import FeishuIngress
 
+    from tests.integration.test_agent_runtime import make_runtime
+    from tests.integration.test_client_state import apply_config
+
+    runtime, state, _ = make_runtime(local_api_env, tmp_path, model_tool=False)
+    runtime.model_factory = None
+    apply_config(state, feishu_enabled=True)
+    ingress = FeishuIngress(state, api._inbox, runtime)
+    ingress.configure("cli_test", "inbound-configure")
+    pending = ingress.receive(
+        '{"event_id":"setup","tenant_key":"ten_1","app_id":"cli_test","open_id":"ou_owner_new","chat_id":"oc_test","text":"pair"}'
+    )
+    ingress.confirm(pending["candidate_id"], "inbound-confirm")
+    api._client = ClientRoutes(state, runtime, ingress)
+    pairing = PairingService(writer)
     client = _GatewayApiClient(api, gw_token)
     reactions = _RecordingReactionClient()
     adapter = FeishuInboundAdapter(
         config=FeishuInboundConfig(
             tenant_key="ten_1",
-            app_id="app_1",
+            app_id="cli_test",
             workspace_id="wsp_test1",
             max_attachment_bytes=1024,
         ),
@@ -86,12 +88,13 @@ def test_feishu_inbound_acks_only_after_persist_and_rejects_group_stranger_and_o
             "event_id": "evt_msg_1",
             "event_type": "im.message.receive_v1",
             "tenant_key": "ten_1",
-            "app_id": "app_1",
+            "app_id": "cli_test",
         },
         "event": {
             "sender": {"sender_id": {"open_id": "ou_owner_new"}},
             "message": {
                 "message_id": "om_1",
+                "chat_id": "oc_test",
                 "chat_type": "p2p",
                 "message_type": "text",
                 "content": '{"text":"analyze repo"}',
@@ -157,3 +160,5 @@ def test_feishu_inbound_acks_only_after_persist_and_rejects_group_stranger_and_o
     r_fail = adapter.handle_ws_event(fail_ev)
     assert r_fail.ws_ack is False
     assert r_fail.rejection_code == "INBOX_PERSIST_FAILED"
+
+    runtime.close()

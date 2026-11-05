@@ -655,6 +655,7 @@ def _serve_daemon_process(
         from openbot.adapters.local_api.client_routes import ClientRoutes
         from openbot.application.agent_runtime import AgentRuntime
         from openbot.application.client_state import ClientState
+        from openbot.application.feishu_ingress import FeishuIngress
         from openbot.application.runtime_factory import model_factory
         from openbot.observability.redaction import RedactionPipeline
         from openbot.tools.mcp.container_read import ContainerReadTool
@@ -681,7 +682,7 @@ def _serve_daemon_process(
                 model_credentials, lambda: state.settings()["config"]["mode"]
             ),
         )
-        client_routes = ClientRoutes(state, runtime)
+        client_routes = ClientRoutes(state, runtime, FeishuIngress(state, inbox, runtime))
 
     tokens = ScopedTokenStore()
     token_path = profile_dir / "owner_cli.token"
@@ -699,6 +700,20 @@ def _serve_daemon_process(
         os.write(fd_tok, (owner_token + "\n").encode("utf-8"))
     finally:
         os.close(fd_tok)
+
+    if client_routes is not None and hasattr(os, "O_NOFOLLOW"):
+        gateway_token = tokens.issue(
+            profile_id=profile_id, principal_id=context.principal_id, scope="feishu_gateway"
+        )
+        gateway_path = profile_dir / "feishu_gateway.token"
+        fd_gateway = os.open(
+            gateway_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
+        )
+        try:
+            os.fchmod(fd_gateway, 0o600)
+            os.write(fd_gateway, (gateway_token + "\n").encode())
+        finally:
+            os.close(fd_gateway)
 
     api = LocalControlApiServer(
         profile_id=profile_id,

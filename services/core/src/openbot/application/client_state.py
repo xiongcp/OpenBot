@@ -328,10 +328,19 @@ class ClientState:
             if old:
                 return canonicalize(old)
             settings = self._settings(db)
+            inbound = db.execute(
+                "SELECT source_scope FROM inbox WHERE task_id=?", (task_id,)
+            ).fetchone()
+            source = (
+                "FEISHU"
+                if inbound and strict_json(inbound[0]).get("channel") == "feishu"
+                else "LOCAL"
+            )
             run = {
                 "run_id": "run_" + secrets.token_hex(16),
                 "config_revision": settings["revision"],
                 "config": settings["config"],
+                "source": source,
                 "started_at_ms": time.time_ns() // 1_000_000,
             }
             checkpoint = strict_json(
@@ -441,7 +450,7 @@ class ClientState:
                         "kind": kind,
                         "occurred_at_ms": created_at,
                         "config_revision": run["config_revision"],
-                        "data": {"status": "STARTED"},
+                        "data": {"status": "STARTED", "source": run.get("source", "LOCAL")},
                     }
                 else:
                     event = strict_json(raw)["receipt"]

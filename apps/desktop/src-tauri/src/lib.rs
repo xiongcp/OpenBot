@@ -11,6 +11,7 @@ fn snapshot(control: &Control) -> Result<Value> {
         "runs":control.call("GET","/v1/client/runs",None)?,
         "approvals":control.call("GET","/v1/client/approvals",None)?,
         "health":control.call("GET","/v1/client/health",None)?,
+        "feishu":control.call("GET","/v1/client/feishu",None)?,
     }))
 }
 #[tauri::command]
@@ -48,6 +49,15 @@ async fn client_start(control: State<'_, Control>, task_id: String) -> Result<Va
         "POST",
         &format!("/v1/client/tasks/{task_id}/start"),
         Some(json!({})),
+    )
+}
+#[tauri::command]
+async fn client_confirm_pair(control: State<'_, Control>, candidate_id: String) -> Result<Value> {
+    valid_id(&candidate_id, "pcn_")?;
+    control.call(
+        "POST",
+        "/v1/client/feishu/confirm",
+        Some(json!({"candidate_id":candidate_id,"confirm":true})),
     )
 }
 #[tauri::command]
@@ -134,6 +144,7 @@ pub fn run() {
             client_trace,
             client_create,
             client_start,
+            client_confirm_pair,
             client_cancel,
             client_preview_settings,
             client_apply_settings,

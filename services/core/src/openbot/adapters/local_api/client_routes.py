@@ -6,13 +6,17 @@ from typing import Any
 
 from openbot.application.agent_runtime import AgentRuntime
 from openbot.application.client_state import ClientState
+from openbot.application.feishu_ingress import FeishuIngress
 from openbot.application.operations import task_record
 from openbot.contracts import ContractError, strict_json
 
 
 class ClientRoutes:
-    def __init__(self, state: ClientState, runtime: AgentRuntime):
+    def __init__(
+        self, state: ClientState, runtime: AgentRuntime, feishu: FeishuIngress | None = None
+    ):
         self.state, self.runtime = state, runtime
+        self.feishu = feishu
 
     def _safe(self, text: str) -> str:
         return self.state.redactor.sanitize_sink(
@@ -99,6 +103,39 @@ class ClientRoutes:
         request_id: str,
         min_retained_seq: int,
     ) -> tuple[int, dict[str, Any]] | None:
+        if self.feishu and (path.startswith("/v1/feishu/") or path.startswith("/v1/client/feishu")):
+            self.state.settings()
+            if principal_id != self.state.context.principal_id:
+                raise PermissionError("CLIENT_OWNER_MISMATCH")
+            if path.startswith("/v1/feishu/"):
+                if scope != "feishu_gateway":
+                    raise PermissionError("FEISHU_GATEWAY_SCOPE_REQUIRED")
+                if method == "GET" and path == "/v1/feishu/config":
+                    return 200, self.feishu.config()
+                if method == "POST" and path == "/v1/feishu/events":
+                    return 201, self.feishu.receive(body)
+                if method == "POST" and path == "/v1/feishu/health":
+                    return 200, self.feishu.heartbeat(body)
+            else:
+                if scope != "owner_cli":
+                    raise PermissionError("FEISHU_LOCAL_OWNER_REQUIRED")
+                if method == "GET" and path == "/v1/client/feishu":
+                    return 200, self.feishu.snapshot()
+                doc = strict_json(body)
+                if (
+                    method == "POST"
+                    and path == "/v1/client/feishu/configure"
+                    and set(doc) == {"app_id"}
+                ):
+                    return 200, self.feishu.configure(doc["app_id"], request_id)
+                if (
+                    method == "POST"
+                    and path == "/v1/client/feishu/confirm"
+                    and set(doc) == {"candidate_id", "confirm"}
+                    and doc["confirm"] is True
+                ):
+                    return 200, self.feishu.confirm(doc["candidate_id"], request_id)
+            raise ContractError("FEISHU_ROUTE_OR_BODY_INVALID")
         if not path.startswith("/v1/client/"):
             return None
         if principal_id != self.state.context.principal_id:
@@ -113,7 +150,10 @@ class ClientRoutes:
         if method == "POST" and path == "/v1/client/settings/apply":
             return 200, self.state.apply(body, request_id)
         if method == "GET" and path == "/v1/client/health":
-            return 200, self.runtime.health()
+            health = self.runtime.health()
+            if self.feishu:
+                health["gateway"] = self.feishu.snapshot()["stage"]
+            return 200, health
         if method == "GET" and path == "/v1/client/runs":
             return 200, self.runs()
         if method == "GET" and path == "/v1/client/approvals":

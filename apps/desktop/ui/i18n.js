@@ -1,4 +1,10 @@
 const pairs = {
+  startQueued:['启动排队任务','Start queued task'], feishuPairing:['飞书身份确认','Feishu identity confirmation'],
+  pairingHint:['核对租户、App、用户和聊天 ID 后，仅为本人私聊确认绑定。首条消息不会执行任务。','Verify tenant, app, user and chat IDs before binding your private chat. First contact does not run a task.'],
+  confirmPair:['确认绑定此私聊','Confirm this private chat'], noCandidates:['没有待确认的私聊','No private chats awaiting confirmation'],
+  tenant_key:['租户 ID','Tenant ID'], app_id:['App ID','App ID'], open_id:['用户 ID','User ID'], chat_id:['聊天 ID','Chat ID'],
+  NOT_CONNECTED:['未连接','Not connected'], CONNECTING:['连接中','Connecting'], STOPPED:['已停止','Stopped'],
+
   recorded:['已记录','Recorded'], proposed:['仅提案','Proposed only'], dispatched:['已派发','Dispatched'], returned:['已返回并核验','Returned and verified'], interrupted:['已中断','Interrupted'],
   event_id:['事件 ID','Event ID'], run_id:['运行 ID','Run ID'], config_revision:['运行配置版本','Run configuration'], parent_event_id:['因果父事件','Parent event'], artifact_id:['产物 ID','Artifact ID'], sha256:['SHA-256','SHA-256'], skill_id:['Skill ID','Skill ID'], version:['版本','Version'], source:['来源','Source'], server_id:['MCP 服务','MCP server'], tool:['工具','Tool'], operation_id:['操作 ID','Operation ID'], attempt_id:['尝试 ID','Attempt ID'], approval_id:['审批 ID','Approval ID'], input_tokens:['输入 Token','Input tokens'], output_tokens:['输出 Token','Output tokens'], usage_estimated:['用量为估计值','Estimated usage'], error_code:['中断原因','Interruption reason'], status:['记录状态','Recorded status'],
   product:['OpenBot','OpenBot'], tagline:['每一步，都有依据。','Every step, accounted for.'],
