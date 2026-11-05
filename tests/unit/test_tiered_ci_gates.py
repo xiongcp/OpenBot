@@ -16,6 +16,14 @@ def test_tiered_ci_gates_run_security_in_pr_and_block_on_injected_failure_or_ski
     assert "nightly-soak.yml" in workflows
     assert "release-supply-chain.yml" in workflows
     assert not list((ROOT / ".github/workflows").glob("*/*.yml"))
+    for wf_name in (
+        "pr-gate.yml",
+        "platform-macos.yml",
+        "nightly-soak.yml",
+        "release-supply-chain.yml",
+    ):
+        wf_text = (ROOT / ".github/workflows" / wf_name).read_text(encoding="utf-8")
+        assert "mvp/macos-hardening" in wf_text
 
     bad_repo = tmp_path / "bad_repo"
     (bad_repo / ".github/workflows/sub").mkdir(parents=True)
