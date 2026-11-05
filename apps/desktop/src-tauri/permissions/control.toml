@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-client-control"
+description = "Fixed profile-bound control commands; no filesystem, shell or arbitrary HTTP. / 固定 profile 控制命令"
+commands.allow = ["client_snapshot", "client_trace", "client_create", "client_start", "client_cancel", "client_preview_settings", "client_apply_settings", "client_decide", "client_reconnect"]

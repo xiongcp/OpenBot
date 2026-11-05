@@ -1,0 +1,23 @@
+name: desktop-client
+on:
+  push:
+    paths: ['apps/desktop/**', 'scripts/build_desktop.py', '.github/workflows/desktop-client.yml']
+  pull_request:
+    paths: ['apps/desktop/**', 'scripts/build_desktop.py', '.github/workflows/desktop-client.yml']
+permissions:
+  contents: read
+jobs:
+  macos-development:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Frontend projections and translations
+        run: node --test apps/desktop/tests/projection.test.mjs
+      - name: Prepare fixed Rust toolchain
+        run: rustup toolchain install 1.91.0 --profile minimal --component rustfmt
+      - name: Fixed command boundary tests
+        run: cargo +1.91.0 test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+      - name: Rust format
+        run: cargo +1.91.0 fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+      - name: Native development build
+        run: cargo +1.91.0 build --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --offline

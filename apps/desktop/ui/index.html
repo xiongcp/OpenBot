@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenBot</title><link rel="stylesheet" href="style.css"><script type="module" src="app.js"></script></head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="brandmark">o<span>·</span></span><strong>OpenBot</strong><small>LOCAL AGENT</small></div>
+  <div class="workspace"><span class="workspace-icon">OB</span><div><b data-i18n="workspace"></b><small>macOS · development</small></div><span class="live-dot"></span></div>
+  <button id="new-task" class="new-task" data-i18n="newTask" data-mutation></button>
+  <nav aria-label="Navigation"><button class="nav active" data-view="runs"><span>⌘</span><b data-i18n="runs"></b></button><button class="nav" data-view="approvals"><span>◇</span><b data-i18n="approvals"></b><em id="approval-count">0</em></button><button class="nav" data-view="inventory"><span>⊞</span><b data-i18n="inventory"></b></button><button class="nav" data-view="settings"><span>⚙</span><b data-i18n="settings"></b></button></nav>
+  <div class="recent-heading" data-i18n="recent"></div><div id="task-list" class="task-list"></div>
+  <div class="sidebar-bottom"><div id="health-list"></div><button id="reconnect" data-i18n="refresh"></button><p data-i18n="tagline"></p></div>
+</aside>
+<main>
+  <header><div class="breadcrumb">WORKSPACE <span>/</span> LOCAL AGENT</div><button id="language" class="language" data-i18n="language"></button></header>
+  <div id="banner" class="banner" role="status" hidden></div>
+  <section id="view-runs" class="view">
+    <div class="page-heading"><div><p class="eyebrow" data-i18n="overview"></p><h1 id="run-title" data-i18n="empty"></h1><p id="run-subtitle" class="muted"></p></div><button id="cancel-task" class="secondary" data-i18n="cancel" data-mutation hidden></button></div>
+    <div id="run-notice" class="notice" hidden></div>
+    <div class="metrics"><article><span data-i18n="state"></span><strong id="run-state">—</strong><small id="run-id">—</small></article><article><span data-i18n="tokens"></span><strong id="token-total">—</strong><small id="token-split">—</small></article><article><span data-i18n="calls"></span><strong id="tool-total">—</strong><small data-i18n="cost"></small></article></div>
+    <div class="execution-layout"><section class="execution panel"><div class="panel-heading"><div><h2 data-i18n="graph"></h2><p data-i18n="graphNote"></p></div><span id="event-count" class="count">0</span></div><div id="graph-scroll"><div id="graph" class="graph"></div></div><div class="legend"><span><i class="dot"></i> <b data-i18n="TOOL_RETURNED"></b></span><span><i class="dot amber"></i> <b data-i18n="WAITING_APPROVAL"></b></span><span><i class="dot gray"></i> <b data-i18n="RUN_INTERRUPTED"></b></span></div><details class="timeline"><summary data-i18n="timeline"></summary><ol id="timeline-list"></ol></details></section><aside class="inspector panel"><div class="panel-heading"><h2 data-i18n="details"></h2><span>↗</span></div><div id="details" class="details"></div></aside></div>
+    <section id="result-section" class="panel result" hidden><h2 data-i18n="result"></h2><pre id="result-text"></pre></section>
+  </section>
+  <section id="view-approvals" class="view" hidden><div class="page-heading"><div><p class="eyebrow">CONTROL</p><h1 data-i18n="approvals"></h1><p class="muted" data-i18n="approvalNote"></p></div></div><div id="approvals-list"></div></section>
+  <section id="view-inventory" class="view" hidden><div class="page-heading"><div><p class="eyebrow">CAPABILITIES</p><h1 data-i18n="inventory"></h1><p class="muted" data-i18n="inventoryNote"></p></div></div><div id="inventory-list" class="inventory-list"></div></section>
+  <section id="view-settings" class="view" hidden><div class="page-heading"><div><p class="eyebrow">CONFIGURATION</p><h1 data-i18n="settings"></h1><p class="muted" data-i18n="secretNote"></p></div><span id="settings-revision" class="pill"></span></div>
+    <form id="settings-form" class="panel settings-form"><label><span data-i18n="locale"></span><select name="locale"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label><label><span data-i18n="model"></span><input name="model" maxlength="96" required></label><label><span data-i18n="mode"></span><select name="mode"><option value="OFFLINE" data-i18n="OFFLINE"></option><option value="LOCAL_MODEL" data-i18n="LOCAL_MODEL"></option><option value="CONNECTED" data-i18n="CONNECTED"></option></select></label><label><span data-i18n="steps"></span><input name="max_steps" type="number" min="1" max="8" required></label><label class="check"><input name="skill_enabled" type="checkbox"><span data-i18n="skill_enabled"></span></label><label class="check"><input name="mcp_enabled" type="checkbox"><span data-i18n="mcp_enabled"></span></label><label class="check"><input name="feishu_enabled" type="checkbox"><span data-i18n="feishu_enabled"></span></label><p class="form-note" data-i18n="activation"></p><button class="primary" type="submit" data-i18n="preview" data-mutation></button></form>
+    <section id="settings-preview" class="panel preview" hidden><h2 data-i18n="pending"></h2><pre id="settings-diff"></pre><p data-i18n="activation"></p><button id="apply-settings" class="primary" data-i18n="apply" data-mutation></button></section>
+  </section>
+  <footer>OPENBOT <span>·</span> macOS development <span>·</span> <span data-i18n="tagline"></span></footer>
+</main>
+<dialog id="task-dialog"><form id="task-form"><div class="dialog-heading"><h2 data-i18n="newTask"></h2><button type="button" id="close-dialog" class="icon-button" aria-label="关闭 / Close">×</button></div><label for="goal" data-i18n="goal"></label><textarea id="goal" maxlength="4000" required rows="5"></textarea><p class="muted" data-i18n="taskHint"></p><button class="primary" data-i18n="create" data-mutation></button></form></dialog>
+</body></html>
