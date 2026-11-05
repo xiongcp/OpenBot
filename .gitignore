@@ -15,3 +15,22 @@ __pycache__/
 *.log
 !evidence/implementation/*.log
 /evidence/implementation/runs/
+
+# Local credentials and daemon state / 本地凭据与 daemon 状态
+.env
+.env.*
+!.env.example
+!.env.template
+*.token
+challenges.json
+daemon_session.json
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.pem
+*.key
+*.p12
+*.pfx
+/profiles/
+/.openbot/
