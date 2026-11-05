@@ -84,6 +84,7 @@ class _ByteListResponse:
 
     async def iter_bytes(self):  # type: ignore[no-untyped-def]
         for chunk in self._chunks:
+            await asyncio.sleep(0)
             yield chunk
 
 
@@ -121,6 +122,7 @@ class OpenAICompatibleAdapter:
         self._max_retries = max_gateway_retries
         self._backoff_ms = retry_backoff_ms
         self._cancelled: set[str] = set()
+        self._inflight: dict[str, asyncio.Task[Any]] = {}
         self._closed = False
 
     def capabilities(self) -> frozenset[str]:
@@ -236,63 +238,75 @@ class OpenAICompatibleAdapter:
             # 2. Reserve budget for this exact HTTP attempt
             attempt_ref = f"{request.request_id}:try_{attempt_idx}"
             self._budget.reserve(attempt_ref, request.reserved_cost_units)
+            cur_task = asyncio.current_task()
+            if cur_task is not None:
+                self._inflight[request.request_id] = cur_task
             received_any_chunk = False
             settled = False
             try:
-                raw_chunks = await self._transport.stream_chat(payload)
-                text_parts: list[str] = []
-                tool_accum: dict[int, dict[str, str]] = {}
-                finish_reason: str | None = None
-                done = False
-                usage: dict[str, Any] | None = None
+                async with asyncio.timeout(remaining_s):
+                    raw_chunks = await self._transport.stream_chat(payload)
+                    stream_source = (
+                        raw_chunks
+                        if hasattr(raw_chunks, "iter_bytes")
+                        else _ByteListResponse(raw_chunks)
+                    )
+                    text_parts: list[str] = []
+                    tool_accum: dict[int, dict[str, str]] = {}
+                    finish_reason: str | None = None
+                    done = False
+                    usage: dict[str, Any] | None = None
 
-                async for chunk in _sse_data(_ByteListResponse(raw_chunks)):
-                    received_any_chunk = True
-                    if request.request_id in self._cancelled:
-                        raise ProviderFailure("Request cancelled after first stream chunk")
-                    if chunk is None:
-                        done = True
-                        break
-                    if chunk.get("usage") is not None:
-                        if type(chunk["usage"]) is not dict:
-                            raise ProviderFailure("Malformed usage object")
-                        usage = chunk["usage"]
-                    choices = chunk.get("choices")
-                    if type(choices) is not list or len(choices) > 1:
-                        raise ProviderFailure("Malformed choices in stream")
-                    for choice in choices:
-                        delta = choice.get("delta", {})
-                        if type(delta) is not dict:
-                            raise ProviderFailure("Malformed delta object")
-                        c_delta = delta.get("content")
-                        if c_delta is not None:
-                            if type(c_delta) is not str or finish_reason is not None:
-                                raise ProviderFailure("Invalid content delta")
-                            text_parts.append(c_delta)
-                        t_calls = delta.get("tool_calls")
-                        if t_calls is not None:
-                            if type(t_calls) is not list or finish_reason is not None:
-                                raise ProviderFailure("Invalid tool_calls delta")
-                            for tc in t_calls:
-                                idx = tc.get("index", 0)
-                                if type(idx) is not int or idx < 0:
-                                    raise ProviderFailure("Invalid tool_call index")
-                                slot = tool_accum.setdefault(
-                                    idx, {"id": "", "name": "", "arguments": ""}
-                                )
-                                if tc.get("id"):
-                                    slot["id"] += str(tc["id"])
-                                fn = tc.get("function")
-                                if isinstance(fn, dict):
-                                    if fn.get("name"):
-                                        slot["name"] += str(fn["name"])
-                                    if fn.get("arguments"):
-                                        slot["arguments"] += str(fn["arguments"])
-                        r_reason = choice.get("finish_reason")
-                        if r_reason is not None:
-                            if r_reason not in {"stop", "tool_calls"} or finish_reason is not None:
-                                raise ProviderFailure("Unsupported or duplicate finish_reason")
-                            finish_reason = str(r_reason)
+                    async for chunk in _sse_data(stream_source):
+                        received_any_chunk = True
+                        if request.request_id in self._cancelled:
+                            raise ProviderFailure("Request cancelled after first stream chunk")
+                        if chunk is None:
+                            done = True
+                            break
+                        if chunk.get("usage") is not None:
+                            if type(chunk["usage"]) is not dict:
+                                raise ProviderFailure("Malformed usage object")
+                            usage = chunk["usage"]
+                        choices = chunk.get("choices")
+                        if type(choices) is not list or len(choices) > 1:
+                            raise ProviderFailure("Malformed choices in stream")
+                        for choice in choices:
+                            delta = choice.get("delta", {})
+                            if type(delta) is not dict:
+                                raise ProviderFailure("Malformed delta object")
+                            c_delta = delta.get("content")
+                            if c_delta is not None:
+                                if type(c_delta) is not str or finish_reason is not None:
+                                    raise ProviderFailure("Invalid content delta")
+                                text_parts.append(c_delta)
+                            t_calls = delta.get("tool_calls")
+                            if t_calls is not None:
+                                if type(t_calls) is not list or finish_reason is not None:
+                                    raise ProviderFailure("Invalid tool_calls delta")
+                                for tc in t_calls:
+                                    idx = tc.get("index", 0)
+                                    if type(idx) is not int or idx < 0:
+                                        raise ProviderFailure("Invalid tool_call index")
+                                    slot = tool_accum.setdefault(
+                                        idx, {"id": "", "name": "", "arguments": ""}
+                                    )
+                                    if tc.get("id"):
+                                        slot["id"] += str(tc["id"])
+                                    fn = tc.get("function")
+                                    if isinstance(fn, dict):
+                                        if fn.get("name"):
+                                            slot["name"] += str(fn["name"])
+                                        if fn.get("arguments"):
+                                            slot["arguments"] += str(fn["arguments"])
+                            r_reason = choice.get("finish_reason")
+                            if r_reason is not None:
+                                if (
+                                    r_reason not in {"stop", "tool_calls"}
+                                    or finish_reason is not None
+                                ):
+                                    raise ProviderFailure("Unsupported or duplicate finish_reason")
+                                finish_reason = str(r_reason)
 
                 if not done or finish_reason is None:
                     raise ProviderFailure("Stream ended before complete output and [DONE]")
@@ -343,6 +357,10 @@ class OpenAICompatibleAdapter:
                     None if usage is None else int(usage["completion_tokens"]),
                     usage is None,
                 )
+            except asyncio.CancelledError as exc:
+                if not settled:
+                    self._budget.unknown(attempt_ref)
+                raise ProviderFailure("Request cancelled while in-flight; usage UNKNOWN") from exc
             except Exception as exc:
                 if not settled:
                     self._budget.unknown(attempt_ref)
@@ -359,11 +377,21 @@ class OpenAICompatibleAdapter:
                 if isinstance(exc, ProviderFailure):
                     raise
                 raise ProviderFailure("Model generation failed; usage held as UNKNOWN") from exc
+            finally:
+                self._inflight.pop(request.request_id, None)
 
         raise ProviderFailure("Exhausted gateway retry budget")
 
     async def cancel(self, request_id: str) -> None:
         self._cancelled.add(request_id)
+        inflight = self._inflight.get(request_id)
+        if inflight is not None:
+            inflight.cancel()
 
     async def close(self) -> None:
         self._closed = True
+        tasks = list(self._inflight.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
