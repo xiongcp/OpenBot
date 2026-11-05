@@ -87,15 +87,45 @@ class FeishuIngress:
 
     def heartbeat(self, raw: str | bytes) -> dict[str, Any]:
         doc = strict_json(raw)
+        allowed_keys = {"stage", "task_ids"}
         if (
             not isinstance(doc, dict)
-            or set(doc) != {"stage"}
+            or not ({"stage"} <= set(doc) <= allowed_keys)
             or doc["stage"] not in {"CONNECTING", "CONNECTED", "STOPPED", "FAILED"}
         ):
             raise ValueError("FEISHU_HEALTH_INVALID")
+        task_ids = doc.get("task_ids")
+        if task_ids is not None:
+            if (
+                type(task_ids) is not list
+                or len(task_ids) > 64
+                or any(
+                    type(t) is not str or not re.fullmatch(r"tsk_[A-Za-z0-9_-]{1,80}", t)
+                    for t in task_ids
+                )
+            ):
+                raise ValueError("FEISHU_HEALTH_INVALID")
         with self._lock:
             self._health = {"stage": doc["stage"], "at": time.monotonic()}
-        return {"status": "RECORDED"}
+        finished: dict[str, str] = {}
+        if task_ids:
+
+            def query(db: sqlite3.Connection) -> dict[str, str]:
+                res = {}
+                for t in task_ids:
+                    row = db.execute("SELECT state FROM tasks WHERE task_id=?", (t,)).fetchone()
+                    if row and row[0] in {
+                        "SUCCEEDED",
+                        "FAILED",
+                        "CANCELLED",
+                        "PARTIAL",
+                        "PAUSED",
+                    }:
+                        res[t] = str(row[0])
+                return res
+
+            finished = self.state.writer.read(query)
+        return {"status": "RECORDED", "finished": finished}
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:

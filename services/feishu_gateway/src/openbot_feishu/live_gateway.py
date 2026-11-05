@@ -95,7 +95,9 @@ class Reactor:
         self._post = post or self._https_post
 
     @staticmethod
-    def _https_post(path: str, body: dict[str, Any], token: str) -> dict[str, Any]:
+    def _https_post(
+        path: str, body: dict[str, Any], token: str, method: str = "POST"
+    ) -> dict[str, Any]:
         import urllib.request
 
         class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -106,18 +108,20 @@ class Reactor:
         headers = {"Content-Type": "application/json; charset=utf-8"}
         if token:
             headers["Authorization"] = "Bearer " + token
+        data = json.dumps(body).encode() if body else None
         request = urllib.request.Request(
-            "https://open.feishu.cn" + path, json.dumps(body).encode(), headers, method="POST"
+            "https://open.feishu.cn" + path, data, headers, method=method
         )
         with opener.open(request, timeout=5) as response:
             return dict(strict_json(response.read(65537)))
 
-    def acknowledge(self, message_id: str) -> None:
+    def acknowledge(self, message_id: str) -> str:
         if time.monotonic() >= self._expires:
             doc = self._post(
                 "/open-apis/auth/v3/tenant_access_token/internal",
                 {"app_id": self._app, "app_secret": self._secret},
                 "",
+                "POST",
             )
             if doc.get("code") != 0 or not doc.get("tenant_access_token"):
                 raise PermissionError("FEISHU_TOKEN_UNAVAILABLE")
@@ -127,12 +131,40 @@ class Reactor:
             f"/open-apis/im/v1/messages/{message_id}/reactions",
             {"reaction_type": {"emoji_type": RECEIPT_EMOJI}},
             self._token,
+            "POST",
         )
         if doc.get("code") != 0:
             raise PermissionError("FEISHU_REACTION_REJECTED")
+        return str((doc.get("data") or {}).get("reaction_id") or "")
+
+    def remove(self, message_id: str, reaction_id: str) -> None:
+        if not message_id or not reaction_id:
+            return
+        if time.monotonic() >= self._expires:
+            doc = self._post(
+                "/open-apis/auth/v3/tenant_access_token/internal",
+                {"app_id": self._app, "app_secret": self._secret},
+                "",
+                "POST",
+            )
+            if doc.get("code") != 0 or not doc.get("tenant_access_token"):
+                raise PermissionError("FEISHU_TOKEN_UNAVAILABLE")
+            self._token = str(doc["tenant_access_token"])
+            self._expires = time.monotonic() + max(60, int(doc.get("expire", 0)) - 120)
+        self._post(
+            f"/open-apis/im/v1/messages/{message_id}/reactions/{reaction_id}",
+            {},
+            self._token,
+            "DELETE",
+        )
 
 
-def forward_event(session: CliApiSession, line: bytes, reactor: Any) -> str:
+def forward_event(
+    session: CliApiSession,
+    line: bytes,
+    reactor: Any,
+    pending: dict[str, tuple[str, str]] | None = None,
+) -> str:
     doc = dict(strict_json(line))
     message_id = doc.pop("message_id", "")
     response = session.call("POST", "/v1/feishu/events", body=doc)
@@ -140,9 +172,12 @@ def forward_event(session: CliApiSession, line: bytes, reactor: Any) -> str:
         # Do not ACK the SDK callback when durable admission failed.
         raise ConnectionError("FEISHU_INGRESS_REJECTED")
     receipt = response.json()
-    if "task_id" in receipt and reactor is not None and message_id:
+    task_id = receipt.get("task_id")
+    if task_id and reactor is not None and message_id:
         try:
-            reactor.acknowledge(message_id)
+            rid = reactor.acknowledge(message_id)
+            if rid and pending is not None:
+                pending[str(task_id)] = (message_id, str(rid))
         except Exception:
             print("FEISHU_RECEIPT_UNAVAILABLE", flush=True)  # fixed code; no SDK/error body
     return str(receipt.get("status", "TASK_PERSISTED"))
@@ -181,6 +216,7 @@ def supervise(
         )
         selector = selectors.DefaultSelector()
         reactor = Reactor(app_id, app_secret)
+        pending_reactions: dict[str, tuple[str, str]] = {}
         stage, buffer = "CONNECTING", b""
         started, last_heartbeat = time.monotonic(), 0.0
         last_transport = started
@@ -198,7 +234,20 @@ def supervise(
                 if time.monotonic() - last_transport > 180:
                     raise TimeoutError("FEISHU_TRANSPORT_HEARTBEAT_EXPIRED")
                 if time.monotonic() - last_heartbeat >= 2:
-                    session.call("POST", "/v1/feishu/health", body={"stage": stage})
+                    body: dict[str, Any] = {"stage": stage}
+                    if pending_reactions:
+                        body["task_ids"] = list(pending_reactions.keys())
+                    resp = session.call("POST", "/v1/feishu/health", body=body)
+                    if resp.status_code == 200:
+                        finished = resp.json().get("finished", {})
+                        for tid, state in finished.items():
+                            if tid in pending_reactions:
+                                mid, rid = pending_reactions.pop(tid)
+                                try:
+                                    reactor.remove(mid, rid)
+                                    print(f"FEISHU_REACTION_REMOVED_{state}", flush=True)
+                                except Exception:
+                                    pass
                     last_heartbeat = time.monotonic()
                 for _key, _ in selector.select(timeout=0.5):
                     chunk = os.read(child.stdout.fileno(), 16384)
@@ -218,9 +267,18 @@ def supervise(
                         elif line == b"FAILED":
                             raise ConnectionError("FEISHU_TRANSPORT_FAILED")
                         else:
-                            print("FEISHU_" + forward_event(session, line, reactor), flush=True)
+                            print(
+                                "FEISHU_"
+                                + forward_event(session, line, reactor, pending_reactions),
+                                flush=True,
+                            )
         finally:
             selector.close()
+            for mid, rid in pending_reactions.values():
+                try:
+                    reactor.remove(mid, rid)
+                except Exception:
+                    pass
             if child.poll() is None:
                 child.terminate()
                 try:

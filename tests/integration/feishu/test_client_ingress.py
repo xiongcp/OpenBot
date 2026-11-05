@@ -53,6 +53,11 @@ def test_first_contact_requires_local_confirm_and_paired_replay_never_restarts(
         wait_for(lambda: any(e["kind"] == "RUN_FINISHED" for e in state.trace(task)["events"]))
         assert ingress.receive(canonicalize(event(event_id="ev_synthetic_2")))["task_id"] == task
         assert sum(e["kind"] == "MODEL_REQUESTED" for e in state.trace(task)["events"]) == 1
+        hb = ingress.heartbeat(
+            json.dumps({"stage": "CONNECTED", "task_ids": [task, "tsk_nonexistent"]})
+        )
+        assert hb["finished"][task] == "SUCCEEDED"
+        assert "tsk_nonexistent" not in hb["finished"]
         counts = state.writer.read(
             lambda db: (
                 db.execute("SELECT count(*) FROM channel_identities").fetchone()[0],

@@ -137,12 +137,18 @@ class _Session:
 
 class _Reactor:
     def __init__(self, fail=False):
-        self.added, self.fail = [], fail
+        self.added, self.removed, self.fail = [], [], fail
 
     def acknowledge(self, message_id):
         self.added.append(message_id)
         if self.fail:
             raise RuntimeError("synthetic reaction failure with secret-token")
+        return "rc_fake_" + message_id
+
+    def remove(self, message_id, reaction_id):
+        self.removed.append((message_id, reaction_id))
+        if self.fail:
+            raise RuntimeError("synthetic removal failure with secret-token")
 
 
 EVENT = (
@@ -204,3 +210,50 @@ def test_reaction_failure_is_best_effort_and_not_leaked():
 
     result = forward_event(_Session(_Reply(201, {"task_id": "tsk_1"})), EVENT, _Reactor(fail=True))
     assert result == "TASK_PERSISTED"
+
+
+def test_reaction_lifecycle_tracked_in_pending_and_removed_on_completion():
+    from openbot_feishu.live_gateway import forward_event
+
+    reactor, session = _Reactor(), _Session(_Reply(201, {"task_id": "tsk_1"}))
+    pending = {}
+    assert forward_event(session, EVENT, reactor, pending) == "TASK_PERSISTED"
+    assert pending == {"tsk_1": ("om_1", "rc_fake_om_1")}
+
+    # Simulate heartbeat detecting terminal state and removing reaction
+    mid, rid = pending.pop("tsk_1")
+    reactor.remove(mid, rid)
+    assert reactor.removed == [("om_1", "rc_fake_om_1")]
+    assert pending == {}
+
+
+def test_reactor_real_delete_request_structure():
+    from openbot_feishu.live_gateway import Reactor
+
+    calls = []
+
+    def fake_post(path, body, token, method="POST"):
+        calls.append((path, body, token, method))
+        if "auth" in path:
+            return {"code": 0, "tenant_access_token": "tok_123", "expire": 7200}
+        if method == "DELETE":
+            return {"code": 0}
+        return {"code": 0, "data": {"reaction_id": "rc_real_9"}}
+
+    reactor = Reactor("cli_x", "sec_x", post=fake_post)
+    rid = reactor.acknowledge("om_test")
+    assert rid == "rc_real_9"
+    assert calls[1] == (
+        "/open-apis/im/v1/messages/om_test/reactions",
+        {"reaction_type": {"emoji_type": "Get"}},
+        "tok_123",
+        "POST",
+    )
+
+    reactor.remove("om_test", rid)
+    assert calls[2] == (
+        "/open-apis/im/v1/messages/om_test/reactions/rc_real_9",
+        {},
+        "tok_123",
+        "DELETE",
+    )

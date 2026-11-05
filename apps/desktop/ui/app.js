@@ -24,7 +24,14 @@ async function action(fn) {
   if (busy || !connected) return;
   busy = true; mutationState();
   try { banner(''); await fn(); await refresh(true); }
-  catch (error) { banner(`${t(String(error).includes('CONFLICT') ? 'stale' : 'failed')} · ${String(error).slice(0, 100)}`); }
+  catch (error) {
+    const isConflict = String(error).includes('CONFLICT');
+    banner(`${t(isConflict ? 'stale' : 'failed')} · ${String(error).slice(0, 100)}`);
+    if (isConflict) {
+      preview = null; settingsDirty = false; renderedSettingsRevision = null; $('settings-preview').hidden = true;
+      try { await refresh(true); } catch {}
+    }
+  }
   finally { busy = false; mutationState(); }
 }
 function selectTask(id) { if (selectedTask === id) return; selectedTask = id; selectedEvent = null; trace = emptyTrace(); renderKey = ''; render(true); refresh(); }
@@ -209,7 +216,7 @@ $('settings-form').addEventListener('submit', event => { event.preventDefault();
   const data = new FormData($('settings-form')), config = Object.fromEntries(['locale','model','mode'].map(k => [k,data.get(k)]));
   config.max_steps = Number(data.get('max_steps'));
   for (const key of ['skill_enabled','mcp_enabled','feishu_enabled']) config[key] = data.has(key);
-  preview = await invoke('client_preview_settings', { expectedRevision: renderedSettingsRevision, config });
+  preview = await invoke('client_preview_settings', { expectedRevision: snapshot.settings.revision, config });
   text('settings-diff', preview.changes.map(k => `${t(k === 'max_steps' ? 'steps' : k)}: ${snapshot.settings.config[k]} → ${preview.config[k]}`).join('\n') || '—');
   $('settings-preview').hidden = false;
 }); });
