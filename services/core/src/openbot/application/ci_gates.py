@@ -49,6 +49,10 @@ class TieredCiGateEvaluator:
                     raise PermissionError(f"RETIRED_RUNNER_LABEL_FORBIDDEN: {name} uses {label}")
             if "uv sync --locked" not in text:
                 raise PermissionError(f"WORKFLOW_MISSING_LOCKED_SYNC: {name}")
+            if "python-version: '3.12.12'" in text or 'python-version: "3.12.12"' in text:
+                raise PermissionError(
+                    f"SETUP_PYTHON_UNAVAILABLE_PATCH_BUILD: {name} uses setup-python 3.12.12"
+                )
         return required
 
     def evaluate_tier(

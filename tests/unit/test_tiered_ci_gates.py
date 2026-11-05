@@ -50,6 +50,23 @@ def test_tiered_ci_gates_run_security_in_pr_and_block_on_injected_failure_or_ski
     with pytest.raises(PermissionError, match="WORKFLOW_MISSING_LOCKED_SYNC"):
         TieredCiGateEvaluator(unsynced_repo).validate_workflow_layout()
 
+    bad_py_repo = tmp_path / "bad_py_repo"
+    wf_dir3 = bad_py_repo / ".github/workflows"
+    wf_dir3.mkdir(parents=True)
+    for name in (
+        "pr.yml",
+        "pr-gate.yml",
+        "platform-macos.yml",
+        "nightly-soak.yml",
+        "release-supply-chain.yml",
+    ):
+        (wf_dir3 / name).write_text(
+            "runs-on: macos-15\npython-version: '3.12.12'\nuv sync --locked",
+            encoding="utf-8",
+        )
+    with pytest.raises(PermissionError, match="SETUP_PYTHON_UNAVAILABLE_PATCH_BUILD"):
+        TieredCiGateEvaluator(bad_py_repo).validate_workflow_layout()
+
     pr_plan = evaluator.evaluate_tier(
         tier="pull_request", inject_security_failure=False, allow_skip_failed=False
     )

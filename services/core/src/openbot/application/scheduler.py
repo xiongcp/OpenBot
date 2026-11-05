@@ -1,6 +1,5 @@
 """Single-instance profile OS lock handoff, runtime_epoch activation, and single-task scheduling."""
 
-import fcntl
 import hmac
 import os
 import secrets
@@ -8,6 +7,9 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+if os.name == "posix":
+    import fcntl
 
 from openbot.application.resources import ResourceBusyError, ResourceCoordinator
 from openbot.application.state_machine import TaskStateService
@@ -39,6 +41,8 @@ class SingleInstanceSupervisorLock:
     def acquire_and_mint_handoff(self, *, runtime_epoch: str, boot_id: str) -> DaemonHandoffTicket:
         if self._fd is not None:
             raise PermissionError("Supervisor instance already holds profile lock")
+        if os.name != "posix":
+            raise PermissionError("CAPABILITY_UNAVAILABLE: POSIX flock required")
         fd = os.open(self._path, os.O_CREAT | os.O_RDWR, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -74,7 +78,8 @@ class SingleInstanceSupervisorLock:
     def release(self) -> None:
         if self._fd is not None:
             try:
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                if os.name == "posix":
+                    fcntl.flock(self._fd, fcntl.LOCK_UN)
             finally:
                 os.close(self._fd)
                 self._fd = None
