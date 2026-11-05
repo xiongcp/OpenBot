@@ -15,3 +15,5 @@ run_id is persisted once in the accepted Task checkpoint. Resume/recovery retain
 Tauri attaches to an existing daemon. Only fixed Rust commands can access control credentials; remote content is inert text. Window closure never changes daemon lifetime. No arbitrary network, shell or filesystem command is exposed to WebView.
 
 Compatibility / 兼容: existing 23-table schema and original 14-operation contract remain unchanged; new client routes and schemas are additive. Native/signing/real-service qualification stays independent.
+
+Runtime result rule / 运行结果规则: the bounded runtime commits receipts only for its current DISPATCHING attempt and active epoch. A verified scoped artifact permits SUCCEEDED and releases the resource lease. Missing receipt records UNKNOWN with a reason and no finished timestamp, retains the lease, and moves a nonterminal Task to RECONCILING; consumed approval stays consumed. Remote token usage uses durable reservations; monetary cost remains explicitly unavailable without a qualified price source.

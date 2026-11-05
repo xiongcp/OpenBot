@@ -100,6 +100,7 @@
 
 ## 2026-11-05 客户端与透明执行 / Client and transparent execution
 
+- 有界 Runtime 7 项核心回归与实际 SDK loopback 7 项通过；完整验证 383 passed / 2 explicit native skips，8/8 checks 通过。实际模型+容器串联在下一步 daemon 组合后验证，尚不算该真实门禁完成。
 - 用户已确认设计并授权继续实施。完成 ClientState 第一切片：复用 events/checkpoint 保存配置 revision、预览 hash、owner CAS、run 配置快照与有界脱敏因果事件；权限类变更原子更新 policy revision。先观察 10 项缺失实现失败及 3 项边界失败，再达到 14 passed，lint/types 与完整验证 8/8 通过。
 - Approved design is now in implementation. The first ClientState slice adds durable settings revisions, preview/CAS, pinned run configuration and bounded redacted causal events through existing storage; no migration or new dependency. Targeted tests: 14 passed; full verification: all eight checks passed.
 - MCP 远端 CI 发现 Windows 缺少文件保护常量；先重现 2 个 AttributeError，再修为缺失保护时显式拒绝。相关 9 tests、Windows target mypy、ruff 均通过；Windows 容器执行仍未验收。
