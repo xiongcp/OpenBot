@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "tools": [
+    {
+      "tool_id": "mcp.git_inspector",
+      "server_id": "openbot-mcp-git-inspector",
+      "tool_name": "git_inspect",
+      "description": "Read-only Git commit and status inspection in isolated container",
+      "image": "python@sha256:88f028fa462a3d7a363c8b2a8272b859bd464f8a1d78f986de8a2c38f263e659",
+      "script_sha256": "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+      "network_mode": "none",
+      "read_only_rootfs": true,
+      "user": "65532:65532",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "subcommand": {"type": "string", "enum": ["status", "log", "diff"]},
+          "max_count": {"type": "integer", "minimum": 1, "maximum": 50}
+        },
+        "required": ["subcommand"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_id": "mcp.sqlite_reader",
+      "server_id": "openbot-mcp-sqlite-reader",
+      "tool_name": "sqlite_query_readonly",
+      "description": "Read-only SQLite table inspection in isolated container",
+      "image": "python@sha256:88f028fa462a3d7a363c8b2a8272b859bd464f8a1d78f986de8a2c38f263e659",
+      "script_sha256": "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b",
+      "network_mode": "none",
+      "read_only_rootfs": true,
+      "user": "65532:65532",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "db_rel_path": {"type": "string"},
+          "table": {"type": "string"}
+        },
+        "required": ["db_rel_path", "table"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "tool_id": "mcp.doc_extractor",
+      "server_id": "openbot-mcp-doc-extractor",
+      "tool_name": "extract_document_structure",
+      "description": "Read-only Markdown and PDF outline extractor in isolated container",
+      "image": "python@sha256:88f028fa462a3d7a363c8b2a8272b859bd464f8a1d78f986de8a2c38f263e659",
+      "script_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "network_mode": "none",
+      "read_only_rootfs": true,
+      "user": "65532:65532",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"}
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

@@ -2,13 +2,20 @@
 
 import io
 import json
+import os
 import re
+import selectors
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Literal
 
 _DYNAMIC_RUNNERS = frozenset({"npx", "uvx", "pipx", "pnpx", "bunx"})
+_FORBIDDEN_SERVER_METHODS = frozenset(
+    {"sampling/createMessage", "elicitation/create", "roots/list"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +49,8 @@ class McpStdioLifecycleClient:
         self._manifest = manifest
         self._proc: subprocess.Popen[bytes] | None = None
         self._seen_req_ids: set[str] = set()
+        self._stderr_tail = bytearray()
+        self._stderr_thread: threading.Thread | None = None
 
     def negotiate_initialize(self, *, server_protocol_version: str) -> dict[str, Any]:
         if server_protocol_version not in self._manifest.supported_protocol_versions:
@@ -71,6 +80,42 @@ class McpStdioLifecycleClient:
     def bound_response_bytes(self, raw: bytes) -> tuple[bytes, bool]:
         return self.read_bounded_stream(io.BytesIO(raw))
 
+    def _drain_stderr_loop(self, stream: IO[bytes]) -> None:
+        try:
+            while True:
+                chunk = stream.read(1024)
+                if not chunk:
+                    break
+                self._stderr_tail.extend(chunk)
+                if len(self._stderr_tail) > 4096:
+                    del self._stderr_tail[:-4096]
+        except Exception:
+            pass
+
+    def _read_bounded_with_deadline(self, stream: IO[bytes], timeout_ms: int) -> tuple[bytes, bool]:
+        limit = self._manifest.max_output_bytes
+        deadline = time.monotonic() + max(0.001, timeout_ms / 1000.0)
+        buf = bytearray()
+        try:
+            fileno = stream.fileno()
+        except (AttributeError, OSError):
+            return self.read_bounded_stream(stream)
+        with selectors.DefaultSelector() as sel:
+            sel.register(fileno, selectors.EVENT_READ)
+            while len(buf) <= limit:
+                rem = deadline - time.monotonic()
+                if rem <= 0 or not sel.select(rem):
+                    raise TimeoutError("MCP_STDIO_DEADLINE_EXCEEDED")
+                ch = os.read(fileno, 1)
+                if not ch:
+                    break
+                if ch == b"\n":
+                    break
+                buf.extend(ch)
+        if len(buf) > limit:
+            return bytes(buf[:limit]), True
+        return bytes(buf), False
+
     def start_and_handshake(self) -> dict[str, Any]:
         if self._proc is not None:
             raise PermissionError("MCP stdio server already started")
@@ -83,6 +128,14 @@ class McpStdioLifecycleClient:
             start_new_session=True,
         )
         self._proc = proc
+        if proc.stderr is not None:
+            self._stderr_thread = threading.Thread(
+                target=self._drain_stderr_loop,
+                args=(proc.stderr,),
+                daemon=True,
+                name="openbot-mcp-stderr-drain",
+            )
+            self._stderr_thread.start()
         assert proc.stdin is not None and proc.stdout is not None
         init_req = {
             "jsonrpc": "2.0",
@@ -97,11 +150,20 @@ class McpStdioLifecycleClient:
         self._seen_req_ids.add("init_1")
         proc.stdin.write((json.dumps(init_req) + "\n").encode("utf-8"))
         proc.stdin.flush()
-        raw_line, trunc = self.read_bounded_stream(proc.stdout)
+        try:
+            raw_line, trunc = self._read_bounded_with_deadline(
+                proc.stdout, self._manifest.init_timeout_ms
+            )
+        except TimeoutError as exc:
+            self.close()
+            raise PermissionError("MCP_INITIALIZE_TIMEOUT") from exc
         if trunc or not raw_line:
             self.close()
             raise PermissionError("MCP_INITIALIZE_HANDSHAKE_FAILED")
         resp = json.loads(raw_line.decode("utf-8"))
+        if resp.get("method") in _FORBIDDEN_SERVER_METHODS:
+            self.close()
+            raise PermissionError("MCP_SAMPLING_OR_ELICITATION_FORBIDDEN")
         if resp.get("id") != "init_1" or "result" not in resp:
             self.close()
             raise PermissionError("MCP_INITIALIZE_INVALID_RESPONSE")
