@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
+from openbot.adapters.local_api.client_routes import ClientRoutes
 from openbot.application.cancellation import CancellationService
 from openbot.application.dispatch import DispatchService
 from openbot.application.operations import ChallengeStore, OperationService
@@ -28,7 +29,6 @@ from openbot.storage.writer import RequestConflict, Writer
 type ApiScope = Literal["owner_cli", "feishu_gateway", "webview_readonly"]
 
 _LOOPBACK_IPS = frozenset({"127.0.0.1", "::1"})
-_ALLOWED_HOST_PREFIXES = ("127.0.0.1", "[::1]", "localhost")
 _PROXY_HEADERS = frozenset({"x-forwarded-for", "x-real-ip", "forwarded", "x-forwarded-host"})
 
 
@@ -102,6 +102,7 @@ class LocalControlApiServer:
         artifacts: ArtifactStore,
         challenges: ChallengeStore,
         dispatcher: DispatchService | None = None,
+        client_routes: ClientRoutes | None = None,
         min_retained_event_seq: int = 1,
         max_body_bytes: int = 65_536,
     ) -> None:
@@ -116,6 +117,7 @@ class LocalControlApiServer:
         self._approvals = approvals
         self._recovery = recovery
         self._cancellation = cancellation
+        self._client = client_routes
         self._artifacts = artifacts
         self._challenges = challenges
         self._dispatcher = dispatcher
@@ -132,7 +134,7 @@ class LocalControlApiServer:
 
         # 2. Host & Origin validation (DNS rebinding & cross-origin browser defense)
         host = lower_headers.get("host", "").lower()
-        if not host or not host.startswith(_ALLOWED_HOST_PREFIXES):
+        if not re.fullmatch(r"(?:127\.0\.0\.1|localhost|\[::1\])(?::[0-9]{1,5})?", host):
             return None, _json_resp(403, {"code": "INVALID_HOST_HEADER"})
         origin = lower_headers.get("origin")
         if origin is not None and origin not in {"http://127.0.0.1", "tauri://localhost"}:
@@ -168,6 +170,19 @@ class LocalControlApiServer:
         deadline = int(time.monotonic() * 1000) + 5000
 
         try:
+            if self._client is not None:
+                result = self._client.handle(
+                    method=req.method,
+                    path=req.path,
+                    body=req.body,
+                    query=req.query,
+                    scope=grant.scope,
+                    principal_id=grant.principal_id,
+                    request_id="client-api:" + idem_key,
+                    min_retained_seq=self._min_seq,
+                )
+                if result is not None:
+                    return _json_resp(*result)
             if req.method == "GET" and req.path == "/v1/health":
                 return _json_resp(
                     200,
@@ -361,6 +376,9 @@ class LocalControlApiServer:
             return _json_resp(403, {"code": "FORBIDDEN", "message": str(exc)})
 
     def _handle_approval_preview(self, approval_id: str) -> ApiResponse:
+        if self._client is not None:
+            return _json_resp(200, self._client.preview(approval_id))
+
         def query(db: sqlite3.Connection) -> dict[str, Any]:
             row = db.execute(
                 "SELECT a.operation_id,a.status,a.version,a.binding_hash,a.expires_at,"
@@ -513,8 +531,28 @@ class LoopbackHttpDaemon:
             def _dispatch(self, method: str) -> None:
                 if parent.artificial_delay_ms > 0:
                     time.sleep(parent.artificial_delay_ms / 1000.0)
-                length = int(self.headers.get("Content-Length", "0"))
-                raw_body = self.rfile.read(length) if length > 0 else b""
+                lengths = self.headers.get_all("Content-Length", [])
+                value = lengths[0] if lengths else "0"
+                if (
+                    len(lengths) > 1
+                    or self.headers.get("Transfer-Encoding") is not None
+                    or not re.fullmatch(r"[0-9]{1,10}", value)
+                ):
+                    self._reply(_json_resp(400, {"code": "HTTP_FRAMING_INVALID"}))
+                    return
+                length = int(value)
+                if length > parent._api._max_body:
+                    self._reply(_json_resp(413, {"code": "PAYLOAD_TOO_LARGE"}))
+                    return
+                self.connection.settimeout(5)
+                try:
+                    raw_body = self.rfile.read(length) if length > 0 else b""
+                except TimeoutError:
+                    self._reply(_json_resp(408, {"code": "BODY_READ_TIMEOUT"}))
+                    return
+                if len(raw_body) != length:
+                    self._reply(_json_resp(400, {"code": "HTTP_BODY_TRUNCATED"}))
+                    return
                 parsed = urlsplit(self.path)
                 query = {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
                 hdrs = {k: v for k, v in self.headers.items()}
@@ -527,6 +565,9 @@ class LoopbackHttpDaemon:
                     client_ip=str(self.client_address[0]),
                 )
                 resp = parent._api.handle(api_req)
+                self._reply(resp)
+
+            def _reply(self, resp: ApiResponse) -> None:
                 self.send_response(resp.status_code)
                 self.send_header("Content-Type", resp.content_type)
                 self.send_header("Content-Length", str(len(resp.body)))

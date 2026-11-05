@@ -100,6 +100,7 @@
 
 ## 2026-11-05 客户端与透明执行 / Client and transparent execution
 
+- 真实模型串联门禁已完成：12 个因果事件、2 次 gpt-5.5 SSE、1 次真实隔离 MCP 读取、1 个 CONSUMED 审批、双语产物，Task SUCCEEDED。工具角色续接的真实缺陷已 RED→GREEN 修复；完整验证 399 passed / 2 native skips，8/8。
 - 有界 Runtime 7 项核心回归与实际 SDK loopback 7 项通过；完整验证 383 passed / 2 explicit native skips，8/8 checks 通过。实际模型+容器串联在下一步 daemon 组合后验证，尚不算该真实门禁完成。
 - 用户已确认设计并授权继续实施。完成 ClientState 第一切片：复用 events/checkpoint 保存配置 revision、预览 hash、owner CAS、run 配置快照与有界脱敏因果事件；权限类变更原子更新 policy revision。先观察 10 项缺失实现失败及 3 项边界失败，再达到 14 passed，lint/types 与完整验证 8/8 通过。
 - Approved design is now in implementation. The first ClientState slice adds durable settings revisions, preview/CAS, pinned run configuration and bounded redacted causal events through existing storage; no migration or new dependency. Targeted tests: 14 passed; full verification: all eight checks passed.

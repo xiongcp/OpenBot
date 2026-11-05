@@ -10,7 +10,7 @@
 
 1. [complete] 已核对代码、PDF 与官方来源，完成双语设计、执行图与独立建设者审阅；用户已确认按此实施。
 2. [complete] Git 敏感文件忽略规则：失败回归与完整验证通过，65f8666 已推送，远端 SHA 与 contracts CI 成功核对。
-3. [in_progress] 真实模型 SSE 与飞书 token/bot/discovery 探测已通过；准备只读收消息监听，凭据只在进程内存。
+3. [in_progress] 真实模型 → 核心审批 → 隔离 MCP → 双语产物链路已成功；飞书 token/bot/discovery 已通过，真人收消息关联待验证。凭据只在进程内存。
 4. [in_progress] 执行 docs/superpowers/plans/2026-11-05-agent-client.md；每项失败回归、相关验证、commit、push、远端/CI 核对。
 
 本轮授权覆盖常规本地实现与测试、修复分支的原子提交和 push；覆盖旧计划“不推送/不使用测试凭据”的限制。未授权自动合并 main、正式发布、部署或任意第三方消息。真实密钥不得写入任何仓库文件、日志、证据或普通诊断。
