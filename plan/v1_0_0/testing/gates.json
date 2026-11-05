@@ -19,7 +19,7 @@
         "TC-GIT-005",
         "TC-GIT-006"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     },
     {
       "id": "G2",
@@ -47,7 +47,7 @@
         "TC-CORE-044",
         "TC-V1-031"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     },
     {
       "id": "G3",
@@ -71,7 +71,7 @@
         "TC-V1-027",
         "TC-V1-039"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     },
     {
       "id": "G4",
@@ -95,7 +95,7 @@
         "TC-V1-028",
         "TC-V1-029"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     },
     {
       "id": "G5",
@@ -122,7 +122,7 @@
         "TC-V1-037",
         "TC-V1-038"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     },
     {
       "id": "G6",
@@ -163,7 +163,7 @@
         "TC-V1-035",
         "TC-V1-036"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     },
     {
       "id": "G7",
@@ -180,7 +180,7 @@
         "TC-V1-015",
         "TC-V1-040"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     },
     {
       "id": "G8",
@@ -193,7 +193,7 @@
         "TC-V1-023",
         "TC-V1-030"
       ],
-      "status": "NOT_RUN"
+      "status": "PASS"
     }
   ],
   "conditional_cases": {

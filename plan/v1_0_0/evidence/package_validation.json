@@ -5,7 +5,7 @@
   "product_tests_executed": false,
   "product_test_results_modified": false,
   "network_requests_performed": false,
-  "checked_at_utc": "2026-11-05T13:23:22.442463+00:00",
+  "checked_at_utc": "2026-11-05T14:13:05.625623+00:00",
   "status": "PASS",
   "summary": {
     "checks": 12,
@@ -331,8 +331,8 @@
       "size_bytes": 161345
     },
     "tasks/backlog.json": {
-      "sha256": "c520e95ce3cd8276b1a0a9584bb61be14f3d8363c980478a27d1cb11325696db",
-      "size_bytes": 219590
+      "sha256": "94ceb5e26905b91d6dda5ba01d7b00df4c1bf39752a438b3eab571e50ddcdc7f",
+      "size_bytes": 233450
     },
     "templates/candidate.template.json": {
       "sha256": "63766135d758454f9838008d22469545053a346199b528f65695d239c56e174d",
@@ -351,12 +351,12 @@
       "size_bytes": 821
     },
     "testing/gates.json": {
-      "sha256": "6a77d56da86989585e1b51a7ea7b1f0bb3cf9fa3b0c887ab7ef27ee3125d951e",
-      "size_bytes": 4824
+      "sha256": "22f4368d904b0d204a1081e784c2334a3599f5cc1890baf736fdfd12f1a515d4",
+      "size_bytes": 4800
     },
     "testing/test_cases.json": {
-      "sha256": "90e8d1abdc8df6963553394e368f991cdcdc187f7d1556b35424b77cc74a90bf",
-      "size_bytes": 358070
+      "sha256": "5e6b59f3926bf12c98efe358509332b99d99c694ffa7fec3b4406842bb1956cc",
+      "size_bytes": 363427
     },
     "website/IMPLEMENTATION_SPEC.md": {
       "sha256": "e2f4e7505cbdc9116509273aa5a779c32f61c5640e351465390686ba3ca7768c",
