@@ -33,6 +33,20 @@ class _GatewayApiClient:
         )
 
 
+class _RecordingReactionClient:
+    def __init__(self) -> None:
+        self.added: list[tuple[str, str]] = []
+        self.removed: list[tuple[str, str]] = []
+
+    def add_reaction(self, message_id: str, emoji_type: str) -> str | None:
+        self.added.append((message_id, emoji_type))
+        return f"rxn_{message_id}_{emoji_type}"
+
+    def remove_reaction(self, message_id: str, reaction_id: str) -> bool:
+        self.removed.append((message_id, reaction_id))
+        return True
+
+
 def test_feishu_inbound_acks_only_after_persist_and_rejects_group_stranger_and_oversized(
     local_api_env,
 ) -> None:
@@ -54,6 +68,7 @@ def test_feishu_inbound_acks_only_after_persist_and_rejects_group_stranger_and_o
     )
 
     client = _GatewayApiClient(api, gw_token)
+    reactions = _RecordingReactionClient()
     adapter = FeishuInboundAdapter(
         config=FeishuInboundConfig(
             tenant_key="ten_1",
@@ -63,6 +78,7 @@ def test_feishu_inbound_acks_only_after_persist_and_rejects_group_stranger_and_o
         ),
         pairing=pairing,
         api_client=client,
+        reaction_client=reactions,
     )
 
     valid_event = {
@@ -90,6 +106,11 @@ def test_feishu_inbound_acks_only_after_persist_and_rejects_group_stranger_and_o
     assert r1.task_id == r2.task_id
     assert r1.ack_latency_ms >= 0
     assert r1.llm_waited_in_callback is False
+    assert r1.processing_reaction_emoji == "Typing"
+    assert r1.processing_reaction_id == "rxn_om_1_Typing"
+    assert reactions.added == [("om_1", "Typing")]
+    adapter.complete_processing("om_1", failed=False)
+    assert reactions.removed == [("om_1", "rxn_om_1_Typing")]
 
     # 2. Group chat is rejected by default
     group_ev = {

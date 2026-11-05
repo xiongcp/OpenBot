@@ -4,7 +4,7 @@ import json
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from openbot.application.state_machine import TaskStateService
 from openbot.contracts import ContractError, strict_json
@@ -20,6 +20,9 @@ class RemoteApprovalResult:
     status_code: str
     operation_state: str | None
     waited_on_model_or_worker: Literal[False] = False
+    decision: str | None = None
+    resolved_card_json: dict[str, Any] | None = None
+    callback_response: dict[str, Any] | None = None
 
 
 class RemoteApprovalUseCase:
