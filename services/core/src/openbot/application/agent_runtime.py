@@ -536,11 +536,30 @@ class AgentRuntime:
         try:
             asyncio.run(self._loop(task_id))
         except Exception as exc:
-            # Exception details can contain SDK paths or secrets; expose only the class.
+            # Keep only fixed internal codes; arbitrary exception details may contain secrets.
             self._event(
                 task_id,
                 "RUN_INTERRUPTED",
-                {"error_code": type(exc).__name__, "summary_key": "run.interrupted"},
+                {
+                    "error_code": (
+                        str(exc)
+                        if type(exc) is PermissionError
+                        and str(exc)
+                        in {
+                            "MCP_CAPABILITY_UNAVAILABLE",
+                            "MODEL_EGRESS_RESTRICTED",
+                            "MODEL_CREDENTIALS_REQUIRED",
+                            "RUN_CANCELLED_OR_CLOSED",
+                            "APPROVAL_DENIED_OR_EXPIRED",
+                            "TOOL_OUTCOME_UNKNOWN",
+                            "REPEATED_COMPLETED_DEMO_READ",
+                            "RUN_STEP_BUDGET_REDUCED",
+                            "RUN_STEP_LIMIT",
+                        }
+                        else type(exc).__name__
+                    ),
+                    "summary_key": "run.interrupted",
+                },
             )
             if self._snapshot(task_id)["state"] == "RUNNING":
                 self._transition(task_id, "PAUSED")

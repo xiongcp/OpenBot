@@ -122,3 +122,5 @@
 - Completed M0 contract/fixture/PoC verification (`OB-001`–`OB-004` DONE, `OB-006`–`OB-010`, `OB-089`–`OB-091` VERIFIED) and M1 core persistence (`OB-011`–`OB-014` VERIFIED).
 - Completed all M1 tasks on Darwin arm64 (`OB-015`–`OB-025`, `OB-028`–`OB-046`, `OB-081`, `OB-092`–`OB-093`), reaching 91 passed storage integration tests, 266 passed M0 checks, and 285 passed M1 checks.
 - Completed live Feishu tenant protocol/CardKit/WebSocket `101` handshake verification (`OB-047` advanced from `BLOCKED` to `IN_PROGRESS` with zero plaintext secrets on disk) alongside all M2 and M3 tasks (`OB-047`–`OB-056`, `OB-094`, `OB-026`, `OB-057`–`OB-069`, `OB-072`, `OB-075`–`OB-080`, `OB-095`–`OB-096`), reaching 300 passed M0 checks and 319 passed M1 checks.
+
+- 2026-11-05: 已核验飞书指定真人合成文本完全匹配；tenant/app/sender 字段存在，零外发、零工具、未自动配对。原生 macOS CI 41988264209 success。执行中断原因回归 RED 1 failed / 7 passed，限定安全原因码后相关 22 passed，未知异常内容仍不持久化。

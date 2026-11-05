@@ -327,7 +327,26 @@ def test_missing_isolation_fails_before_operation(local_api_env, tmp_path):
         runtime.start(task)
         wait_for(lambda: any(e["kind"] == "RUN_INTERRUPTED" for e in state.trace(task)["events"]))
         assert tool.calls == 0
+        interrupted = next(e for e in state.trace(task)["events"] if e["kind"] == "RUN_INTERRUPTED")
+        assert interrupted["data"]["error_code"] == "MCP_CAPABILITY_UNAVAILABLE"
         assert not any(e["kind"] == "TOOL_PROPOSED" for e in state.trace(task)["events"])
+    finally:
+        runtime.close()
+
+
+def test_unknown_interruption_detail_is_not_persisted(local_api_env, tmp_path):
+    def fail():
+        raise PermissionError("synthetic-private-detail-should-never-persist")
+
+    runtime, state, _ = make_runtime(local_api_env, tmp_path, on_request=fail)
+    task = submit(local_api_env)
+    try:
+        runtime.start(task)
+        wait_for(lambda: any(e["kind"] == "RUN_INTERRUPTED" for e in state.trace(task)["events"]))
+        trace = state.trace(task)
+        assert "synthetic-private-detail" not in json.dumps(trace)
+        interrupted = next(e for e in trace["events"] if e["kind"] == "RUN_INTERRUPTED")
+        assert interrupted["data"]["error_code"] == "PermissionError"
     finally:
         runtime.close()
 
