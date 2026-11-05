@@ -100,6 +100,9 @@
 
 ## 2026-11-05 客户端与透明执行 / Client and transparent execution
 
+- 用户已确认设计并授权继续实施。完成 ClientState 第一切片：复用 events/checkpoint 保存配置 revision、预览 hash、owner CAS、run 配置快照与有界脱敏因果事件；权限类变更原子更新 policy revision。先观察 10 项缺失实现失败及 3 项边界失败，再达到 14 passed，lint/types 与完整验证 8/8 通过。
+- Approved design is now in implementation. The first ClientState slice adds durable settings revisions, preview/CAS, pinned run configuration and bounded redacted causal events through existing storage; no migration or new dependency. Targeted tests: 14 passed; full verification: all eight checks passed.
+
 - 已只读核对 PDF、当前 Git 状态、客户端任务、配置/API/可观测性与官方 Hermes/飞书/Tauri 文档。
 - 已收到测试凭据使用与逐项 commit/push 授权；未将任何真实凭据写入工作区。
 - 正在补 Git 敏感文件回归并形成双语设计；历史汇总不是本轮测试结果。

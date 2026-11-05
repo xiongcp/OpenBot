@@ -1,6 +1,6 @@
 # OpenBot 客户端与透明工作流设计 / Agent Client and Transparent Workflow Design
 
-日期 / Date: 2026-11-05 · 状态 / Status: 待设计确认 / Proposed for review
+日期 / Date: 2026-11-05 · 状态 / Status: 用户已确认实施 / Approved for implementation
 
 关联 / Related: OB-008, OB-047, OB-056, OB-062—066, OB-075, OB-081—083。
 保留全部既有任务 ID 与状态；本文不是运行能力验收或发布批准。
