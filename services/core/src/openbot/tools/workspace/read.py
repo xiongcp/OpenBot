@@ -175,13 +175,14 @@ class WorkspaceReadTools:
         files = self._iter_safe_relative_files(subpath)
         entries: list[WorkspaceListEntry] = []
         for rel in files:
-            raw = self._guard.read_bytes(rel)
+            # Listing is a metadata read: content is neither drained nor hashed here.
+            meta = self._guard.metadata(rel)
             entries.append(
                 WorkspaceListEntry(
                     relative_path=rel,
                     kind="FILE",
-                    size_bytes=len(raw),
-                    sha256=hashlib.sha256(raw).hexdigest(),
+                    size_bytes=meta.size_bytes,
+                    sha256=None,
                 )
             )
         return tuple(entries)
@@ -195,9 +196,7 @@ class WorkspaceReadTools:
     ) -> FileReadResult:
         if start_line < 1 or (end_line is not None and end_line < start_line):
             raise ValueError("Invalid line range")
-        raw = self._guard.read_bytes(rel_path)
-        if len(raw) > self._limits.max_single_file_bytes:
-            raise ValueError(f"FILE_TOO_LARGE: {rel_path} exceeds max_single_file_bytes")
+        raw = self._bounded_text_bytes(rel_path)
         if b"\x00" in raw:
             raise ValueError(f"BINARY_FILE_UNSUPPORTED: {rel_path} contains NUL bytes")
         try:
@@ -223,6 +222,17 @@ class WorkspaceReadTools:
             truncated=truncated,
         )
 
+    def _bounded_text_bytes(self, rel_path: str) -> bytes:
+        """Read at most max_single_file_bytes; a larger file is refused, never drained."""
+        try:
+            return self._guard.read_bytes(rel_path, self._limits.max_single_file_bytes)
+        except PermissionError as exc:
+            if "FILE_READ_BOUND_EXCEEDED" in str(exc):
+                raise ValueError(
+                    f"FILE_TOO_LARGE: {rel_path} exceeds max_single_file_bytes"
+                ) from exc
+            raise
+
     def search(self, pattern: str, *, subpath: str = ".") -> SearchResult:
         if not pattern:
             raise ValueError("Search pattern must be non-empty")
@@ -240,11 +250,11 @@ class WorkspaceReadTools:
                 reason = "TIMEOUT_EXCEEDED"
                 break
             try:
-                raw = self._guard.read_bytes(rel)
+                raw = self._guard.read_bytes(rel, self._limits.max_single_file_bytes)
             except (PermissionError, OSError):
                 continue
             scanned += 1
-            if len(raw) > self._limits.max_single_file_bytes or b"\x00" in raw:
+            if b"\x00" in raw:
                 continue
             try:
                 text = raw.decode("utf-8", errors="strict")

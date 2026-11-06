@@ -93,3 +93,24 @@ def test_list_read_utf8_boundary_binary_rejection_and_global_search_caps(tmp_pat
     assert all(len(m.line_text) <= 64 for m in search_res.matches)
     assert all(m.provenance_kind == "UNTRUSTED_WORKSPACE_FILE" for m in search_res.matches)
     assert all(m.executable_instructions is False for m in search_res.matches)
+
+
+def test_listing_and_search_stay_inside_the_configured_byte_bound(tmp_path):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "huge.txt").write_bytes(b"x" * (1 << 20))
+    (ws / "small.txt").write_bytes(b"needle here\n")
+    tools = WorkspaceReadTools(ws, limits=WorkspaceReadLimits(max_single_file_bytes=4096))
+
+    entries = tools.list_entries(".")
+    assert [e.relative_path for e in entries] == ["huge.txt", "small.txt"]
+    # Listing is metadata only: it must neither read nor hash the oversize file.
+    assert (entries[0].size_bytes, entries[0].sha256) == (1 << 20, None)
+    assert entries[1].size_bytes == len(b"needle here\n")
+
+    with pytest.raises(ValueError, match="FILE_TOO_LARGE"):
+        tools.read("huge.txt")
+
+    search_res = tools.search("needle")
+    assert [m.relative_path for m in search_res.matches] == ["small.txt"]
+    assert search_res.files_scanned == 1, "the oversize file must be skipped, not drained"

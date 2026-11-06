@@ -8,6 +8,9 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_MAX_READ_BYTES = 8 * 1024 * 1024
+_READ_CHUNK_BYTES = 65_536
+
 _WIN_RESERVED_NAMES = frozenset(
     {
         "CON",
@@ -149,7 +152,9 @@ class WorkspaceFileGuard:
             os.close(cur_fd)
             raise
 
-    def _read_from_parent_fd(self, parent_fd: int, leaf: str) -> tuple[bytes, os.stat_result]:
+    def _read_from_parent_fd(
+        self, parent_fd: int, leaf: str, max_bytes: int = DEFAULT_MAX_READ_BYTES
+    ) -> tuple[bytes, os.stat_result]:
         lst = os.lstat(leaf, dir_fd=parent_fd)
         if stat.S_ISLNK(lst.st_mode) or not stat.S_ISREG(lst.st_mode):
             raise PermissionError(f"Symlink or non-regular file refused: {leaf}")
@@ -166,30 +171,70 @@ class WorkspaceFileGuard:
             ):
                 raise PermissionError("File inode changed between lstat and open")
             chunks: list[bytes] = []
-            while True:
-                buf = os.read(fd, 65536)
+            total = 0
+            while total <= max_bytes:
+                buf = os.read(fd, min(_READ_CHUNK_BYTES, max_bytes + 1 - total))
                 if not buf:
                     break
                 chunks.append(buf)
+                total += len(buf)
+            if total > max_bytes:
+                raise PermissionError(f"FILE_READ_BOUND_EXCEEDED: {leaf} is over {max_bytes} bytes")
             return b"".join(chunks), fst
         finally:
             os.close(fd)
 
-    def read_bytes(self, rel_path: str) -> bytes:
+    def read_bytes(self, rel_path: str, max_bytes: int = DEFAULT_MAX_READ_BYTES) -> bytes:
         parts = validate_relative_workspace_path(rel_path)
         parent_fd, _ = self._walk_parent_fd(parts, create_dirs=False)
         try:
-            data, _ = self._read_from_parent_fd(parent_fd, parts[-1])
+            data, _ = self._read_from_parent_fd(parent_fd, parts[-1], max_bytes)
             return data
         finally:
             os.close(parent_fd)
 
-    def observe(self, rel_path: str) -> ObservedFileSnapshot:
+    def metadata(self, rel_path: str) -> ObservedFileSnapshot:
+        """Pure stat of one leaf: identity and size, without reading or creating anything."""
         parts = validate_relative_workspace_path(rel_path)
-        parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=True)
+        parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=False)
+        try:
+            lst = os.lstat(parts[-1], dir_fd=parent_fd)
+        finally:
+            os.close(parent_fd)
+        if stat.S_ISLNK(lst.st_mode) or not stat.S_ISREG(lst.st_mode):
+            raise PermissionError(f"Symlink or non-regular file refused: {parts[-1]}")
+        if lst.st_dev != self._root_dev:
+            raise PermissionError("Cross-device file refused")
+        return ObservedFileSnapshot(
+            relative_path=rel_path,
+            exists=True,
+            sha256=None,
+            size_bytes=lst.st_size,
+            parent_dev=parent_st.st_dev,
+            parent_ino=parent_st.st_ino,
+            file_ino=lst.st_ino,
+        )
+
+    def observe(
+        self, rel_path: str, max_bytes: int = DEFAULT_MAX_READ_BYTES
+    ) -> ObservedFileSnapshot:
+        parts = validate_relative_workspace_path(rel_path)
+        try:
+            parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=False)
+        except (FileNotFoundError, NotADirectoryError):
+            # A missing parent is reported, never created: observation has no side effects.
+            return ObservedFileSnapshot(
+                relative_path=rel_path,
+                exists=False,
+                sha256=None,
+                size_bytes=0,
+                parent_dev=0,
+                parent_ino=0,
+                file_ino=None,
+            )
         try:
             try:
-                data, fst = self._read_from_parent_fd(parent_fd, parts[-1])
+                data, fst = self._read_from_parent_fd(parent_fd, parts[-1], max_bytes)
             except FileNotFoundError:
                 return ObservedFileSnapshot(
                     relative_path=rel_path,
@@ -218,10 +263,14 @@ class WorkspaceFileGuard:
         parts = validate_relative_workspace_path(rel_path)
         if expected.relative_path != rel_path:
             raise PermissionError("Snapshot relative_path mismatch")
-        parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=False)
+        # Only an approved write may create a missing parent; observation never does.
+        create_parent = not expected.exists and not expected.parent_ino
+        parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=create_parent)
         leaf = parts[-1]
         try:
-            if parent_st.st_dev != expected.parent_dev or parent_st.st_ino != expected.parent_ino:
+            if not create_parent and (
+                parent_st.st_dev != expected.parent_dev or parent_st.st_ino != expected.parent_ino
+            ):
                 raise PermissionError("Parent directory inode changed since observation")
             if expected.exists:
                 try:
