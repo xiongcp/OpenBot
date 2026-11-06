@@ -668,7 +668,7 @@ def _serve_daemon_process(
     runtime = None
     if workspace_root is not None:
         from openbot.adapters.local_api.client_routes import ClientRoutes
-        from openbot.application.agent_runtime import AgentRuntime
+        from openbot.application.agent_runtime import AgentRuntime, admitted_tool_manifests
         from openbot.application.client_state import ClientState
         from openbot.application.feishu_ingress import FeishuIngress
         from openbot.application.runtime_factory import model_factory
@@ -694,7 +694,9 @@ def _serve_daemon_process(
             runtime_epoch=runtime_epoch,
             tool=tool,
             model_factory=model_factory(
-                model_credentials, lambda: state.settings()["config"]["mode"]
+                model_credentials,
+                lambda: state.settings()["config"]["mode"],
+                lambda: admitted_tool_manifests(writer),
             ),
         )
         client_routes = ClientRoutes(state, runtime, FeishuIngress(state, inbox, runtime))

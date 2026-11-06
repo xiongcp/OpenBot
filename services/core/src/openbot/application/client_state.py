@@ -59,6 +59,11 @@ _TERMINAL = frozenset({"SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"})
 _RUN_OUTCOMES = _TERMINAL | frozenset({"INTERRUPTED"})
 
 
+DEFAULT_WORKSPACE_TOOLS = "READ"
+MAX_STEPS_LIMIT = 200
+WORKSPACE_TOOL_LEVELS = frozenset({"OFF", "READ", "READ_WRITE"})
+
+
 class ClientState:
     def __init__(self, writer: Writer, context: InboundContext, redactor: RedactionPipeline):
         self.writer, self.context, self.redactor = writer, context, redactor
@@ -71,14 +76,20 @@ class ClientState:
             (self.context.profile_id,),
         ).fetchone()
         if row:
-            return dict(strict_json(row[0])["receipt"])
+            receipt = dict(strict_json(row[0])["receipt"])
+            # ADR-0014: fields added later take their least-privileged documented default.
+            receipt["config"] = {"workspace_tools": DEFAULT_WORKSPACE_TOOLS} | dict(
+                receipt["config"]
+            )
+            return receipt
         return {
             "revision": 0,
             "config": {
                 "locale": "zh-CN",
                 "model": "gpt-5.5",
                 "mode": mode,
-                "max_steps": 4,
+                "max_steps": MAX_STEPS_LIMIT,
+                "workspace_tools": DEFAULT_WORKSPACE_TOOLS,
                 "skill_enabled": True,
                 "mcp_enabled": False,
                 "feishu_enabled": False,
@@ -94,6 +105,7 @@ class ClientState:
             "model",
             "mode",
             "max_steps",
+            "workspace_tools",
             "skill_enabled",
             "mcp_enabled",
             "feishu_enabled",
@@ -110,7 +122,8 @@ class ClientState:
             or config["model"].startswith("sk-")
             or "://" in config["model"]
             or type(config["max_steps"]) is not int
-            or not 1 <= config["max_steps"] <= 8
+            or not 1 <= config["max_steps"] <= MAX_STEPS_LIMIT
+            or config["workspace_tools"] not in WORKSPACE_TOOL_LEVELS
             or any(
                 type(config[k]) is not bool
                 for k in ("skill_enabled", "mcp_enabled", "feishu_enabled")

@@ -192,6 +192,7 @@ pub struct Settings {
     pub model: String,
     pub mode: String,
     pub max_steps: u8,
+    pub workspace_tools: String,
     pub skill_enabled: bool,
     pub mcp_enabled: bool,
     pub feishu_enabled: bool,
@@ -200,7 +201,8 @@ impl Settings {
     pub fn validate(&self) -> Result<()> {
         if !["zh-CN", "en"].contains(&self.locale.as_str())
             || !["CONNECTED", "LOCAL_MODEL", "OFFLINE"].contains(&self.mode.as_str())
-            || !(1..=8).contains(&self.max_steps)
+            || !(1..=200).contains(&self.max_steps)
+            || !["OFF", "READ", "READ_WRITE"].contains(&self.workspace_tools.as_str())
             || self.model.is_empty()
             || self.model.len() > 96
             || self.model.starts_with("sk-")
@@ -264,7 +266,7 @@ mod tests {
     }
     #[test]
     fn rejects_unknown_settings_and_keys() {
-        let mut value = json!({"locale":"en","model":"demo","mode":"CONNECTED","max_steps":4,"skill_enabled":true,"mcp_enabled":false,"feishu_enabled":false});
+        let mut value = json!({"locale":"en","model":"demo","mode":"CONNECTED","max_steps":4,"workspace_tools":"READ","skill_enabled":true,"mcp_enabled":false,"feishu_enabled":false});
         assert!(serde_json::from_value::<Settings>(value.clone())
             .unwrap()
             .validate()
@@ -277,5 +279,28 @@ mod tests {
             .unwrap()
             .validate()
             .is_err());
+    }
+    #[test]
+    fn bounds_long_runs_and_workspace_tool_levels() {
+        let base = json!({"locale":"en","model":"demo","mode":"CONNECTED","max_steps":200,"workspace_tools":"READ_WRITE","skill_enabled":true,"mcp_enabled":false,"feishu_enabled":false});
+        assert!(serde_json::from_value::<Settings>(base.clone())
+            .unwrap()
+            .validate()
+            .is_ok());
+        let mut over = base.clone();
+        over["max_steps"] = json!(201);
+        assert!(serde_json::from_value::<Settings>(over)
+            .unwrap()
+            .validate()
+            .is_err());
+        let mut level = base.clone();
+        level["workspace_tools"] = json!("ALL");
+        assert!(serde_json::from_value::<Settings>(level)
+            .unwrap()
+            .validate()
+            .is_err());
+        let mut missing = base;
+        missing.as_object_mut().unwrap().remove("workspace_tools");
+        assert!(serde_json::from_value::<Settings>(missing).is_err());
     }
 }

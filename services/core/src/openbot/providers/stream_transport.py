@@ -8,6 +8,9 @@ from urllib.parse import urlsplit
 from openbot.providers.openai import ProviderFailure
 from openbot.providers.openai_compatible import validate_outbound_sdk_payload
 
+# ADR-0014: long outputs stream for minutes; this bounds silence between chunks, not total.
+SSE_READ_TIMEOUT_S = 180.0
+
 
 class SdkSSETransport:
     def __init__(self, *, endpoint: str, api_key: str):
@@ -31,7 +34,7 @@ class SdkSSETransport:
             transport=httpx.AsyncHTTPTransport(retries=0, trust_env=False),
             trust_env=False,
             follow_redirects=False,
-            timeout=httpx.Timeout(30.0),
+            timeout=httpx.Timeout(30.0, read=SSE_READ_TIMEOUT_S),
             limits=httpx.Limits(max_connections=1),
         )
         self.sdk = sdk.AsyncOpenAI(
@@ -41,7 +44,7 @@ class SdkSSETransport:
             http_client=client,
             organization="",
             project="",
-            timeout=30.0,
+            timeout=httpx.Timeout(30.0, read=SSE_READ_TIMEOUT_S),
         )
 
     async def stream_chat(self, payload: dict[str, Any]) -> list[bytes]:

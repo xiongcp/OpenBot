@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from openbot.application.budgets import OfflineVocabularyEstimator
+from openbot.application.context_window import (
+    MAX_HISTORY_BLOCKS,
+    MAX_HISTORY_BYTES,
+    MAX_TOOL_RESULT_BYTES,
+)
 from openbot.boundaries import accept_model_call
 from openbot.contracts import canonicalize, strict_json
 from openbot.domain.providers import (
@@ -31,6 +36,8 @@ FORBIDDEN_SDK_HELPERS = frozenset(
         "tool_runner",
     }
 )
+# ADR-0014: per-request output bound; reservation covers the full serialized request plus this.
+MAX_COMPLETION_TOKENS = 64_000
 ALLOWED_OPENAI_REQUEST_FIELDS = frozenset(
     {
         "model",
@@ -134,7 +141,7 @@ class OpenAICompatibleAdapter:
         messages: list[dict[str, Any]] = []
         pending: str | None = None
         seen: set[str] = set()
-        if len(request.blocks) > 64:
+        if len(request.blocks) > MAX_HISTORY_BLOCKS:
             raise ProviderFailure("Model history exceeds block limit")
         for block in request.blocks:
             if isinstance(block, Text) and pending is None:
@@ -172,7 +179,7 @@ class OpenAICompatibleAdapter:
                 pending = block.call_id
                 seen.add(block.call_id)
             elif isinstance(block, ToolResult) and block.call_id == pending:
-                if len(block.result) > 16384:
+                if len(block.result) > MAX_TOOL_RESULT_BYTES:
                     raise ProviderFailure("Tool history result exceeds limit")
                 messages.append(
                     {
@@ -184,7 +191,10 @@ class OpenAICompatibleAdapter:
                 pending = None
             else:
                 raise ProviderFailure("Unsupported or unmatched history block")
-        if pending is not None or not messages or len(canonicalize(messages)) > 65536:
+        if request.system:
+            # Runtime-owned instruction; never user, tool or model supplied (ADR-0014).
+            messages.insert(0, {"role": "system", "content": request.system})
+        if pending is not None or not messages or len(canonicalize(messages)) > MAX_HISTORY_BYTES:
             raise ProviderFailure("Incomplete or oversized model history")
         tools_list = [
             {
@@ -200,7 +210,7 @@ class OpenAICompatibleAdapter:
             "model": self._model,
             "messages": messages,
             "stream": True,
-            "max_completion_tokens": 256,
+            "max_completion_tokens": MAX_COMPLETION_TOKENS,
         }
         if self._profile.supports_stream_usage:
             payload["stream_options"] = {"include_usage": True}

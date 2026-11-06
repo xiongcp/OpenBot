@@ -6,8 +6,9 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
-from openbot.application.agent_runtime import DEMO_MANIFEST
+from openbot.application.agent_runtime import published_tool_manifests
 from openbot.domain.providers import ModelTransport, RequestBudget
+from openbot.domain.tools import ToolManifest
 from openbot.policy.egress import EgressGuard
 from openbot.providers.openai_compatible import OpenAICompatibleAdapter
 from openbot.providers.stream_transport import SdkSSETransport
@@ -43,6 +44,7 @@ def read_model_credentials() -> tuple[str, str]:
 def model_factory(
     credentials: tuple[str, str] | None,
     active_mode: Callable[[], str],
+    admitted_tools: Callable[[], dict[str, ToolManifest]],
 ) -> Callable[[dict[str, Any], RequestBudget], ModelTransport] | None:
     if credentials is None:
         return None
@@ -60,7 +62,7 @@ def model_factory(
                 profile_allowed_domains=frozenset({host}),
                 workspace_allowed_domains=frozenset({host}),
             ),
-            manifests={DEMO_MANIFEST.name: DEMO_MANIFEST} if config["mcp_enabled"] else {},
+            manifests=published_tool_manifests(admitted_tools(), config),
             stream_transport=SdkSSETransport(endpoint=endpoint, api_key=key),
             capability_profile="openai_official",
             task_network_mode=config["mode"],

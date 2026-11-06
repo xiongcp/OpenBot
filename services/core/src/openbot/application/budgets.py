@@ -19,11 +19,11 @@ type ReservationKind = Literal["MODEL", "TOOL"]
 class TaskBudgetPolicy:
     """Conservative per-task operational and circuit-breaker limits."""
 
-    max_steps: int = 32
-    max_model_calls: int = 16
-    max_tool_calls: int = 16
+    max_steps: int = 200
+    max_model_calls: int = 200
+    max_tool_calls: int = 400
     max_retries_per_call: int = 2
-    max_duration_ms: int = 300_000
+    max_duration_ms: int = 14_400_000
     max_single_artifact_bytes: int = 1_048_576
     max_total_artifact_bytes: int = 8_388_608
     max_repeated_proposals: int = 2
@@ -48,17 +48,28 @@ class TaskBudgetPolicy:
     def from_payload(cls, raw: dict[str, Any] | None) -> "TaskBudgetPolicy":
         if not raw:
             return cls()
+        defaults = cls()  # one source of truth for omitted fields (ADR-0014)
         return cls(
-            max_steps=int(raw.get("max_steps", 32)),
-            max_model_calls=int(raw.get("max_model_calls", 16)),
-            max_tool_calls=int(raw.get("max_tool_calls", 16)),
-            max_retries_per_call=int(raw.get("max_retries_per_call", 2)),
-            max_duration_ms=int(raw.get("max_duration_ms", 300_000)),
-            max_single_artifact_bytes=int(raw.get("max_single_artifact_bytes", 1_048_576)),
-            max_total_artifact_bytes=int(raw.get("max_total_artifact_bytes", 8_388_608)),
-            max_repeated_proposals=int(raw.get("max_repeated_proposals", 2)),
-            max_consecutive_errors=int(raw.get("max_consecutive_errors", 3)),
-            max_idle_turns=int(raw.get("max_idle_turns", 3)),
+            max_steps=int(raw.get("max_steps", defaults.max_steps)),
+            max_model_calls=int(raw.get("max_model_calls", defaults.max_model_calls)),
+            max_tool_calls=int(raw.get("max_tool_calls", defaults.max_tool_calls)),
+            max_retries_per_call=int(
+                raw.get("max_retries_per_call", defaults.max_retries_per_call)
+            ),
+            max_duration_ms=int(raw.get("max_duration_ms", defaults.max_duration_ms)),
+            max_single_artifact_bytes=int(
+                raw.get("max_single_artifact_bytes", defaults.max_single_artifact_bytes)
+            ),
+            max_total_artifact_bytes=int(
+                raw.get("max_total_artifact_bytes", defaults.max_total_artifact_bytes)
+            ),
+            max_repeated_proposals=int(
+                raw.get("max_repeated_proposals", defaults.max_repeated_proposals)
+            ),
+            max_consecutive_errors=int(
+                raw.get("max_consecutive_errors", defaults.max_consecutive_errors)
+            ),
+            max_idle_turns=int(raw.get("max_idle_turns", defaults.max_idle_turns)),
         )
 
 

@@ -35,6 +35,7 @@ class ModelRequest:
     blocks: tuple[Block, ...]
     deadline_monotonic_ms: int
     reserved_cost_units: int
+    system: str = ""
 
 
 @dataclass(frozen=True, slots=True)

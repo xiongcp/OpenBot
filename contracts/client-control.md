@@ -2,7 +2,7 @@
 
 All routes require existing profile-bound authentication and loopback/Host/Origin checks. 配置写入、运行启动和审批决定仅 owner scope；查询允许已授权只读 scope。
 
-- `GET /v1/client/settings` → `{revision, config}`; config contains `locale`, `model`, `mode`, `max_steps`, `skill_enabled`, `mcp_enabled`, `feishu_enabled`. No endpoint or secrets.
+- `GET /v1/client/settings` → `{revision, config}`; config contains `locale`, `model`, `mode`, `max_steps` (1–200), `workspace_tools` (`OFF`/`READ`/`READ_WRITE`, default `READ`, ADR-0014), `skill_enabled`, `mcp_enabled`, `feishu_enabled`. No endpoint or secrets.
 - `POST /v1/client/settings/preview` body `{expected_revision, config}` → `{expected_revision, preview_hash, config, changes, activation}`.
 - `POST /v1/client/settings/apply` returns the whole preview envelope (`preview_hash`, `changes`, `activation`) plus `confirm:true`; identical re-delivery uses Idempotency-Key. Stale revision/hash → 409; invalid config → 400; owner failure → 403. Effective settings and audit event commit atomically.
 - `GET /v1/client/runs` → `{runs:[{task_id, goal, state, version, run_id?, config_revision?, updated_at}]}` (max 100, owner/session scoped).
