@@ -1,0 +1,65 @@
+{
+  "template_version": "1.0",
+  "record_type": "repo_binding",
+  "status": "NOT_RUN",
+  "known_project_url": "https://github.com/xiongcp/OpenBot",
+  "authorization": {
+    "commit_each_independent_fix": true,
+    "push_each_independent_fix": true,
+    "source": "用户本轮明确授权；不是永久修改仓库规则",
+    "merge_release_tag_deploy_authorized": false
+  },
+  "policy": {
+    "max_unconfirmed_push_candidates": 1,
+    "force_push_allowed": false,
+    "rewrite_published_commits_allowed": false,
+    "mix_user_changes_allowed": false
+  },
+  "branch_suggestion": "mvp/macos-hardening",
+  "binding": {
+    "local_repo_path_private": null,
+    "repair_worktree_path_private": null,
+    "current_branch": null,
+    "repair_branch": null,
+    "upstream": null,
+    "remote_name": null,
+    "sanitized_push_endpoint_identity": null,
+    "push_url_count": null,
+    "target_ref": null,
+    "target_ref_exists": null,
+    "baseline_sha": null,
+    "baseline_tree": null,
+    "observed_remote_sha": null,
+    "observed_at": null,
+    "git_version": null
+  },
+  "initial_worktree": {
+    "is_dirty": null,
+    "status_evidence_id": null,
+    "staged_diff_evidence_id": null,
+    "unstaged_diff_evidence_id": null,
+    "untracked_paths_private_evidence_id": null,
+    "preexisting_unpushed_commits": [],
+    "user_changes_preserved": null
+  },
+  "scope": {
+    "requested_release_profile": "MACOS_MVP",
+    "scope_frozen_at": null,
+    "required_capabilities": [],
+    "conditional_capabilities": [],
+    "explicit_exclusions_with_basis": [],
+    "native_macos_version": null,
+    "hardware_arch": null,
+    "process_arch": null,
+    "is_rosetta": null,
+    "claims_three_platform_m3": null,
+    "claims_signed_desktop_m4": null,
+    "requirement_basis": "已确认v1.2/M3功能基线在macOS验收；不宣称三平台M3完成",
+    "minimum_required_provider_types": [
+      "REAL_CLOUD_PROVIDER",
+      "REAL_OLLAMA_LOCAL_MODEL"
+    ],
+    "missing_implementation_is_scope_exclusion": false
+  },
+  "blockers": []
+}

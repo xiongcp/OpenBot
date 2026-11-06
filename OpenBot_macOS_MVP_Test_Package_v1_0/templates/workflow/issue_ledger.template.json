@@ -1,0 +1,85 @@
+{
+  "template_version": "1.0",
+  "record_type": "issue_record",
+  "status": "NOT_RUN",
+  "issue_id": null,
+  "title": null,
+  "severity": null,
+  "failure_class": null,
+  "related_case_ids": [],
+  "test_priorities": [],
+  "base_sha": null,
+  "expected_behavior": null,
+  "observed_behavior": null,
+  "root_cause": null,
+  "reproduction": {
+    "status": "NOT_RUN",
+    "run_ids": [],
+    "deterministic": null,
+    "evidence_ids": []
+  },
+  "regression": {
+    "existing_or_new_test_paths": [],
+    "before_fix_run_ids": [],
+    "after_fix_run_ids": [],
+    "targeted_command_ids": [],
+    "related_command_ids": [],
+    "why_this_proves_root_cause": null
+  },
+  "change": {
+    "approved_paths": [],
+    "actual_staged_paths": [],
+    "minimal_fix_summary": null,
+    "user_changes_preserved": null,
+    "secrets_and_pii_review_status": "NOT_RUN",
+    "precommit_hook_effects": []
+  },
+  "local_verification": {
+    "status": "NOT_RUN",
+    "tested_checkout_sha": null,
+    "tested_index_tree": null,
+    "tested_snapshot_description": null,
+    "run_ids": [],
+    "known_independent_baseline_blockers": []
+  },
+  "commit": {
+    "status": "NOT_RUN",
+    "introduced_by_sha": null,
+    "parent_sha": null,
+    "tree": null,
+    "commit_object_evidence_id": null,
+    "committed_paths_evidence_id": null,
+    "exact_committed_tree_verification_run_ids": [],
+    "superseded_unpublished_candidates": []
+  },
+  "push": {
+    "status": "NOT_RUN",
+    "receipt_id": null,
+    "remote_name": null,
+    "target_ref": null,
+    "expected_sha": null,
+    "observed_remote_tip_sha": null,
+    "reachability_proof_evidence_id": null
+  },
+  "ci": {
+    "status": "NOT_RUN",
+    "required_workflow_job_ids": [],
+    "runs": [],
+    "blocking_issue_ids": []
+  },
+  "closure": {
+    "status": "NOT_RUN",
+    "verified_on_sha": null,
+    "ancestry_from_introduced_by_evidence_id": null,
+    "final_required_run_ids": [],
+    "all_required_gates_passed": null,
+    "remaining_blockers": [],
+    "closed_at": null
+  },
+  "regressions": {
+    "reopened_by_issue_ids": [],
+    "invalidated_verification_run_ids": []
+  },
+  "private_evidence_ids": [],
+  "sanitized_summary": null
+}

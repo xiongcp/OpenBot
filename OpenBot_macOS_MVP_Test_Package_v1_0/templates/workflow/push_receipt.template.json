@@ -1,0 +1,52 @@
+{
+  "template_version": "1.0",
+  "record_type": "push_receipt",
+  "status": "NOT_RUN",
+  "receipt_id": null,
+  "issue_id": null,
+  "destination": {
+    "remote_name": null,
+    "sanitized_actual_push_endpoint_identity": null,
+    "push_url_count": null,
+    "target_ref": null,
+    "confirmed_scope": null
+  },
+  "expected_commit_sha": null,
+  "expected_commit_tree": null,
+  "remote_before": {
+    "observed_at": null,
+    "query_exit_code": null,
+    "exists": null,
+    "tip_sha": null,
+    "raw_evidence_id": null
+  },
+  "attempts": [],
+  "attempt_record_shape": {
+    "attempt_id": null,
+    "started_at": null,
+    "ended_at": null,
+    "push_exit_code": null,
+    "client_timed_out": null,
+    "safe_argv_evidence_id": null,
+    "raw_stdout_id": null,
+    "raw_stderr_id": null
+  },
+  "remote_after": {
+    "observed_at": null,
+    "query_exit_code": null,
+    "exists": null,
+    "tip_sha": null,
+    "raw_evidence_id": null
+  },
+  "verification": {
+    "status": "NOT_RUN",
+    "mode": null,
+    "exact_tip_match": null,
+    "expected_commit_reachable": null,
+    "ancestry_check_exit_code": null,
+    "ancestry_evidence_id": null,
+    "current_tip_verified_by_this_receipt": null,
+    "confirmed_at": null
+  },
+  "blockers": []
+}

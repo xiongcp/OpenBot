@@ -1,0 +1,127 @@
+{
+  "template_version": "1.0",
+  "record_type": "command_manifest",
+  "status": "NOT_RUN",
+  "actual_repo_sha": null,
+  "notice": "argv来自已读取参考仓库；本机当前版本必须重新确认。命令ID是本模板标识，不是OpenBot CLI。",
+  "commands": [
+    {
+      "id": "CMD-001",
+      "argv": [
+        "uv",
+        "sync",
+        "--locked"
+      ],
+      "source": "README.md",
+      "candidate_only": true,
+      "confirmed_at_current_sha": null,
+      "cwd_private": null,
+      "environment_keys": [],
+      "dependency_groups": [],
+      "test_layer": null,
+      "requires_real_service": null,
+      "allowed_side_effect_scope": null,
+      "harness_timeout_seconds": null,
+      "reference_internal_per_command_timeout_seconds": null,
+      "notes": "安装当前锁定默认依赖；不是测试通过证据",
+      "status": "NOT_RUN",
+      "run_ids": []
+    },
+    {
+      "id": "CMD-002",
+      "argv": [
+        ".venv/bin/python",
+        "scripts/verify.py"
+      ],
+      "source": "README.md / scripts/verify.py",
+      "candidate_only": true,
+      "confirmed_at_current_sha": null,
+      "cwd_private": null,
+      "environment_keys": [],
+      "dependency_groups": [],
+      "test_layer": null,
+      "requires_real_service": null,
+      "allowed_side_effect_scope": null,
+      "harness_timeout_seconds": null,
+      "reference_internal_per_command_timeout_seconds": 60,
+      "notes": "参考版本移除原生测试开关、默认M0/仅支持M0-M1、内部每项60秒，生成原始日志；不能代验原生或真实服务",
+      "status": "NOT_RUN",
+      "run_ids": []
+    },
+    {
+      "id": "CMD-003",
+      "argv": [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        "--collect-only",
+        "-q"
+      ],
+      "source": ".github/workflows/pr.yml 的 pytest console 入口；本规程添加 collection 核对参数",
+      "candidate_only": true,
+      "confirmed_at_current_sha": null,
+      "cwd_private": null,
+      "environment_keys": [],
+      "dependency_groups": [],
+      "test_layer": null,
+      "requires_real_service": null,
+      "allowed_side_effect_scope": null,
+      "harness_timeout_seconds": null,
+      "reference_internal_per_command_timeout_seconds": null,
+      "notes": "仅核对收集与导入；不是业务断言执行",
+      "status": "NOT_RUN",
+      "run_ids": []
+    },
+    {
+      "id": "CMD-004",
+      "argv": [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest"
+      ],
+      "source": ".github/workflows/pr.yml",
+      "candidate_only": true,
+      "confirmed_at_current_sha": null,
+      "cwd_private": null,
+      "environment_keys": [],
+      "dependency_groups": [],
+      "test_layer": null,
+      "requires_real_service": null,
+      "allowed_side_effect_scope": null,
+      "harness_timeout_seconds": null,
+      "reference_internal_per_command_timeout_seconds": null,
+      "notes": "参考CI实际命令；须记录收集/执行/skip与依赖组",
+      "status": "NOT_RUN",
+      "run_ids": []
+    },
+    {
+      "id": "CMD-005",
+      "argv": [
+        "uv",
+        "sync",
+        "--locked",
+        "--group",
+        "provider-openai"
+      ],
+      "source": "pyproject.toml 参考组名",
+      "candidate_only": true,
+      "confirmed_at_current_sha": null,
+      "cwd_private": null,
+      "environment_keys": [],
+      "dependency_groups": [],
+      "test_layer": null,
+      "requires_real_service": null,
+      "allowed_side_effect_scope": null,
+      "harness_timeout_seconds": null,
+      "reference_internal_per_command_timeout_seconds": null,
+      "notes": "仅在当前版本仍有该组且需要SDK测试时执行；不是自动取得真实云凭据",
+      "status": "NOT_RUN",
+      "run_ids": []
+    }
+  ],
+  "discovered_product_entrypoints": [],
+  "discovered_workflows": [],
+  "blockers": []
+}

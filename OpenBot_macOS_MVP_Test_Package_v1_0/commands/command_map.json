@@ -1,0 +1,69 @@
+{
+  "source_sha": "a223d36a659b7ecf32fca2b4890fc187d3e96e48",
+  "all_local_execution_status": "NOT_RUN",
+  "commands": [
+    {
+      "id": "CMD-001",
+      "command": "uv sync --locked",
+      "kind": "OBSERVED",
+      "source": "pyproject.toml",
+      "note": "Prepare default development dependencies; does not include provider-openai group"
+    },
+    {
+      "id": "CMD-002",
+      "command": ".venv/bin/python scripts/verify.py",
+      "kind": "OBSERVED",
+      "source": "scripts/verify.py",
+      "note": "Defaults M0, clears native flag, writes fixed evidence paths; not full MVP gate"
+    },
+    {
+      "id": "CMD-003",
+      "command": ".venv/bin/python -m pytest --collect-only -q",
+      "kind": "VALIDATED_SYNTAX_TO_RUN",
+      "source": "pyproject.toml",
+      "note": "Run from repo root; actual result not observed locally"
+    },
+    {
+      "id": "CMD-004",
+      "command": "uv sync --locked --group provider-openai",
+      "kind": "OBSERVED_GROUP_SYNTAX_TO_RUN",
+      "source": "pyproject.toml",
+      "note": "Uses existing extra group; requires installation access"
+    },
+    {
+      "id": "CMD-005",
+      "command": ".venv/bin/python -m pytest tests/components/contracts -q -rs",
+      "kind": "EXISTING_TEST_PATH_TO_RUN",
+      "source": "tests/components/contracts/test_openai_faults.py",
+      "note": "SDK against synthetic loopback HTTP, not live provider"
+    },
+    {
+      "id": "CMD-006",
+      "command": ".venv/bin/python scripts/verify.py --phase M1",
+      "kind": "OBSERVED",
+      "source": "scripts/verify.py",
+      "note": "Only M0/M1 phase parser exists"
+    },
+    {
+      "id": "CMD-007",
+      "command": "OPENBOT_NATIVE_TESTS=1 .venv/bin/python -m pytest tests/components/native_poc/test_docker.py::test_actual_native_container_limits_and_independent_lifecycle -q -rs",
+      "kind": "BLOCKED_BY_REVIEW_FINDING",
+      "source": "tests/components/native_poc/test_docker.py",
+      "note": "Read and address MVP-016 first; fixed image, explicit owned engine; synthetic PoC only"
+    },
+    {
+      "id": "CMD-008",
+      "command": "uv run --no-sync openbot --help",
+      "kind": "EXISTING_ENTRY_TO_RUN",
+      "source": "services/core/src/openbot/cli.py",
+      "note": "main exposes only version and health in reviewed SHA"
+    },
+    {
+      "id": "CMD-009",
+      "command": "uv run --no-sync openbot task --help",
+      "kind": "NEGATIVE_PROBE_TO_RUN",
+      "source": "services/core/src/openbot/cli.py",
+      "note": "Expected to expose MVP-006 at reviewed SHA; not a working task workflow"
+    }
+  ]
+}

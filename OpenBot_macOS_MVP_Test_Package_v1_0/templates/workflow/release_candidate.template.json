@@ -1,0 +1,298 @@
+{
+  "template_version": "1.0",
+  "record_type": "release_candidate",
+  "status": "NOT_RUN",
+  "release_profile": "MACOS_MVP",
+  "scope_frozen_at": null,
+  "candidate": {
+    "sha": null,
+    "tree": null,
+    "branch": null,
+    "target_ref": null,
+    "remote_reachability_receipt_id": null,
+    "frozen_at": null,
+    "unreviewed_changes_present": null
+  },
+  "scope": {
+    "required_capabilities": [],
+    "conditional_capabilities": [],
+    "exclusions_with_requirement_basis": [],
+    "macos_build": null,
+    "hardware_arch": null,
+    "process_arch": null,
+    "service_versions": {},
+    "claims_three_platform_m3": null,
+    "claims_signed_desktop_m4": null,
+    "requirement_basis": "已确认v1.2/M3功能基线在macOS验收；不宣称三平台M3完成",
+    "minimum_required_provider_types": [
+      "REAL_CLOUD_PROVIDER",
+      "REAL_OLLAMA_LOCAL_MODEL"
+    ],
+    "missing_implementation_is_scope_exclusion": false
+  },
+  "required_case_ids": [],
+  "required_case_set_reviewed_at": null,
+  "required_gate_ids": [
+    "G00",
+    "G01",
+    "G02",
+    "G03",
+    "G04",
+    "G05",
+    "G06",
+    "G07",
+    "G08",
+    "G09",
+    "G10",
+    "G11",
+    "G12",
+    "G13",
+    "G14"
+  ],
+  "gates": [
+    {
+      "id": "G00",
+      "name": "仓库与固定候选",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G01",
+      "name": "可运行测试与CI",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G02",
+      "name": "真实内核链路",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G03",
+      "name": "授权与两次短事务",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G04",
+      "name": "UNKNOWN、取消与隔离资源",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G05",
+      "name": "Writer与存储故障",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G06",
+      "name": "Artifact、补丁、备份恢复",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G07",
+      "name": "身份、策略、秘密与出口",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G08",
+      "name": "Provider合同与真实双类型模型",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G09",
+      "name": "原生macOS运行与隔离",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G10",
+      "name": "真实飞书链路",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G11",
+      "name": "受控Browser与MCP",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G12",
+      "name": "安装、离线资产、恢复与供应链",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G13",
+      "name": "累计回归和长运行证据",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G14",
+      "name": "对准候选的CI与最终结论",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    },
+    {
+      "id": "G15",
+      "name": "已声明的条件交付能力",
+      "status": "NOT_RUN",
+      "applicability": null,
+      "scope_basis": null,
+      "case_ids": [],
+      "evidence_run_ids": [],
+      "verified_on_sha": null,
+      "blocking_reasons": []
+    }
+  ],
+  "test_counts": {
+    "required": null,
+    "executed": null,
+    "passed": null,
+    "failed": null,
+    "blocked": null,
+    "not_run": null,
+    "skipped": null
+  },
+  "defects": {
+    "open_s0": null,
+    "open_s1": null,
+    "open_s2": null,
+    "open_s3": null,
+    "required_behavior_blocking_issue_ids": [],
+    "deferred_issue_ids_with_basis": [],
+    "fixed_issue_ids": []
+  },
+  "ci": {
+    "status": "NOT_RUN",
+    "required_workflow_job_ids": [],
+    "verified_runs": []
+  },
+  "artifacts": {
+    "status": "NOT_RUN",
+    "expected_artifact_ids": [],
+    "expected_manifest_frozen_at": null,
+    "expected_count": null,
+    "verified_count": null,
+    "items": [],
+    "integrity_manifest_id": null,
+    "sbom_and_license_evidence_ids": []
+  },
+  "artifact_record_shape": {
+    "artifact_id": null,
+    "name": null,
+    "source_sha": null,
+    "build_run_id": null,
+    "lockfile_hash": null,
+    "sha256": null,
+    "verification_run_ids": [],
+    "signed_if_claimed": null,
+    "notarized_if_claimed": null,
+    "status": "NOT_RUN"
+  },
+  "other_platforms": {
+    "windows": {
+      "status": "NOT_RUN",
+      "scope_basis": null
+    },
+    "linux": {
+      "status": "NOT_RUN",
+      "scope_basis": null
+    },
+    "intel_macos": {
+      "status": "NOT_RUN",
+      "scope_basis": null
+    }
+  },
+  "evidence_integrity_status": "NOT_RUN",
+  "privacy_review_status": "NOT_RUN",
+  "decision": {
+    "status": "NOT_RUN",
+    "derived_from_evidence": null,
+    "blocking_reasons": [],
+    "decided_at": null,
+    "approved_scope_description": null
+  }
+}
