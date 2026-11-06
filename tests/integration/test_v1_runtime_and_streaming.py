@@ -54,7 +54,9 @@ def test_v1_075_multi_tool_orchestration_search_read_propose_approve_apply(
     local_api_env: Any, tmp_path: Path
 ) -> None:
     state = service(local_api_env)
-    apply_config(state, mode="CONNECTED", mcp_enabled=True, max_steps=6)
+    apply_config(
+        state, mode="CONNECTED", mcp_enabled=True, max_steps=6, workspace_tools="READ_WRITE"
+    )
     target_file = tmp_path / "app_config.py"
     target_file.write_text("MAX_WORKERS = 2\nLOG_LEVEL = 'INFO'\n", encoding="utf-8")
 
@@ -139,7 +141,7 @@ def test_v1_075_rejects_sensitive_or_symlink_patch_and_user_edit_conflict(
     local_api_env: Any, tmp_path: Path
 ) -> None:
     state = service(local_api_env)
-    apply_config(state, mode="CONNECTED", mcp_enabled=True)
+    apply_config(state, mode="CONNECTED", mcp_enabled=True, workspace_tools="READ_WRITE")
     outside = tmp_path.parent / "outside_secret.txt"
     outside.write_text("secret", encoding="utf-8")
     symlink_file = tmp_path / "link_escape.txt"

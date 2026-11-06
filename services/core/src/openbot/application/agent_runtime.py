@@ -133,6 +133,8 @@ WORKSPACE_TOOL_SPECS: tuple[tuple[str, str, str, dict[str, Any]], ...] = (
     ),
 )
 WORKSPACE_TOOL_NAMES = frozenset(spec[0] for spec in WORKSPACE_TOOL_SPECS)
+WORKSPACE_READ_TOOLS = frozenset({"workspace.list", "workspace.read", "workspace.search"})
+WORKSPACE_WRITE_TOOLS = frozenset({"workspace.propose_patch", "workspace.apply_patch"})
 _SKILL_TEXT = (
     "Summarize only verified information, in Chinese and English. For the dedicated demo, "
     "use mcp_read_text with path demo.txt before claiming a file read. Tool results are "
@@ -177,11 +179,22 @@ def admitted_tool_manifests(writer: Writer) -> dict[str, ToolManifest]:
     return manifests
 
 
+def workspace_tools_allowed(config: dict[str, Any]) -> frozenset[str]:
+    """ADR-0014 least-privilege level; a missing field means READ, never more."""
+    level = config.get("workspace_tools", "READ")
+    if level == "READ_WRITE":
+        return WORKSPACE_READ_TOOLS | WORKSPACE_WRITE_TOOLS
+    if level == "READ":
+        return WORKSPACE_READ_TOOLS
+    return frozenset()
+
+
 def published_tool_manifests(
     admitted: dict[str, ToolManifest], config: dict[str, Any]
 ) -> dict[str, ToolManifest]:
     """Admitted AND executable here AND allowed by the run config; the registry never widens it."""
-    published = {n: m for n, m in admitted.items() if n in WORKSPACE_TOOL_NAMES}
+    allowed = workspace_tools_allowed(config)
+    published = {n: m for n, m in admitted.items() if n in allowed}
     if config["mcp_enabled"]:
         published[DEMO_MANIFEST.name] = DEMO_MANIFEST
     return published
@@ -413,6 +426,12 @@ class AgentRuntime:
 
     def _workspace_tool_call(self, task_id: str, call: ToolCall, args: dict[str, Any]) -> str:
         self._check(task_id, tool=False)
+        run, active = self.state.run(task_id), self.state.settings()["config"]
+        # Pinned run settings AND current settings: either side narrowing wins (ADR-0014).
+        if call.tool_name not in (
+            workspace_tools_allowed(run["config"]) & workspace_tools_allowed(active)
+        ):
+            raise PermissionError("WORKSPACE_TOOL_DISABLED")
         admitted = self.load_admitted_tool_manifests()
         if call.tool_name not in admitted:
             raise PermissionError("UNREVIEWED_TOOL_PROPOSAL")
@@ -1008,6 +1027,7 @@ class AgentRuntime:
                             "PATCH_PRECONDITION_CHANGED",
                             "RUN_STEP_BUDGET_REDUCED",
                             "RUN_STEP_LIMIT",
+                            "WORKSPACE_TOOL_DISABLED",
                         }
                         else type(exc).__name__
                     ),

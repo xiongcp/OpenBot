@@ -1015,3 +1015,76 @@ def test_fresh_profile_default_step_budget_fits_the_write_chain(
     assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
     assert target.read_text() == "status = new\n"
     assert len(payloads) == 5
+
+
+@pytest.mark.parametrize(
+    "level,expected",
+    [
+        ("OFF", set()),
+        ("READ", {"workspace.list", "workspace.read", "workspace.search"}),
+        ("READ_WRITE", WORKSPACE_TOOLS),
+    ],
+)
+def test_published_tools_follow_workspace_tools_level(
+    local_api_env, tmp_path, monkeypatch, level, expected
+):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env,
+        workspace,
+        monkeypatch,
+        lambda payload: final_text_frame("No tool needed"),
+        mcp_enabled=False,
+    )
+    apply_config(state, workspace_tools=level)
+    task = submit(local_api_env, "Synthetic goal")
+    configure_budget(local_api_env, task, limit=200_000)
+    try:
+        runtime.start(task)
+        wait_for(lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED")
+    finally:
+        runtime.close()
+    published = {tool["function"]["name"] for tool in payloads[0].get("tools", [])}
+    assert published == expected
+
+
+def test_read_only_setting_blocks_write_tool_before_any_operation(local_api_env, tmp_path):
+    runtime, state, _ = make_runtime(local_api_env, tmp_path)
+    apply_config(state, workspace_tools="READ")
+    (tmp_path / "notes.txt").write_text("status = old\n")
+
+    class WriteProposer:
+        def __init__(self, budget):
+            self.budget = budget
+
+        async def generate(self, request):
+            self.budget.reserve(request.request_id, request.reserved_cost_units)
+            self.budget.settle(request.request_id, 10, 10)
+            args = b'{"path":"notes.txt","old_snippet":"status = old","new_snippet":"pwned"}'
+            call = ToolCall("call_w", "workspace.apply_patch", args)
+            return ModelResponse((call,), 10, 10, False)
+
+        async def cancel(self, request_id):
+            pass
+
+        async def close(self):
+            pass
+
+    runtime.model_factory = lambda config, budget: WriteProposer(budget)
+    task = submit(local_api_env, "Synthetic goal")
+    try:
+        runtime.start(task)
+        interrupted = wait_for(
+            lambda: [
+                e["data"] for e in state.trace(task)["events"] if e["kind"] == "RUN_INTERRUPTED"
+            ]
+        )
+    finally:
+        runtime.close()
+    assert interrupted[0]["error_code"] == "WORKSPACE_TOOL_DISABLED"
+    assert (tmp_path / "notes.txt").read_text() == "status = old\n"
+    count = local_api_env[2].read(
+        lambda db: db.execute("SELECT count(*) FROM operations").fetchone()[0]
+    )
+    assert count == 0
