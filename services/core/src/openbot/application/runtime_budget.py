@@ -3,6 +3,7 @@
 import time
 
 from openbot.application.budgets import BudgetService
+from openbot.contracts import ContractError, strict_json
 from openbot.storage.inbox import InboundContext
 from openbot.storage.writer import Writer
 
@@ -23,7 +24,14 @@ class RuntimeBudget:
             request_id="agent-reserve:" + request_id,
             deadline_monotonic_ms=int(time.monotonic() * 1000) + 5000,
         )
-        self.writer.submit(cmd).result(timeout=5)
+        raw_receipt = self.writer.submit(cmd).result(timeout=5)
+        try:
+            receipt = strict_json(raw_receipt)
+        except ContractError:
+            raise PermissionError("BUDGET_ADMISSION_DENIED") from None
+        if type(receipt) is not dict or receipt.get("admitted") is not True:
+            # The writer already committed PAUSED and its reason; do not overwrite them.
+            raise PermissionError("BUDGET_ADMISSION_DENIED")
 
     def settle(self, request_id: str, input_tokens: int, output_tokens: int) -> None:
         cmd = self.service.settle(

@@ -866,7 +866,9 @@ class AgentRuntime:
                             run["config"]["model"],
                             tuple(history),
                             int(time.monotonic() * 1000) + 40_000,
-                            4096,
+                            # No extra floor: the provider reserves the full serialized
+                            # history, tool schemas, framing and bounded output before HTTP.
+                            0,
                         )
                     ),
                     timeout=42,

@@ -82,6 +82,8 @@ MVP先支持经固定版本安装的stdio server；Streamable HTTP作为单独�
 
 预算执行采用reserve-then-settle。开始模型或工具调用前预留最大成本，完成后按实际用量结算；超时账单未知时保守保留或标记待结算。重复相同提案、连续同一错误和空转轮次达到阈值时PAUSED并说明原因。
 
+CR-03 派发前预算合同：RuntimeBudget 必须严格解析权威持久回执，只有 `admitted` 为 JSON 布尔值 true 才正常返回；其余或无效回执抛固定 `BUDGET_ADMISSION_DENIED`，不得调用 transport 或为不存在的预留执行 settle/unknown。额度、时间、调用次数和并发占用导致的 PAUSED / paused_reason 保留。OpenAI-compatible 每次 HTTP attempt 预留 `max(调用方下限, 完整出站 JSON 的 UTF-8 byte bound + framing margin + 256 输出额度)`；完整 JSON 包含所有历史、工具结果和实际发送的完整工具 schema，使用与 SDK/httpx 一致的紧凑 UTF-8 序列化。`reserved_cost_units` 是下限而非完整请求估算，runtime 的 0 表示无额外下限，不代表免费请求。映射词表通过 hash 校验仍不能把 UTF-8/4 估算当上界；保守预留使用字节界，估算不声称精确计费。已有供应商 usage 结算和 UNKNOWN 预留保留不变；未知价格不得推定为免费，也不新增下载、重试或自动压缩。
+
 ## Skills与记忆的后续边界
 
 Skill是可版本化的说明与工具约束，不是扩大权限的脚本入口。导入Skill保留来源、版本、license和capabilities；技能文字不能增加工具授权。自动生成技能先进入draft，不能自动安装并执行。

@@ -90,6 +90,8 @@ class OfflineVocabularyEstimator:
     ) -> TokenEstimate:
         utf8_len = len(text.encode("utf-8"))
         framing_overhead = 16 + max(0, tool_count) * 32
+        conservative_base = max(1, utf8_len) + framing_overhead * 2
+        conservative = conservative_base + max(32, completion_reserve_tokens)
         if model in self._encodings:
             enc_name, vocab_path, expected_sha256 = self._encodings[model]
             if not vocab_path.is_file() or vocab_path.is_symlink():
@@ -101,8 +103,8 @@ class OfflineVocabularyEstimator:
                 raise ValueError(
                     f"CAPABILITY_UNAVAILABLE: vocabulary sha256 mismatch for {model} ({enc_name})"
                 )
+            # Asset integrity does not make this heuristic a tokenizer or an upper bound.
             base_tokens = max(1, (utf8_len + 3) // 4) + framing_overhead
-            conservative = base_tokens + max(16, completion_reserve_tokens)
             return TokenEstimate(
                 model=model,
                 encoding_name=enc_name,
@@ -112,13 +114,12 @@ class OfflineVocabularyEstimator:
                 exact_billing_guaranteed=False,
             )
         # Unknown / non-mapped model: never apply OpenAI vocabulary as exact count
-        conservative_base = max(1, utf8_len) + framing_overhead * 2
         return TokenEstimate(
             model=model,
             encoding_name="conservative_utf8_bound",
             vocab_sha256=None,
             estimated_tokens=conservative_base,
-            conservative_reserved_tokens=conservative_base + max(32, completion_reserve_tokens),
+            conservative_reserved_tokens=conservative,
             exact_billing_guaranteed=False,
         )
 
