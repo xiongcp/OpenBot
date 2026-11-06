@@ -184,6 +184,9 @@ class OpenAICompatibleAdapter:
                 pending = None
             else:
                 raise ProviderFailure("Unsupported or unmatched history block")
+        if request.system:
+            # Runtime-owned instruction; never user, tool or model supplied (ADR-0014).
+            messages.insert(0, {"role": "system", "content": request.system})
         if pending is not None or not messages or len(canonicalize(messages)) > 65536:
             raise ProviderFailure("Incomplete or oversized model history")
         tools_list = [
