@@ -965,7 +965,12 @@ class AgentRuntime:
                 prior_calls = [
                     (b.tool_name, b.arguments) for b in history if isinstance(b, ToolCall)
                 ]
-                if (calls[0].tool_name, calls[0].arguments) in prior_calls:
+                # Only the demo read is guarded; workspace re-reads after writes are legitimate
+                # and stay bounded by max_steps and the budget (ADR-0014).
+                if (
+                    calls[0].tool_name == DEMO_MANIFEST.name
+                    and (calls[0].tool_name, calls[0].arguments) in prior_calls
+                ):
                     raise PermissionError("REPEATED_COMPLETED_DEMO_READ")
                 result = self._tool_call(task_id, calls[0])
                 # The model decides the next step from the raw tool result; max_steps bounds it.

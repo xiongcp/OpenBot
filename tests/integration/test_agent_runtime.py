@@ -1250,3 +1250,58 @@ def test_forty_step_chain_completes_with_compaction(local_api_env, tmp_path, mon
     for prev, cur in zip(run_events, run_events[1:], strict=False):
         assert cur["parent_event_id"] == prev["event_id"]
     assert any("ELIDED_TOOL_RESULT" in str(m.get("content")) for m in payloads[-1]["messages"])
+
+
+def test_workspace_read_can_repeat_after_a_write(local_api_env, tmp_path, monkeypatch):
+    plan = [
+        ("workspace.read", {"path": "notes.txt"}),
+        (
+            "workspace.apply_patch",
+            {"path": "notes.txt", "old_snippet": "status = old", "new_snippet": "status = new"},
+        ),
+        ("workspace.read", {"path": "notes.txt"}),
+    ]
+
+    def script(payload):
+        done = len([m for m in payload["messages"] if m["role"] == "tool"])
+        if done < len(plan):
+            name, args = plan[done]
+            return tool_call_frame(f"call_{done}", name, args)
+        return final_text_frame("verified new content")
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "notes.txt").write_text("status = old\n")
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False
+    )
+    task = submit(local_api_env, "Change status and verify")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    seen = set()
+
+    def next_approval():
+        events = all_events(state, task)
+        if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+            return "done"
+        waiting = [
+            e["data"]["approval_id"]
+            for e in events
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        while (approval := wait_for(next_approval, timeout=8)) != "done":
+            seen.add(approval)
+            decide(local_api_env, state, task)
+    finally:
+        runtime.close()
+    interrupted = [e["data"] for e in all_events(state, task) if e["kind"] == "RUN_INTERRUPTED"]
+    assert interrupted == []
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    assert "status = new" in payloads[-1]["messages"][-1]["content"]
+    ops = local_api_env[2].read(
+        lambda db: db.execute("SELECT count(DISTINCT operation_id) FROM operations").fetchone()[0]
+    )
+    assert ops == 3  # the second read is a fresh Operation, not a replayed receipt
