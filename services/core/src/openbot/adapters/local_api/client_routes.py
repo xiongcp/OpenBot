@@ -38,7 +38,10 @@ class ClientRoutes:
         runs = []
         active = self.runtime.health()["active_task_id"]
         for task, goal, status, version, checkpoint, updated in rows:
-            run = strict_json(checkpoint).get("agent_run", {})
+            stored = strict_json(checkpoint)
+            # A retired marker still names the run; only a live one can need reconciliation.
+            live = stored.get("agent_run")
+            run = live or stored.get("last_agent_run") or {}
             runs.append(
                 {
                     "task_id": task,
@@ -49,7 +52,7 @@ class ClientRoutes:
                     "config_revision": run.get("config_revision"),
                     "updated_at": updated,
                     "requires_reconciliation": bool(
-                        run
+                        live
                         and task != active
                         and status not in {"SUCCEEDED", "FAILED", "CANCELLED", "PARTIAL"}
                     ),

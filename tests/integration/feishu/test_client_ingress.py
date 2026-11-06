@@ -1,5 +1,7 @@
 import json
+import sys
 import time
+from dataclasses import replace
 
 import pytest
 from openbot.contracts import canonicalize
@@ -119,5 +121,94 @@ def test_unpaired_candidates_are_bounded_and_cannot_inject_owner(local_api_env, 
         for n in range(20):
             ingress.receive(canonicalize(event(open_id=f"ou_synthetic_{n}")))
         assert len(ingress.snapshot()["candidates"]) <= 16
+    finally:
+        runtime.close()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX guardian pipe protocol")
+@pytest.mark.parametrize("scenario", ["duplicate", "unpaired", "rollback", "unauthorized"])
+def test_worker_ack_follows_authenticated_durable_inbox_only(
+    local_api_env, tmp_path, monkeypatch, scenario
+):
+    from openbot.adapters.local_api.client_routes import ClientRoutes
+    from openbot.cli import CliApiSession
+    from openbot.storage import inbox as inbox_module
+    from openbot_feishu import live_gateway as gateway
+
+    from tests.unit.test_feishu_live_gateway import _Reactor, protocol_spawn
+
+    ingress, runtime, state = setup(local_api_env, tmp_path)
+    runtime.model_factory = None  # This slice tests admission, not model/tool execution.
+    api = local_api_env[0]
+    api._client = ClientRoutes(state, runtime, ingress)
+    if scenario != "unpaired":
+        ingress.receive(canonicalize(event()))
+        ingress.confirm(ingress.snapshot()["candidates"][0]["candidate_id"], "confirm-ack")
+    if scenario == "rollback":
+        emit = inbox_module.emit_state
+
+        def fail_after_effects(*args, **kwargs):
+            emit(*args, **kwargs)
+            raise ValueError("synthetic failure before commit")
+
+        monkeypatch.setattr(inbox_module, "emit_state", fail_after_effects)
+
+    class Transport:
+        def request(self, req):
+            if scenario == "unauthorized" and req.path == "/v1/feishu/events":
+                req = replace(
+                    req, headers={**req.headers, "Authorization": "Bearer synthetic-invalid"}
+                )
+            return api.handle(req)
+
+    session = CliApiSession("pro_test1", local_api_env[8], Transport())
+    monkeypatch.setattr(gateway, "Reactor", lambda *args: _Reactor())
+    repeated = event(message_id="om_synthetic")
+    spawn, result_path, children = protocol_spawn(tmp_path, [repeated, repeated])
+    try:
+        if scenario == "duplicate":
+            gateway.supervise(
+                session,
+                tmp_path,
+                "cli_synthetic",
+                "synthetic-only",
+                spawn=spawn,
+                lifetime_seconds=4,
+            )
+        else:
+            with pytest.raises(ConnectionError, match="FEISHU_INGRESS_REJECTED"):
+                gateway.supervise(
+                    session,
+                    tmp_path,
+                    "cli_synthetic",
+                    "synthetic-only",
+                    spawn=spawn,
+                    lifetime_seconds=4,
+                )
+        acks = [json.loads(line) for line in json.loads(result_path.read_text())]
+        expected = (
+            [
+                {"type": "ack", "event_id": "ev_synthetic_1", "callback_id": "0" * 31 + "1"},
+                {"type": "ack", "event_id": "ev_synthetic_1", "callback_id": "0" * 31 + "2"},
+            ]
+            if scenario == "duplicate"
+            else []
+        )
+        assert acks == expected
+        assert children[0].poll() == 0
+        counts = state.writer.read(
+            lambda db: (
+                db.execute("SELECT count(*) FROM inbox").fetchone()[0],
+                db.execute("SELECT count(*) FROM tasks").fetchone()[0],
+                db.execute("SELECT count(*) FROM events WHERE event_type='TASK_QUEUED'").fetchone()[
+                    0
+                ],
+                db.execute(
+                    "SELECT count(*) FROM outbox WHERE semantic_key LIKE 'task:%'"
+                ).fetchone()[0],
+            )
+        )
+        assert counts == ((1, 1, 1, 1) if scenario == "duplicate" else (0, 0, 0, 0))
+        assert runtime.tool.calls == 0
     finally:
         runtime.close()

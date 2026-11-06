@@ -6,18 +6,22 @@ import json
 import logging
 import os
 import re
-import selectors
+import secrets
+import select
 import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 from openbot.cli import CliApiSession, discover_cli_session
-from openbot.contracts import strict_json
+from openbot.contracts import canonicalize, strict_json
 from openbot.observability.redaction import RedactionPipeline
 
 
@@ -159,28 +163,195 @@ class Reactor:
         )
 
 
-def forward_event(
-    session: CliApiSession,
-    line: bytes,
-    reactor: Any,
-    pending: dict[str, tuple[str, str]] | None = None,
-) -> str:
+@dataclass(frozen=True)
+class DurableEvent:
+    event_id: str
+    task_id: str
+    message_id: str
+
+
+def forward_event(session: CliApiSession, line: bytes) -> DurableEvent:
+    """Admission only: a pairing candidate's HTTP 201 is not a durable Inbox receipt."""
     doc = dict(strict_json(line))
     message_id = doc.pop("message_id", "")
+    event_id = doc.get("event_id")
+    if (
+        not isinstance(event_id, str)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", event_id)
+        or not isinstance(message_id, str)
+        or (message_id and not re.fullmatch(r"om_[A-Za-z0-9_-]{1,196}", message_id))
+    ):
+        raise ValueError("FEISHU_EVENT_INVALID")
     response = session.call("POST", "/v1/feishu/events", body=doc)
     if response.status_code not in {200, 201}:
-        # Do not ACK the SDK callback when durable admission failed.
         raise ConnectionError("FEISHU_INGRESS_REJECTED")
     receipt = response.json()
-    task_id = receipt.get("task_id")
-    if task_id and reactor is not None and message_id:
+    if (
+        not isinstance(receipt, dict)
+        or not isinstance(receipt.get("task_id"), str)
+        or not re.fullmatch(r"tsk_[A-Za-z0-9_-]{1,80}", receipt["task_id"])
+        or not isinstance(receipt.get("state"), str)
+        or not receipt["state"]
+        or type(receipt.get("version")) is not int
+        or receipt["version"] < 0
+    ):
+        raise ConnectionError("FEISHU_INGRESS_REJECTED")
+    return DurableEvent(event_id, receipt["task_id"], message_id)
+
+
+class _Presentation:
+    """Single-flight, no-queue best effort. Network work never holds the state lock."""
+
+    def __init__(self, reactor: Reactor):
+        self._reactor = reactor
+        self._lock = threading.Lock()
+        self._busy = self._closed = False
+        self._pending: dict[str, tuple[str, str]] = {}
+
+    def _launch(self, job: Callable[[], None]) -> None:
+        with self._lock:
+            if self._busy or self._closed:
+                return
+            self._busy = True
+
+        def run() -> None:
+            try:
+                job()
+            except Exception:
+                print("FEISHU_RECEIPT_UNAVAILABLE", flush=True)  # never SDK/error bodies
+            finally:
+                with self._lock:
+                    self._busy = False
+
+        threading.Thread(target=run, daemon=True, name="feishu-presentation").start()
+
+    def task_ids(self) -> list[str]:
+        with self._lock:
+            return list(self._pending)
+
+    def acknowledge(self, task_id: str, message_id: str) -> None:
+        with self._lock:
+            if not message_id or task_id in self._pending or len(self._pending) >= 64:
+                return
+
+        def add() -> None:
+            reaction_id = self._reactor.acknowledge(message_id)
+            with self._lock:
+                if reaction_id and not self._closed:
+                    self._pending[task_id] = (message_id, reaction_id)
+
+        self._launch(add)
+
+    def finish(self, finished: dict[str, Any]) -> None:
+        with self._lock:
+            selected = [tid for tid in self._pending if tid in finished]
+        if not selected:
+            return
+
+        def remove() -> None:
+            for task_id in selected:
+                with self._lock:
+                    message_id, reaction_id = self._pending.pop(task_id)
+                try:
+                    self._reactor.remove(message_id, reaction_id)
+                except Exception:
+                    print("FEISHU_RECEIPT_UNAVAILABLE", flush=True)
+
+        self._launch(remove)
+
+    def close(self) -> None:
+        # Cleanup may be skipped if a job is stuck. Never join a presentation network call.
+        self.finish(dict.fromkeys(self.task_ids()))
+        with self._lock:
+            self._closed = True
+
+
+def _write_frame(fd: int, frame: bytes, deadline: float) -> None:
+    """The caller owns a nonblocking pipe and serializes writers."""
+    while frame:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or not select.select([], [fd], [], remaining)[1]:
+            raise TimeoutError("FEISHU_PIPE_WRITE_DEADLINE")
         try:
-            rid = reactor.acknowledge(message_id)
-            if rid and pending is not None:
-                pending[str(task_id)] = (message_id, str(rid))
-        except Exception:
-            print("FEISHU_RECEIPT_UNAVAILABLE", flush=True)  # fixed code; no SDK/error body
-    return str(receipt.get("status", "TASK_PERSISTED"))
+            written = os.write(fd, frame)
+        except BlockingIOError:
+            continue
+        if not written:
+            raise ConnectionError("FEISHU_PIPE_CLOSED")
+        frame = frame[written:]
+
+
+class _CallbackProtocol:
+    """One reader per worker; callback-local IDs also fence late ACKs for redeliveries."""
+
+    def __init__(self, input_fd: int, output_fd: int):
+        self._input, self._output = input_fd, output_fd
+        os.set_blocking(input_fd, False)
+        os.set_blocking(output_fd, False)
+        self._callbacks, self._writes = threading.Lock(), threading.Lock()
+        self._buffer = b""
+
+    def emit(self, frame: bytes, deadline: float | None = None) -> None:
+        deadline = deadline if deadline is not None else time.monotonic() + 7
+        if len(frame) > 65536 or not frame.endswith(b"\n"):
+            raise ValueError("FEISHU_CONSUMER_OUTPUT_LIMIT")
+        if not self._writes.acquire(timeout=max(0, deadline - time.monotonic())):
+            raise TimeoutError("FEISHU_PIPE_WRITE_DEADLINE")
+        try:
+            _write_frame(self._output, frame, deadline)
+        finally:
+            self._writes.release()
+
+    def read_frame(self, deadline: float) -> bytes | None:
+        """One guardian-side frame from the consumer; None means the pipe reached EOF."""
+        while b"\n" not in self._buffer:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("FEISHU_FRAME_DEADLINE")
+            if not select.select([self._input], [], [], remaining)[0]:
+                continue
+            try:
+                chunk = os.read(self._input, min(4096, 65537 - len(self._buffer)))
+            except BlockingIOError:
+                continue
+            if not chunk:
+                return None
+            self._buffer += chunk
+            if len(self._buffer) > 65536:
+                raise ValueError("FEISHU_CONSUMER_OUTPUT_LIMIT")
+        line, self._buffer = self._buffer.split(b"\n", 1)
+        return line
+
+    def receive(self, event: dict[str, str]) -> None:
+        deadline = time.monotonic() + 7
+        if not self._callbacks.acquire(timeout=max(0, deadline - time.monotonic())):
+            raise RuntimeError("FEISHU_DURABLE_ADMISSION_REQUIRED")
+        try:
+            callback_id = secrets.token_hex(16)
+            frame = {"type": "event", "callback_id": callback_id, "event": event}
+            self.emit((json.dumps(frame, ensure_ascii=True) + "\n").encode(), deadline)
+            expected = {"type": "ack", "event_id": event["event_id"], "callback_id": callback_id}
+            while time.monotonic() < deadline:
+                if b"\n" in self._buffer:
+                    line, self._buffer = self._buffer.split(b"\n", 1)
+                    if strict_json(line) == expected:
+                        return
+                    # A stale/different ACK cannot extend the original deadline.
+                    continue
+                if len(self._buffer) >= 512:
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not select.select([self._input], [], [], remaining)[0]:
+                    break
+                chunk = os.read(self._input, 512 - len(self._buffer))
+                if not chunk:
+                    break
+                self._buffer += chunk
+        except (OSError, ValueError, TimeoutError):
+            raise RuntimeError("FEISHU_DURABLE_ADMISSION_REQUIRED") from None
+        finally:
+            self._callbacks.release()
+        raise RuntimeError("FEISHU_DURABLE_ADMISSION_REQUIRED")
 
 
 def _allowed(session: CliApiSession, app_id: str) -> bool:
@@ -214,10 +385,9 @@ def supervise(
             start_new_session=True,
             pass_fds=(lock.fd,),
         )
-        selector = selectors.DefaultSelector()
-        reactor = Reactor(app_id, app_secret)
-        pending_reactions: dict[str, tuple[str, str]] = {}
-        stage, buffer = "CONNECTING", b""
+        protocol = _CallbackProtocol(child.stdout.fileno(), child.stdin.fileno())
+        presentation = _Presentation(Reactor(app_id, app_secret))
+        stage = "CONNECTING"
         started, last_heartbeat = time.monotonic(), 0.0
         last_transport = started
         try:
@@ -225,63 +395,65 @@ def supervise(
                 (json.dumps({"app_id": app_id, "app_secret": app_secret}) + "\n").encode()
             )
             child.stdin.flush()
-            selector.register(child.stdout, selectors.EVENT_READ)
             while child.poll() is None:
-                if time.monotonic() - started >= lifetime_seconds or not _allowed(session, app_id):
+                now = time.monotonic()
+                if now - started >= lifetime_seconds or not _allowed(session, app_id):
                     break
-                if time.monotonic() - started > 15 and stage != "CONNECTED":
+                if now - started > 15 and stage != "CONNECTED":
                     raise TimeoutError("FEISHU_CONNECT_DEADLINE")
-                if time.monotonic() - last_transport > 180:
+                if now - last_transport > 180:
                     raise TimeoutError("FEISHU_TRANSPORT_HEARTBEAT_EXPIRED")
-                if time.monotonic() - last_heartbeat >= 2:
+                if now - last_heartbeat >= 2:
                     body: dict[str, Any] = {"stage": stage}
-                    if pending_reactions:
-                        body["task_ids"] = list(pending_reactions.keys())
+                    if tracked := presentation.task_ids():
+                        body["task_ids"] = tracked
                     try:
                         resp = session.call("POST", "/v1/feishu/health", body=body)
                         if resp.status_code == 200:
-                            finished = resp.json().get("finished", {})
-                            for tid, state in finished.items():
-                                if tid in pending_reactions:
-                                    mid, rid = pending_reactions.pop(tid)
-                                    try:
-                                        reactor.remove(mid, rid)
-                                        print(f"FEISHU_REACTION_REMOVED_{state}", flush=True)
-                                    except Exception:
-                                        pass
+                            presentation.finish(dict(resp.json().get("finished", {})))
                     except Exception:
-                        pass
+                        print("FEISHU_HEALTH_UNAVAILABLE", flush=True)
                     last_heartbeat = time.monotonic()
-                for _key, _ in selector.select(timeout=0.5):
-                    chunk = os.read(child.stdout.fileno(), 16384)
-                    if not chunk:
-                        break
-                    buffer += chunk
-                    if len(buffer) > 65536:
-                        raise ValueError("FEISHU_CONSUMER_OUTPUT_LIMIT")
-                    while b"\n" in buffer:
-                        line, buffer = buffer.split(b"\n", 1)
-                        if line == b"CONNECTED":
-                            stage = "CONNECTED"
-                            last_transport = time.monotonic()
-                            print("FEISHU_CONNECTED", flush=True)
-                        elif line == b"HEARTBEAT":
-                            last_transport = time.monotonic()
-                        elif line == b"FAILED":
-                            raise ConnectionError("FEISHU_TRANSPORT_FAILED")
-                        else:
-                            print(
-                                "FEISHU_"
-                                + forward_event(session, line, reactor, pending_reactions),
-                                flush=True,
-                            )
-        finally:
-            selector.close()
-            for mid, rid in pending_reactions.values():
                 try:
-                    reactor.remove(mid, rid)
-                except Exception:
-                    pass
+                    frame = protocol.read_frame(time.monotonic() + 0.5)
+                except TimeoutError:
+                    continue
+                if frame is None:
+                    break
+                if frame == b"CONNECTED":
+                    stage = "CONNECTED"
+                    last_transport = time.monotonic()
+                    print("FEISHU_CONNECTED", flush=True)
+                elif frame == b"HEARTBEAT":
+                    last_transport = time.monotonic()
+                elif frame == b"FAILED":
+                    raise ConnectionError("FEISHU_TRANSPORT_FAILED")
+                else:
+                    report = dict(strict_json(frame))
+                    callback_id, event_doc = report.get("callback_id"), report.get("event")
+                    if (
+                        report.get("type") != "event"
+                        or not isinstance(callback_id, str)
+                        or not re.fullmatch(r"[0-9a-f]{32}", callback_id)
+                        or not isinstance(event_doc, dict)
+                    ):
+                        raise ValueError("FEISHU_CONSUMER_FRAME_INVALID")
+                    durable = forward_event(session, canonicalize(event_doc))
+                    protocol.emit(
+                        canonicalize(
+                            {
+                                "type": "ack",
+                                "event_id": durable.event_id,
+                                "callback_id": callback_id,
+                            }
+                        )
+                        + b"\n",
+                        time.monotonic() + 1,
+                    )
+                    presentation.acknowledge(durable.task_id, durable.message_id)
+                    print("FEISHU_EVENT_PERSISTED", flush=True)
+        finally:
+            presentation.close()
             if child.poll() is None:
                 child.terminate()
                 try:
@@ -325,6 +497,7 @@ def _worker() -> None:
         return response
 
     sdk_ws.requests = SimpleNamespace(post=discovery)
+    protocol = _CallbackProtocol(sys.stdin.fileno(), sys.stdout.fileno())
 
     def receive(data: Any) -> None:
         result = normalize_message(json.loads(lark.JSON.marshal(data)))
@@ -332,15 +505,11 @@ def _worker() -> None:
             result["text"] = redactor.sanitize_sink(
                 sink="model_input", text=result["text"], data_class="WORKSPACE"
             ).sanitized_text
-            print(json.dumps(result, ensure_ascii=True), flush=True)
-            # The callback completes only after the daemon confirms durable admission.
-            import select
+            # The callback completes only after the guardian confirms a durable Inbox receipt.
+            protocol.receive(result)
 
-            if (
-                not select.select([sys.stdin.buffer], [], [], 7)[0]
-                or sys.stdin.buffer.readline(8) != b"ACK\n"
-            ):
-                raise RuntimeError("FEISHU_DURABLE_ADMISSION_REQUIRED")
+    def marker(frame: bytes) -> None:
+        protocol.emit(frame)
 
     handler = (
         lark.EventDispatcherHandler.builder("", "")
@@ -352,21 +521,21 @@ def _worker() -> None:
 
     async def connected() -> None:
         await connect()
-        print("CONNECTED", flush=True)
+        marker(b"CONNECTED\n")
 
     client._connect = connected
     disconnect = client._disconnect
 
     async def disconnected() -> None:
         await disconnect()
-        print("FAILED", flush=True)
+        marker(b"FAILED\n")
 
     client._disconnect = disconnected
     control_frame = client._handle_control_frame
 
     async def transport_frame(frame: Any) -> None:
         await control_frame(frame)
-        print("HEARTBEAT", flush=True)
+        marker(b"HEARTBEAT\n")
 
     client._handle_control_frame = transport_frame
     try:

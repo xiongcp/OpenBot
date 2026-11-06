@@ -150,23 +150,35 @@ class PatchCommitJournal:
             str, Literal["RESTORED_ORIGINAL", "FAILED_NOT_APPLIED", "CONFLICT_USER_MODIFIED"]
         ] = {}
         for rel_path, entry in reversed(list(self._entries.items())):
-            if entry["state"] != "APPLIED":
+            cur_snap = guard.observe(rel_path)
+            disk_sha = cur_snap.sha256 if cur_snap.exists else None
+            landed = cur_snap.exists and disk_sha == entry["new_sha256"]
+            untouched = (entry.get("old_exists") and disk_sha == entry.get("old_sha256")) or (
+                not entry.get("old_exists") and not cur_snap.exists
+            )
+            # PREPARED covers the crash between a durable write and mark_file_applied.
+            if entry["state"] == "APPLIED" or landed:
+                if not landed:
+                    actions[rel_path] = "CONFLICT_USER_MODIFIED"
+                    entry["state"] = "CONFLICT_USER_MODIFIED"
+                    continue
+                b_name = entry.get("backup_file")
+                if b_name is not None:
+                    orig_bytes = (self._dir / str(b_name)).read_bytes()
+                    if hashlib.sha256(orig_bytes).hexdigest() != entry.get("old_sha256"):
+                        raise RuntimeError("Journal backup sha256 corrupted")
+                    guard.write_atomic(rel_path, orig_bytes, cur_snap)
+                elif not entry.get("old_exists"):
+                    guard.unlink_verified(rel_path, cur_snap)
+                actions[rel_path] = "RESTORED_ORIGINAL"
+                entry["state"] = "RESTORED_ORIGINAL"
+                continue
+            if untouched:
                 actions[rel_path] = "FAILED_NOT_APPLIED"
                 entry["state"] = "FAILED_NOT_APPLIED"
                 continue
-            cur_snap = guard.observe(rel_path)
-            if not cur_snap.exists or cur_snap.sha256 != entry["new_sha256"]:
-                actions[rel_path] = "CONFLICT_USER_MODIFIED"
-                entry["state"] = "CONFLICT_USER_MODIFIED"
-                continue
-            b_name = entry.get("backup_file")
-            if b_name is not None:
-                orig_bytes = (self._dir / str(b_name)).read_bytes()
-                if hashlib.sha256(orig_bytes).hexdigest() != entry["old_sha256"]:
-                    raise RuntimeError("Journal backup sha256 corrupted")
-                guard.write_atomic(rel_path, orig_bytes, cur_snap)
-            actions[rel_path] = "RESTORED_ORIGINAL"
-            entry["state"] = "RESTORED_ORIGINAL"
+            actions[rel_path] = "CONFLICT_USER_MODIFIED"
+            entry["state"] = "CONFLICT_USER_MODIFIED"
         self._flush("ROLLED_BACK_AFTER_PARTIAL_FAILURE")
         return actions
 

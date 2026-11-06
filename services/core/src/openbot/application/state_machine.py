@@ -137,6 +137,13 @@ def verify_outcome(
     if submission.task_kind == "DIAGNOSIS":
         if not submission.source_refs or any(not ref.strip() for ref in submission.source_refs):
             raise PermissionError("Diagnosis task requires verified source references")
+        if any(ref == "task:" + task_id for ref in submission.source_refs):
+            raise PermissionError("Diagnosis task cannot cite itself as evidence")
+    elif submission.task_kind == "CHAT":
+        if not submission.artifact_ids:
+            raise PermissionError("Chat outcome requires the reply artifact")
+        if submission.source_refs:
+            raise PermissionError("Chat outcome cannot cite effect evidence")
     elif submission.task_kind == "PATCH":
         if (
             not submission.artifact_ids

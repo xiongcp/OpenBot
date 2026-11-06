@@ -171,3 +171,47 @@ def test_multi_file_commit_journal_rolls_back_first_file_when_second_file_fails(
     # Both files on disk match their exact original pre-patch contents
     assert (ws_root / "first.txt").read_bytes() == b"first_old\n"
     assert (ws_root / "second.txt").read_bytes() == b"second_old\n"
+
+
+def test_prepared_journal_reconciles_landed_writes_and_preserves_user_edits(patch_env):
+    ws_root, _, _, _, _, _, _, patch_tool = patch_env
+    from openbot.tools.workspace.commit_journal import PatchCommitJournal
+
+    guard = patch_tool._guard
+    path = ws_root / "note.txt"
+    old, new = b"old-body\n", b"new-body\n"
+    path.write_bytes(old)
+    old_sha, new_sha = hashlib.sha256(old).hexdigest(), hashlib.sha256(new).hexdigest()
+
+    def journal(name: str) -> PatchCommitJournal:
+        created = PatchCommitJournal(patch_tool._journal_root, name)
+        created.record_Backup(
+            relative_path="note.txt", old_bytes=old, old_sha256=old_sha, new_sha256=new_sha
+        )
+        return created
+
+    def land_new() -> None:
+        guard.write_atomic("note.txt", new, guard.observe("note.txt"))
+
+    landed = journal("landed")
+    land_new()
+    actions = PatchCommitJournal.load(landed.journal_path).recover_partial_failure(guard)
+    assert actions == {"note.txt": "RESTORED_ORIGINAL"}
+    assert path.read_bytes() == old
+
+    path.write_bytes(old)
+    assert journal("untouched").recover_partial_failure(guard) == {"note.txt": "FAILED_NOT_APPLIED"}
+    assert path.read_bytes() == old
+
+    edited = journal("edited")
+    land_new()
+    path.write_bytes(b"user-edit\n")
+    assert edited.recover_partial_failure(guard) == {"note.txt": "CONFLICT_USER_MODIFIED"}
+    assert path.read_bytes() == b"user-edit\n"
+
+    corrupt = journal("corrupt")
+    land_new()
+    next(corrupt._dir.glob("bak_*.bin")).write_bytes(b"not-the-backup")
+    with pytest.raises(RuntimeError, match="backup sha256"):
+        corrupt.recover_partial_failure(guard)
+    assert path.read_bytes() == new

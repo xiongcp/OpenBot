@@ -709,3 +709,71 @@ os._exit(78)
             "TASK_FINISHED",
         ]
         assert [e["version"] for e in events] == [0, 1, 2]
+
+
+def test_chat_outcome_cites_no_effects_and_diagnosis_cannot_self_reference(system):
+    path, context, writer, inbox = system
+    service = TaskStateService(writer)
+
+    def running(event_id: str, goal: str, request_id: str) -> str:
+        task_id = json.loads(
+            inbox.submit(context, event_id, payload(goal), deadline()).result(timeout=5)
+        )["task_id"]
+        writer.submit(
+            service.command(context, task_id, 0, "RUNNING", request_id, deadline())
+        ).result(timeout=5)
+        return task_id
+
+    def submit_complete(task_id: str, submission, request_id: str):
+        return json.loads(
+            writer.submit(
+                service.complete(context, task_id, 1, submission, request_id, deadline())
+            ).result(timeout=5)
+        )
+
+    t_chat = running("evt-chat", "just talk", "run-chat")
+    _seed_artifact(path, "art_reply1", t_chat, state="AVAILABLE")
+    for request_id, submission in (
+        (
+            "complete-chat-no-artifact",
+            OutcomeSubmission(
+                task_kind="CHAT", target="SUCCEEDED", summary="reply without an artifact"
+            ),
+        ),
+        (
+            "complete-chat-with-refs",
+            OutcomeSubmission(
+                task_kind="CHAT",
+                target="SUCCEEDED",
+                summary="reply claiming effects",
+                artifact_ids=("art_reply1",),
+                source_refs=("operation:op_unrelated",),
+            ),
+        ),
+    ):
+        with pytest.raises(PermissionError):
+            submit_complete(t_chat, submission, request_id)
+    done = submit_complete(
+        t_chat,
+        OutcomeSubmission(
+            task_kind="CHAT",
+            target="SUCCEEDED",
+            summary="plain reply",
+            artifact_ids=("art_reply1",),
+        ),
+        "complete-chat-ok",
+    )
+    assert done["state"] == "SUCCEEDED"
+
+    t_diag = running("evt-diag-self", "diagnose issue", "run-diag-self")
+    with pytest.raises(PermissionError, match="cannot cite itself"):
+        submit_complete(
+            t_diag,
+            OutcomeSubmission(
+                task_kind="DIAGNOSIS",
+                target="SUCCEEDED",
+                summary="self reference",
+                source_refs=("task:" + t_diag,),
+            ),
+            "complete-diag-self-ref",
+        )

@@ -1,10 +1,12 @@
 """OB-025 cloud model adapter with egress/budget gating and full-JSON tool proposal assembly."""
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from openbot.application.budgets import OfflineVocabularyEstimator
 from openbot.boundaries import accept_model_call
 from openbot.contracts import canonicalize, strict_json
 from openbot.domain.providers import (
@@ -214,6 +216,15 @@ class OpenAICompatibleAdapter:
         if request.request_id in self._cancelled:
             raise ProviderFailure("Request was cancelled before dispatch")
         payload = self._build_payload(request)
+        # Match SDK/httpx JSON serialization, including all history and complete tool schemas.
+        # This offline byte bound plus framing/output margins is not exact billed usage.
+        estimate = OfflineVocabularyEstimator().estimate(
+            request.model,
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+            tool_count=len(payload.get("tools", [])),
+            completion_reserve_tokens=payload["max_completion_tokens"],
+        )
+        reserved_units = max(request.reserved_cost_units, estimate.conservative_reserved_tokens)
 
         total_allowed_attempts = 1 + self._max_retries
         for attempt_idx in range(1, total_allowed_attempts + 1):
@@ -237,7 +248,7 @@ class OpenAICompatibleAdapter:
 
             # 2. Reserve budget for this exact HTTP attempt
             attempt_ref = f"{request.request_id}:try_{attempt_idx}"
-            self._budget.reserve(attempt_ref, request.reserved_cost_units)
+            self._budget.reserve(attempt_ref, reserved_units)
             cur_task = asyncio.current_task()
             if cur_task is not None:
                 self._inflight[request.request_id] = cur_task

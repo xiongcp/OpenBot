@@ -1,6 +1,7 @@
 import hashlib
 import json
 import time
+from concurrent.futures import Future
 
 import pytest
 from openbot.application.budgets import (
@@ -8,6 +9,7 @@ from openbot.application.budgets import (
     OfflineVocabularyEstimator,
     TaskBudgetPolicy,
 )
+from openbot.application.runtime_budget import RuntimeBudget
 from openbot.application.state_machine import TaskStateService
 from openbot.contracts import SchemaRegistry
 from openbot.storage.inbox import InboundContext, Inbox
@@ -67,6 +69,28 @@ def budget_env(tmp_path):
         yield path, context, writer, inbox, tasks, budgets
     finally:
         writer.close()
+
+
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        b'{"admitted":false}',
+        b"{}",
+        b"[]",
+        b'{"admitted":1}',
+        b'{"admitted":"true"}',
+        b'{"admitted":true,"admitted":false}',
+        b"not-json",
+    ],
+)
+def test_runtime_budget_requires_explicit_admission_receipt(budget_env, monkeypatch, receipt):
+    _, context, writer, _, _, _ = budget_env
+    result = Future()
+    result.set_result(receipt)
+    # Fault injection at the durable writer boundary, not a substitute budget implementation.
+    monkeypatch.setattr(writer, "submit", lambda _: result)
+    with pytest.raises(PermissionError, match="^BUDGET_ADMISSION_DENIED$"):
+        RuntimeBudget(writer, context, "tsk_synthetic").reserve("request", 500)
 
 
 def test_reserve_settle_unknown_retention_and_pause_on_exhaustion(budget_env):
@@ -312,6 +336,13 @@ def test_offline_vocabulary_estimator_verifies_hash_and_never_claims_exact_for_u
     assert known_est.vocab_sha256 == vocab_hash
     assert known_est.exact_billing_guaranteed is False
     assert known_est.estimated_tokens < known_est.conservative_reserved_tokens
+    # A verified asset is not a tokenizer: multibyte text must still use a byte bound.
+    unicode_est = estimator.estimate(
+        "gpt-4o-mini", "预算界限" * 1000, tool_count=2, completion_reserve_tokens=256
+    )
+    assert unicode_est.estimated_tokens < 12000
+    assert unicode_est.conservative_reserved_tokens >= 12000 + 256 + 80
+    assert unicode_est.exact_billing_guaranteed is False
 
     # 2. Unknown model never pretends OpenAI tokenizer is exact; uses conservative upper bound
     unknown_est = estimator.estimate("claude-sonnet-4", "hello world", tool_count=1)

@@ -52,7 +52,6 @@ def test_handle_guard_blocks_symlink_escape_and_parent_swap_race_and_verifies_ol
     (ws_root / "link_out.txt").symlink_to(outside)
     with pytest.raises(PermissionError, match="Symlink"):
         guard.read_bytes("link_out.txt")
-
     # 2. Create new file verifies parent inode and non-existence, then writes atomically
     snap_new = guard.observe("sub/hello.txt")
     assert snap_new.exists is False
@@ -114,3 +113,37 @@ def test_git_worktree_and_ripgrep_guards_block_hooks_filters_and_user_config(tmp
     # Pattern is placed after '--' so leading-dash patterns cannot inject flags like --pre
     dash_idx = rg_argv.index("--")
     assert rg_argv[dash_idx + 1] == "--pre=sh"
+
+
+def test_reads_stop_at_the_bound_instead_of_draining_to_eof(tmp_path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    guard = WorkspaceFileGuard(ws)
+    (ws / "exact.bin").write_bytes(b"a" * 4096)
+
+    assert guard.read_bytes("exact.bin", max_bytes=4096) == b"a" * 4096
+    with pytest.raises(PermissionError, match="FILE_READ_BOUND_EXCEEDED"):
+        guard.read_bytes("exact.bin", max_bytes=4095)
+
+    # A sparse gigabyte must never be materialised by a bounded read or a metadata call.
+    sparse = ws / "sparse.bin"
+    sparse.write_bytes(b"")
+    os.truncate(sparse, 1 << 30)
+    with pytest.raises(PermissionError, match="FILE_READ_BOUND_EXCEEDED"):
+        guard.read_bytes("sparse.bin", max_bytes=1 << 20)
+    meta = guard.metadata("sparse.bin")
+    assert (meta.exists, meta.sha256, meta.size_bytes) == (True, None, 1 << 30)
+
+
+def test_observe_is_pure_and_write_creates_the_approved_parent(tmp_path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    guard = WorkspaceFileGuard(ws)
+
+    snap = guard.observe("new_dir/dir.txt")
+    assert snap.exists is False
+    assert not (ws / "new_dir").exists(), "read-only observation must not create directories"
+
+    written = guard.write_atomic("new_dir/dir.txt", b"v1", snap)
+    assert written.exists is True
+    assert (ws / "new_dir" / "dir.txt").read_bytes() == b"v1"
