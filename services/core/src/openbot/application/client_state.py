@@ -78,7 +78,7 @@ class ClientState:
                 "locale": "zh-CN",
                 "model": "gpt-5.5",
                 "mode": mode,
-                "max_steps": 4,
+                "max_steps": 8,
                 "skill_enabled": True,
                 "mcp_enabled": False,
                 "feishu_enabled": False,

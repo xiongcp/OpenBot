@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import os
+import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -164,6 +165,7 @@ def default_model_runtime(env, root, monkeypatch, *, usage=True, on_http=None):
     runtime.model_factory = model_factory(
         ("https://budget.invalid/v1", "synthetic-not-a-real-key"),
         lambda: state.settings()["config"]["mode"],
+        runtime.load_admitted_tool_manifests,
     )
     return runtime, state, requests
 
@@ -243,7 +245,9 @@ def test_default_factory_reserves_before_http_and_accounts_once(
         on_http=lambda _: during_http.extend(reservation_rows(local_api_env)),
     )
     task = submit(local_api_env)
-    budgets = configure_budget(local_api_env, task, limit=2048)
+    # The payload now carries the five published workspace tool schemas (~1.5 KB), which the
+    # reservation must cover; 2048 tokens would correctly deny admission before HTTP.
+    budgets = configure_budget(local_api_env, task, limit=4096)
     try:
         runtime.start(task)
         wait_for(
@@ -313,13 +317,13 @@ def test_default_factory_sizes_full_payload_before_admission(
             Text("Summarize"),
         )
     else:
-        from openbot.application import runtime_factory
+        from openbot.application import agent_runtime
 
-        manifest = runtime_factory.DEMO_MANIFEST
+        manifest = agent_runtime.DEMO_MANIFEST
         schema = json.loads(manifest.input_schema)
         schema["description"] = "工具说明" * 600
         monkeypatch.setattr(
-            runtime_factory,
+            agent_runtime,
             "DEMO_MANIFEST",
             replace(
                 manifest,
@@ -731,3 +735,283 @@ def test_verified_effect_binds_outcome_source_refs(local_api_env, tmp_path):
     assert not any(ref.startswith("task:") for ref in outcome["source_refs"])
     verified_at = max(i for i, e in enumerate(events) if e["kind"] == "TOOL_RETURNED")
     assert [e["kind"] for e in events].index("OUTCOME_VERIFIED") > verified_at
+
+
+WORKSPACE_TOOLS = {
+    "workspace.list",
+    "workspace.read",
+    "workspace.search",
+    "workspace.propose_patch",
+    "workspace.apply_patch",
+}
+
+
+def scripted_sse(frames):
+    """Encode OpenAI-compatible stream chunks exactly as the SDK receives them."""
+    body = b"".join(b"data: " + json.dumps(f).encode() + b"\n\n" for f in frames)
+    return body + b"data: [DONE]\n\n"
+
+
+def tool_call_frame(call_id, name, args):
+    return {
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": call_id,
+                            "type": "function",
+                            "function": {"name": name, "arguments": json.dumps(args)},
+                        }
+                    ]
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
+    }
+
+
+def scripted_factory_runtime(env, root, monkeypatch, script, *, mcp_enabled, max_steps=8):
+    """Real default factory + SDK; only HTTP is replaced by a scripted model."""
+    httpx = pytest.importorskip("httpx")
+    pytest.importorskip("openai")
+    payloads = []
+
+    async def handle(request):
+        payload = json.loads(request.content)
+        payloads.append(payload)
+        frame = script(payload)
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=scripted_sse([frame])
+        )
+
+    def transport(**kwargs):
+        assert kwargs == {"retries": 0, "trust_env": False}
+        return httpx.MockTransport(handle)
+
+    monkeypatch.setattr(httpx, "AsyncHTTPTransport", transport)
+    runtime, state, _ = make_runtime(env, root)
+    updates = {"mcp_enabled": mcp_enabled}
+    if max_steps is not None:
+        updates["max_steps"] = max_steps
+    apply_config(state, **updates)
+    runtime.model_factory = model_factory(
+        ("https://scripted.invalid/v1", "synthetic-not-a-real-key"),
+        lambda: state.settings()["config"]["mode"],
+        runtime.load_admitted_tool_manifests,
+    )
+    return runtime, state, payloads
+
+
+def final_text_frame(text):
+    return {
+        "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
+    }
+
+
+@pytest.mark.parametrize("mcp_enabled", [False, True])
+def test_default_factory_publishes_only_tools_with_a_runtime_executor(
+    local_api_env, tmp_path, monkeypatch, mcp_enabled
+):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env,
+        workspace,
+        monkeypatch,
+        lambda payload: final_text_frame("No tool needed"),
+        mcp_enabled=mcp_enabled,
+    )
+    # An admitted registry entry without a runtime executor must never reach the model.
+    db = sqlite3.connect(tmp_path / "api.sqlite")
+    try:
+        with db:
+            db.execute(
+                "INSERT INTO tool_registry VALUES('unexecuted.tool','1.0.0',?,NULL,"
+                "'synthetic',?,'ACTIVE',1000)",
+                ("0" * 64, json.dumps({"name": "unexecuted.tool", "input_schema": {}})),
+            )
+    finally:
+        db.close()
+    task = submit(local_api_env, "Synthetic goal")
+    configure_budget(local_api_env, task, limit=200_000)
+    try:
+        runtime.start(task)
+        wait_for(lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED")
+    finally:
+        runtime.close()
+    published = {tool["function"]["name"] for tool in payloads[0]["tools"]}
+    assert published == WORKSPACE_TOOLS | ({"mcp_read_text"} if mcp_enabled else set())
+
+
+def chain_script(payload):
+    """search → read → propose → apply(bundle) → final text, keyed by tool results seen."""
+    tool_messages = [m for m in payload["messages"] if m["role"] == "tool"]
+    step = len(tool_messages)
+    if step == 0:
+        return tool_call_frame("call_s", "workspace.search", {"pattern": "status"})
+    if step == 1:
+        return tool_call_frame("call_r", "workspace.read", {"path": "notes.txt"})
+    if step == 2:
+        return tool_call_frame(
+            "call_p",
+            "workspace.propose_patch",
+            {"path": "notes.txt", "old_snippet": "status = old", "new_snippet": "status = new"},
+        )
+    if step == 3:
+        proposal = json.loads(tool_messages[-1]["content"].split("\n", 2)[2])
+        return tool_call_frame(
+            "call_a", "workspace.apply_patch", {"bundle_id": proposal["bundle_id"]}
+        )
+    return final_text_frame("notes.txt now reads status = new")
+
+
+def test_default_factory_completes_search_read_propose_apply_chain(
+    local_api_env, tmp_path, monkeypatch
+):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, chain_script, mcp_enabled=False
+    )
+    target = workspace / "notes.txt"
+    target.write_text("status = old\n")
+    task = submit(local_api_env, "Change the status in notes.txt from old to new")
+    configure_budget(local_api_env, task, limit=200_000)
+    approved = set()
+
+    def approve_next():
+        def pending():
+            events = state.trace(task)["events"]
+            if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+                return "done"
+            waiting = [
+                e["data"]["approval_id"]
+                for e in events
+                if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in approved
+            ]
+            return waiting[-1] if waiting else None
+
+        approval = wait_for(pending, timeout=8)
+        if approval == "done":
+            return False
+        approved.add(approval)
+        decide(local_api_env, state, task)
+        return True
+
+    try:
+        runtime.start(task)
+        while approve_next():
+            pass
+        wait_for(lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] != "RUNNING")
+    finally:
+        runtime.close()
+    interrupted = [e["data"] for e in state.trace(task)["events"] if e["kind"] == "RUN_INTERRUPTED"]
+    assert interrupted == []
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    assert target.read_text() == "status = new\n"
+    # search, read and apply each needed their own one-time approval; propose is staging only.
+    assert len(approved) == 3
+    assert len(payloads) == 5
+    for payload in payloads[1:]:
+        # Tool results reach the model unaltered; no injected "stop calling tools" instruction.
+        assert payload["messages"][-1]["role"] == "tool"
+        assert not any(
+            "without another tool request" in str(m.get("content")) for m in payload["messages"]
+        )
+    outcome = outcome_row(local_api_env, task)
+    assert outcome["task_kind"] == "DIAGNOSIS"
+    ops = local_api_env[2].read(
+        lambda db: db.execute("SELECT tool_id,state FROM operations ORDER BY created_at").fetchall()
+    )
+    assert ops == [
+        ("workspace.search", "SUCCEEDED"),
+        ("workspace.read", "SUCCEEDED"),
+        ("workspace.apply_patch", "SUCCEEDED"),
+    ]
+
+
+def test_default_factory_rejected_apply_writes_nothing(local_api_env, tmp_path, monkeypatch):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    runtime, state, _ = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, chain_script, mcp_enabled=False
+    )
+    target = workspace / "notes.txt"
+    target.write_text("status = old\n")
+    task = submit(local_api_env, "Change the status in notes.txt from old to new")
+    configure_budget(local_api_env, task, limit=200_000)
+    seen = set()
+
+    def next_approval():
+        waiting = [
+            e["data"]["approval_id"]
+            for e in state.trace(task)["events"]
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        for decision in ("APPROVE", "APPROVE", "DENY"):  # search, read, then the write
+            seen.add(wait_for(next_approval, timeout=8))
+            decide(local_api_env, state, task, decision)
+        wait_for(
+            lambda: any(e["kind"] == "RUN_INTERRUPTED" for e in state.trace(task)["events"]),
+            timeout=8,
+        )
+    finally:
+        runtime.close()
+    assert target.read_text() == "status = old\n"
+    ops = dict(
+        local_api_env[2].read(
+            lambda db: db.execute("SELECT tool_id,state FROM operations").fetchall()
+        )
+    )
+    assert ops["workspace.apply_patch"] == "REJECTED"
+    dispatched = [
+        e["data"]["tool"] for e in state.trace(task)["events"] if e["kind"] == "TOOL_DISPATCHED"
+    ]
+    assert "workspace.apply_patch" not in dispatched
+
+
+def test_fresh_profile_default_step_budget_fits_the_write_chain(
+    local_api_env, tmp_path, monkeypatch
+):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, chain_script, mcp_enabled=False, max_steps=None
+    )
+    assert state.settings()["config"]["max_steps"] == 8
+    target = workspace / "notes.txt"
+    target.write_text("status = old\n")
+    task = submit(local_api_env, "Change the status in notes.txt from old to new")
+    configure_budget(local_api_env, task, limit=200_000)
+    seen = set()
+
+    def next_approval():
+        events = state.trace(task)["events"]
+        if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+            return "done"
+        waiting = [
+            e["data"]["approval_id"]
+            for e in events
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        while (approval := wait_for(next_approval, timeout=8)) != "done":
+            seen.add(approval)
+            decide(local_api_env, state, task)
+    finally:
+        runtime.close()
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    assert target.read_text() == "status = new\n"
+    assert len(payloads) == 5
