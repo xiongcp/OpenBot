@@ -12,5 +12,7 @@ All routes require existing profile-bound authentication and loopback/Host/Origi
 - `GET /v1/client/health` → independent runtime/credentials/executor/gateway availability, no secret values.
 
 事件字段 / Trace DTO: `schema_version:"1", event_id, global_seq, task_id, run_id, parent_event_id?, kind, occurred_at_ms, config_revision, data`.
-Kinds: `RUN_STARTED`, `SKILL_LOADED`, `MODEL_REQUESTED`, `MODEL_RETURNED`, `TOOL_PROPOSED`, `WAITING_APPROVAL`, `TOOL_DISPATCHED`, `TOOL_RETURNED`, `OUTCOME_VERIFIED`, `RUN_FINISHED`, `RUN_INTERRUPTED`.
+Kinds: `RUN_STARTED`, `SKILL_LOADED`, `MODEL_REQUESTED`, `MODEL_RETURNED`, `TOOL_PROPOSED`, `WAITING_APPROVAL`, `TOOL_DISPATCHED`, `TOOL_RETURNED`, `OUTCOME_VERIFIED`, `RUN_FINISHED`, `RUN_INTERRUPTED`, `RUN_CLOSED`.
+
+`RUN_CLOSED` 由 `finish_run` 与 checkpoint 退役在同一短事务写入：它携带最终 `status`（终态或 `INTERRUPTED`）与 `finished_at_ms`，并把 `agent_run` 从检查点移到 `last_agent_run`。运行槽位只属于仍然存活的 run；被中断、被拒或预算耗尽的运行结束后必须释放，否则画像内其他任务永远得不到 `ONE_ACTIVE_RUN_REQUIRED` 之外的机会。崩溃恢复不写该事件，遗留的 `agent_run` 仍阻止静默重启。
 Only allowlisted scalar/string-list data, redacted before persistence; no generic raw payload passthrough.

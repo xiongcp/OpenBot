@@ -644,3 +644,90 @@ def test_repeated_completed_read_is_not_dispatched_again(local_api_env, tmp_path
         assert runtime.tool.calls == 1
     finally:
         runtime.close()
+
+
+def outcome_row(env, task_id):
+    raw = env[2].read(
+        lambda db: db.execute(
+            "SELECT outcome_json FROM tasks WHERE task_id=?", (task_id,)
+        ).fetchone()[0]
+    )
+    return None if raw is None else json.loads(raw)
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "O_NOFOLLOW"), reason="Requires POSIX demo-file guards; Windows is unqualified"
+)
+def test_chat_outcome_claims_no_evidence_and_releases_the_run(local_api_env, tmp_path):
+    runtime, state, _ = make_runtime(local_api_env, tmp_path, model_tool=False)
+    task = submit(local_api_env)
+    try:
+        runtime.start(task)
+        wait_for(lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED")
+        wait_for(lambda: state.run(task) == {})
+        outcome = outcome_row(local_api_env, task)
+        assert outcome["task_kind"] == "CHAT"
+        assert outcome["source_refs"] == []
+        assert "RUN_CLOSED" in [e["kind"] for e in state.trace(task)["events"]]
+        # A finished run must not keep holding the profile's single active-run slot.
+        second = submit(local_api_env, goal="Read demo.txt using the MCP tool and summarize again")
+        assert runtime.start(second)["run_id"]
+        wait_for(lambda: state.run(second) == {})
+    finally:
+        runtime.close()
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "O_NOFOLLOW"), reason="Requires POSIX demo-file guards; Windows is unqualified"
+)
+def test_denied_approval_releases_the_active_run_slot(local_api_env, tmp_path):
+    runtime, state, _ = make_runtime(local_api_env, tmp_path)
+    task = submit(local_api_env)
+    try:
+        runtime.start(task)
+        decide(local_api_env, state, task, "DENY")
+        wait_for(lambda: state.run(task) == {})
+        assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "QUEUED"
+        assert any(e["kind"] == "RUN_CLOSED" for e in state.trace(task)["events"])
+        # Denial must not strand the queued task: a fresh run is startable without recovery.
+        second_run = runtime.start(task)["run_id"]
+        wait_for(
+            lambda: any(
+                e["kind"] == "RUN_CLOSED" and e["run_id"] == second_run
+                for e in state.trace(task)["events"]
+            )
+        )
+        # Effects of the earlier run cannot launder the resumed run's outcome claim.
+        assert outcome_row(local_api_env, task)["task_kind"] == "CHAT"
+    finally:
+        runtime.close()
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "O_NOFOLLOW"), reason="Requires POSIX demo-file guards; Windows is unqualified"
+)
+def test_verified_effect_binds_outcome_source_refs(local_api_env, tmp_path):
+    runtime, state, _ = make_runtime(local_api_env, tmp_path)
+    task = submit(local_api_env)
+    try:
+        runtime.start(task)
+        decide(local_api_env, state, task)
+        wait_for(
+            lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED",
+            timeout=8,
+        )
+    finally:
+        runtime.close()
+    events = state.trace(task)["events"]
+    returned = [e for e in events if e["kind"] == "TOOL_RETURNED"]
+    assert returned, "a verified tool effect must be recorded before completion"
+    expected = []
+    for event in returned:
+        for key, prefix in (("operation_id", "operation:"), ("artifact_id", "artifact:")):
+            if key in event["data"] and prefix + event["data"][key] not in expected:
+                expected.append(prefix + event["data"][key])
+    outcome = outcome_row(local_api_env, task)
+    assert outcome["source_refs"] == expected
+    assert not any(ref.startswith("task:") for ref in outcome["source_refs"])
+    verified_at = max(i for i, e in enumerate(events) if e["kind"] == "TOOL_RETURNED")
+    assert [e["kind"] for e in events].index("OUTCOME_VERIFIED") > verified_at

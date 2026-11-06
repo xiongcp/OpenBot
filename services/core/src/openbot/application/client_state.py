@@ -56,6 +56,7 @@ _DATA_KEYS = frozenset(
     }
 )
 _TERMINAL = frozenset({"SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"})
+_RUN_OUTCOMES = _TERMINAL | frozenset({"INTERRUPTED"})
 
 
 class ClientState:
@@ -308,8 +309,10 @@ class ClientState:
     def run(self, task_id: str) -> dict[str, Any]:
         return self.writer.read(lambda db: self._run(db, task_id))
 
-    def start_run(self, task_id: str) -> dict[str, Any]:
-        req = "client-start:" + task_id
+    def start_run(self, task_id: str, request_id: str | None = None) -> dict[str, Any]:
+        # Each accepted start is a distinct run; a fixed key would replay the previous receipt
+        # and leave the resumed task without a live marker.
+        req = request_id or "client-start:" + task_id
 
         def apply(db: sqlite3.Connection, fingerprint: str) -> bytes:
             state, version, _ = task_record(db, self.context, task_id)
@@ -369,6 +372,57 @@ class ClientState:
             return canonicalize(run)
 
         return self._write(req, {"task_id": task_id}, apply)
+
+    def finish_run(self, task_id: str, status: str) -> dict[str, Any]:
+        """Retire the live marker so a finished run cannot hold the single active-run slot."""
+        if status not in _RUN_OUTCOMES:
+            raise ValueError("RUN_FINISH_STATUS_INVALID")
+        req = "client-finish:" + task_id + ":" + status
+
+        def apply(db: sqlite3.Connection, fingerprint: str) -> bytes:
+            state, version, _ = task_record(db, self.context, task_id)
+            run = self._run(db, task_id)
+            if not run:
+                return canonicalize({"task_id": task_id, "retired": False, "state": state})
+            retired = {**run, "status": status, "finished_at_ms": time.time_ns() // 1_000_000}
+            checkpoint = strict_json(
+                db.execute(
+                    "SELECT checkpoint_json FROM tasks WHERE task_id=?", (task_id,)
+                ).fetchone()[0]
+            )
+            checkpoint.pop("agent_run")
+            checkpoint["last_agent_run"] = retired
+            db.execute(
+                "UPDATE tasks SET checkpoint_json=?,version=version+1 "
+                "WHERE task_id=? AND version=?",
+                (canonicalize(checkpoint).decode(), task_id, version),
+            )
+            closed = {
+                "schema_version": "1",
+                "event_id": "evt_" + secrets.token_hex(16),
+                "task_id": task_id,
+                "run_id": run["run_id"],
+                "parent_event_id": None,
+                "kind": "RUN_CLOSED",
+                "occurred_at_ms": retired["finished_at_ms"],
+                "config_revision": run["config_revision"],
+                "data": {"status": status},
+            }
+            self._event(
+                db,
+                aggregate="AgentRun",
+                aggregate_id=run["run_id"],
+                revision=1,
+                kind="RUN_CLOSED",
+                task_id=task_id,
+                receipt=closed,
+                request_id=req,
+                fingerprint=fingerprint,
+                event_id=closed["event_id"],
+            )
+            return canonicalize({"task_id": task_id, "retired": True, **retired})
+
+        return self._write(req, {"task_id": task_id, "status": status}, apply)
 
     def record(
         self, task_id: str, kind: str, data: dict[str, Any], *, parent_event_id: str | None = None
@@ -440,20 +494,21 @@ class ClientState:
             ).fetchall()
             events = []
             for seq, event_id, kind, created_at, raw in rows:
+                receipt = strict_json(raw)["receipt"]
                 if kind == "RUN_STARTED":
                     event = {
                         "schema_version": "1",
                         "event_id": event_id,
                         "task_id": task_id,
-                        "run_id": run["run_id"],
+                        "run_id": receipt["run_id"],
                         "parent_event_id": None,
                         "kind": kind,
                         "occurred_at_ms": created_at,
-                        "config_revision": run["config_revision"],
-                        "data": {"status": "STARTED", "source": run.get("source", "LOCAL")},
+                        "config_revision": receipt["config_revision"],
+                        "data": {"status": "STARTED", "source": receipt.get("source", "LOCAL")},
                     }
                 else:
-                    event = strict_json(raw)["receipt"]
+                    event = receipt
                 events.append(event | {"global_seq": seq})
             return {
                 "task_id": task_id,

@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import logging
 import os
 import secrets
 import sqlite3
@@ -37,6 +38,8 @@ from openbot.tools.executors.sandbox import ContainerOwnership
 from openbot.tools.filesystem_guard import WorkspaceFileGuard, validate_relative_workspace_path
 from openbot.tools.workspace.patch import FileEditSpec, PatchProposalBundle, WorkspacePatchTool
 from openbot.tools.workspace.read import WorkspaceReadTools
+
+_TERMINAL_STATES = frozenset({"SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"})
 
 DEMO_SCHEMA = {
     "type": "object",
@@ -317,6 +320,8 @@ class AgentRuntime:
         ):
             raise PermissionError("RUN_CANCELLED_OR_CLOSED")
         run, active = self.state.run(task_id), self.state.settings()["config"]
+        if not run:
+            raise PermissionError("RUN_NOT_STARTED")
         checkpoint = self.state.writer.read(
             lambda db: strict_json(
                 db.execute(
@@ -346,7 +351,7 @@ class AgentRuntime:
                 raise PermissionError("MODEL_CREDENTIALS_REQUIRED")
             if self._snapshot(task_id)["state"] != "QUEUED":
                 raise RequestConflict("RUN_REQUIRES_QUEUED_TASK")
-            run = self.state.start_run(task_id)
+            run = self.state.start_run(task_id, "agent-start:" + secrets.token_hex(16))
             self._active = task_id
             self._thread = threading.Thread(
                 target=self._execute, args=(task_id,), daemon=True, name="openbot-agent-run"
@@ -360,10 +365,16 @@ class AgentRuntime:
         ).sanitized_text
 
     def _event(self, task_id: str, kind: str, data: dict[str, Any]) -> dict[str, Any]:
-        events = self.state.trace(task_id)["events"]
-        return self.state.record(
-            task_id, kind, data, parent_event_id=events[-1]["event_id"] if events else None
+        run_id = self.state.run(task_id).get("run_id")
+        parent = next(
+            (
+                event["event_id"]
+                for event in reversed(self.state.trace(task_id)["events"])
+                if run_id is None or event.get("run_id") == run_id
+            ),
+            None,
         )
+        return self.state.record(task_id, kind, data, parent_event_id=parent)
 
     def _read_hash(self) -> str:
         nofollow, nonblock = getattr(os, "O_NOFOLLOW", None), getattr(os, "O_NONBLOCK", None)
@@ -380,6 +391,10 @@ class AgentRuntime:
         if len(data) > 4096:
             raise PermissionError("DEMO_INPUT_LIMIT")
         return hashlib.sha256(data).hexdigest()
+
+    def _call_scope(self, task_id: str, call: ToolCall) -> str:
+        """Idempotency keys are scoped to one run; a task may legally be run again later."""
+        return str(self.state.run(task_id)["run_id"]) + ":" + call.call_id + task_id
 
     def _workspace_tool_call(self, task_id: str, call: ToolCall, args: dict[str, Any]) -> str:
         self._check(task_id, tool=False)
@@ -407,7 +422,7 @@ class AgentRuntime:
                         new_snippet=str(args["new_snippet"]),
                     ),
                 ),
-                request_id="agent-propose-patch:" + call.call_id + task_id,
+                request_id="agent-propose-patch:" + self._call_scope(task_id, call),
                 deadline_monotonic_ms=deadline(),
             )
             self._patch_bundles[bundle.bundle_id] = bundle
@@ -454,7 +469,7 @@ class AgentRuntime:
                             new_snippet=str(args["new_snippet"]),
                         ),
                     ),
-                    request_id="agent-inline-patch:" + call.call_id + task_id,
+                    request_id="agent-inline-patch:" + self._call_scope(task_id, call),
                     deadline_monotonic_ms=deadline(),
                 )
                 self._patch_bundles[bundle_to_apply.bundle_id] = bundle_to_apply
@@ -475,7 +490,7 @@ class AgentRuntime:
                 {"workspace_generation": generation, "files": precond_files},
                 "WORKSPACE",
                 {"kind": "LOCAL", "resource_ref": self.state.context.workspace_id},
-                "agent-propose:" + call.call_id + task_id,
+                "agent-propose:" + self._call_scope(task_id, call),
                 deadline(),
             )
         )
@@ -677,7 +692,7 @@ class AgentRuntime:
                 },
                 "WORKSPACE",
                 {"kind": "LOCAL", "resource_ref": self.state.context.workspace_id},
-                "agent-propose:" + call.call_id + task_id,
+                "agent-propose:" + self._call_scope(task_id, call),
                 deadline(),
             )
         )
@@ -909,6 +924,7 @@ class AgentRuntime:
             text = self._safe("\n".join(b.text for b in response.blocks if isinstance(b, Text)))
             if not text.strip():
                 raise PermissionError("MODEL_EMPTY_RESULT")
+            evidence = self._verified_evidence(task_id, run["run_id"])
             artifact = self.artifacts.put(
                 self.state.context,
                 data=text.encode(),
@@ -920,30 +936,45 @@ class AgentRuntime:
                 request_id="agent-output:" + ref,
                 deadline_monotonic_ms=deadline(),
             )
-            self._event(
-                task_id,
-                "OUTCOME_VERIFIED",
-                {"artifact_id": artifact.object_id, "sha256": artifact.sha256, "text": text},
-            )
             snap = self._snapshot(task_id)
             command = self.tasks.complete(
                 self.state.context,
                 task_id,
                 snap["version"],
                 OutcomeSubmission(
-                    "DIAGNOSIS",
+                    "DIAGNOSIS" if evidence else "CHAT",
                     "SUCCEEDED",
                     text[:2048],
                     artifact_ids=(artifact.object_id,),
-                    source_refs=("task:" + task_id,),
+                    source_refs=evidence,
                 ),
                 "agent-complete:" + ref,
                 deadline(),
             )
             self.state.writer.submit(command).result(timeout=5)
+            self._event(
+                task_id,
+                "OUTCOME_VERIFIED",
+                {"artifact_id": artifact.object_id, "sha256": artifact.sha256, "text": text},
+            )
             self._event(task_id, "RUN_FINISHED", {"status": "SUCCEEDED"})
             return
         raise PermissionError("RUN_STEP_LIMIT")
+
+    def _verified_evidence(self, task_id: str, run_id: str) -> tuple[str, ...]:
+        """Durable effects of this run only; model text can never attest to its own claim."""
+        refs: list[str] = []
+        for event in self.state.trace(task_id)["events"]:
+            if event["kind"] != "TOOL_RETURNED" or event.get("run_id") != run_id:
+                continue
+            data = event["data"]
+            for key, prefix in (("operation_id", "operation:"), ("artifact_id", "artifact:")):
+                if key not in data:
+                    continue
+                ref = prefix + str(data[key])
+                if ref not in refs:
+                    refs.append(ref)
+        return tuple(refs)
 
     def _execute(self, task_id: str) -> None:
         try:
@@ -977,8 +1008,21 @@ class AgentRuntime:
                 },
             )
             if self._snapshot(task_id)["state"] == "RUNNING":
-                self._transition(task_id, "PAUSED")
+                try:
+                    self._transition(task_id, "PAUSED")
+                except RequestConflict:
+                    # A concurrent commit already moved the task; confirm instead of assuming.
+                    if self._snapshot(task_id)["state"] == "RUNNING":
+                        raise
         finally:
+            try:
+                state = self._snapshot(task_id)["state"]
+                self.state.finish_run(
+                    task_id, state if state in _TERMINAL_STATES else "INTERRUPTED"
+                )
+            except Exception:
+                # Retirement failure must not replace the interruption that caused it.
+                logging.getLogger(__name__).warning("RUN_RETIRE_FAILED")
             with self._lock:
                 self._active = None
 

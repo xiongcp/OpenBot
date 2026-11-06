@@ -98,8 +98,14 @@ def test_client_run_start_trace_and_readonly_replay(client_env):
     wait_for(lambda: env[3].snapshot(env[1], task)["state"] == "SUCCEEDED")
     runs = call(env, "GET", "/v1/client/runs").json()["runs"]
     assert runs[0]["run_id"] == started.json()["run_id"]
+    wait_for(
+        lambda: state.trace(task)["events"][-1]["kind"] == "RUN_CLOSED",
+    )
     trace = call(env, "GET", f"/v1/client/tasks/{task}/trace", token=env[9]).json()
-    assert trace["events"][-1]["kind"] == "RUN_FINISHED"
+    assert [e["kind"] for e in trace["events"][-2:]] == ["RUN_FINISHED", "RUN_CLOSED"]
+    assert trace["events"][-2]["data"] == {"status": "SUCCEEDED"}
+    assert trace["events"][-1]["data"] == {"status": "SUCCEEDED"}
+    assert trace["run_id"] is None, "a retired run must not keep holding the active-run slot"
     assert (
         call(
             env,
