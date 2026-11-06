@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from openbot.application.client_state import ClientState
+from openbot.application.context_window import compact_history
 from openbot.application.dispatch import DispatchService
 from openbot.application.operations import OperationService
 from openbot.application.resources import ResourceRequest
@@ -403,12 +404,23 @@ class AgentRuntime:
             sink="model_input", text=text, data_class="WORKSPACE"
         ).sanitized_text
 
+    def _all_events(self, task_id: str) -> list[dict[str, Any]]:
+        """Every trace event; one trace page holds 128 and long runs need the full chain."""
+        events: list[dict[str, Any]] = []
+        cursor = 0
+        while True:
+            page = self.state.trace(task_id, cursor)["events"]
+            if not page:
+                return events
+            events.extend(page)
+            cursor = int(page[-1]["global_seq"])
+
     def _event(self, task_id: str, kind: str, data: dict[str, Any]) -> dict[str, Any]:
         run_id = self.state.run(task_id).get("run_id")
         parent = next(
             (
                 event["event_id"]
-                for event in reversed(self.state.trace(task_id)["events"])
+                for event in reversed(self._all_events(task_id))
                 if run_id is None or event.get("run_id") == run_id
             ),
             None,
@@ -924,7 +936,7 @@ class AgentRuntime:
                         ModelRequest(
                             ref,
                             run["config"]["model"],
-                            tuple(history),
+                            compact_history(history),
                             int(time.monotonic() * 1000) + MODEL_REQUEST_DEADLINE_MS,
                             # No extra floor: the provider reserves the full serialized
                             # history, tool schemas, framing and bounded output before HTTP.
@@ -1002,7 +1014,7 @@ class AgentRuntime:
     def _verified_evidence(self, task_id: str, run_id: str) -> tuple[str, ...]:
         """Durable effects of this run only; model text can never attest to its own claim."""
         refs: list[str] = []
-        for event in self.state.trace(task_id)["events"]:
+        for event in self._all_events(task_id):
             if event["kind"] != "TOOL_RETURNED" or event.get("run_id") != run_id:
                 continue
             data = event["data"]
@@ -1040,6 +1052,7 @@ class AgentRuntime:
                             "RUN_STEP_BUDGET_REDUCED",
                             "RUN_STEP_LIMIT",
                             "WORKSPACE_TOOL_DISABLED",
+                            "CONTEXT_WINDOW_EXHAUSTED",
                         }
                         else type(exc).__name__
                     ),

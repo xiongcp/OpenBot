@@ -23,6 +23,17 @@ from tests.integration.test_client_state import apply_config, service
 __all__ = ["local_api_env"]
 
 
+def all_events(state, task_id):
+    """Page the 128-event trace window by cursor; long runs exceed a single page."""
+    events, cursor = [], 0
+    while True:
+        page = state.trace(task_id, cursor)["events"]
+        if not page:
+            return events
+        events.extend(page)
+        cursor = page[-1]["global_seq"]
+
+
 def wait_for(check, timeout=5):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -417,7 +428,7 @@ def test_default_factory_concurrent_reservation_exhaustion_prevents_second_http(
 
 def decide(env, state, task_id, decision="APPROVE"):
     events = wait_for(
-        lambda: [e for e in state.trace(task_id)["events"] if e["kind"] == "WAITING_APPROVAL"]
+        lambda: [e for e in all_events(state, task_id) if e["kind"] == "WAITING_APPROVAL"]
     )
     approval = events[-1]["data"]["approval_id"]
     preview = (
@@ -1183,3 +1194,59 @@ def test_default_budget_policy_supports_two_hundred_steps():
     assert policy.max_model_calls == 200
     assert policy.max_tool_calls == 400
     assert policy.max_duration_ms == 14_400_000
+
+
+def test_forty_step_chain_completes_with_compaction(local_api_env, tmp_path, monkeypatch):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    for i in range(40):
+        (workspace / f"part{i}.txt").write_text(f"line {i}\n" * 3000)  # ~24 KB each
+
+    def script(payload):
+        step = len([m for m in payload["messages"] if m["role"] == "tool"])
+        if step < 40:
+            return tool_call_frame(f"call_{step}", "workspace.read", {"path": f"part{step}.txt"})
+        return final_text_frame("read all 40 parts")
+
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False, max_steps=None
+    )
+    task = submit(local_api_env, "Read part0..part39 and report")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    seen = set()
+
+    def next_approval():
+        events = all_events(state, task)
+        if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+            return "done"
+        waiting = [
+            e["data"]["approval_id"]
+            for e in events
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        while (approval := wait_for(next_approval, timeout=8)) != "done":
+            seen.add(approval)
+            decide(local_api_env, state, task)
+    finally:
+        runtime.close()
+    events = all_events(state, task)
+    interrupted = [e["data"] for e in events if e["kind"] == "RUN_INTERRUPTED"]
+    assert interrupted == []
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    assert len(payloads) == 41
+    # Long runs exceed one 128-event trace page: evidence must still cite every effect and
+    # every event's parent must be the run's previous event.
+    assert len(outcome_row(local_api_env, task)["source_refs"]) == 80
+    # RUN_CLOSED is a parentless bookkeeping record by design (finish_run, CR-04).
+    run_events = [
+        e
+        for e in events
+        if e.get("run_id") == events[-1].get("run_id") and e["kind"] != "RUN_CLOSED"
+    ]
+    for prev, cur in zip(run_events, run_events[1:], strict=False):
+        assert cur["parent_event_id"] == prev["event_id"]
+    assert any("ELIDED_TOOL_RESULT" in str(m.get("content")) for m in payloads[-1]["messages"])
