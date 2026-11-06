@@ -257,6 +257,29 @@ class WorkspaceFileGuard:
         finally:
             os.close(parent_fd)
 
+    def unlink_verified(self, rel_path: str, expected: ObservedFileSnapshot) -> None:
+        """Remove a file only when its identity still matches the observed snapshot."""
+        parts = validate_relative_workspace_path(rel_path)
+        if expected.relative_path != rel_path or not expected.exists or expected.file_ino is None:
+            raise PermissionError("Unlink snapshot does not identify an existing file")
+        parent_fd, parent_st = self._walk_parent_fd(parts, create_dirs=False)
+        try:
+            if parent_st.st_dev != expected.parent_dev or parent_st.st_ino != expected.parent_ino:
+                raise PermissionError("Parent directory inode changed since observation")
+            leaf = parts[-1]
+            lst = os.lstat(leaf, dir_fd=parent_fd)
+            if (
+                stat.S_ISLNK(lst.st_mode)
+                or not stat.S_ISREG(lst.st_mode)
+                or lst.st_ino != expected.file_ino
+                or lst.st_dev != self._root_dev
+                or lst.st_nlink > 1
+            ):
+                raise PermissionError("Refusing to unlink changed, linked, or non-regular file")
+            os.unlink(leaf, dir_fd=parent_fd)
+        finally:
+            os.close(parent_fd)
+
     def write_atomic(
         self, rel_path: str, data: bytes, expected: ObservedFileSnapshot
     ) -> ObservedFileSnapshot:
