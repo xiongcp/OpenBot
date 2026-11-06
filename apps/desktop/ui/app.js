@@ -213,7 +213,7 @@ $('language').addEventListener('click', () => action(async () => {
 }));
 $('settings-form').addEventListener('input', () => { settingsDirty = true; preview = null; $('settings-preview').hidden = true; });
 $('settings-form').addEventListener('submit', event => { event.preventDefault(); action(async () => {
-  const data = new FormData($('settings-form')), config = Object.fromEntries(['locale','model','mode'].map(k => [k,data.get(k)]));
+  const data = new FormData($('settings-form')), config = Object.fromEntries(['locale','model','mode','workspace_tools'].map(k => [k,data.get(k)]));
   config.max_steps = Number(data.get('max_steps'));
   for (const key of ['skill_enabled','mcp_enabled','feishu_enabled']) config[key] = data.has(key);
   preview = await invoke('client_preview_settings', { expectedRevision: snapshot.settings.revision, config });

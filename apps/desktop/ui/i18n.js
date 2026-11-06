@@ -27,6 +27,7 @@ const pairs = {
   taskHint:['首版只读工具限专用工作区的 demo.txt。所有调用仍需核心授权。','The first read-only tool is limited to demo.txt in the dedicated workspace. Core authorization is always required.'],
   defaultGoal:['使用 MCP 读取 demo.txt，并用中英文总结已验证内容。','Read demo.txt through MCP and summarize the verified content in Chinese and English.'],
   revision:['配置版本','Configuration revision'], mode:['网络模式','Network mode'], steps:['最大模型步数','Maximum model steps'], locale:['界面语言','Interface language'],
+  workspace_tools:['工作区工具','Workspace tools'], tools_off:['关闭','Off'], tools_read:['只读','Read only'], tools_read_write:['读写（每次写入需批准）','Read & write (each write approved)'],
   skill_enabled:['启用只读 Skill','Enable read-only skill'], mcp_enabled:['启用已准入 MCP','Enable admitted MCP'], feishu_enabled:['启用飞书入口','Enable Feishu entry'],
   preview:['预览变更','Preview changes'], apply:['确认应用','Confirm and apply'], pending:['待确认','Pending confirmation'],
   activation:['语言立即生效；模型默认值用于新运行；权限收紧会在下一次请求或派发前复核。','Locale applies immediately. Model defaults apply to new runs. Restrictions are rechecked before the next request or dispatch.'],

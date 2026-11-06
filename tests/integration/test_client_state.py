@@ -158,3 +158,54 @@ def test_run_started_is_a_replayable_fact_and_second_active_run_is_rejected(loca
     other = new_task(local_api_env, "second synthetic task")
     with pytest.raises(RequestConflict):
         state.start_run(other)
+
+
+def test_fresh_settings_allow_long_runs_with_read_only_tools(local_api_env):
+    state = service(local_api_env)
+    config = state.settings()["config"]
+    assert config["max_steps"] == 200
+    assert config["workspace_tools"] == "READ"
+
+
+@pytest.mark.parametrize("steps,accepted", [(200, True), (201, False), (0, False)])
+def test_max_steps_bounds(local_api_env, steps, accepted):
+    state = service(local_api_env)
+    if accepted:
+        apply_config(state, max_steps=steps)
+        assert state.settings()["config"]["max_steps"] == steps
+    else:
+        with pytest.raises(ContractError):
+            apply_config(state, max_steps=steps)
+
+
+def test_workspace_tools_rejects_unknown_level(local_api_env):
+    state = service(local_api_env)
+    with pytest.raises(ContractError):
+        apply_config(state, workspace_tools="ALL")
+
+
+def test_legacy_settings_receipt_defaults_new_field_to_read(local_api_env, tmp_path):
+    import sqlite3
+
+    state = service(local_api_env)
+    apply_config(state, workspace_tools="READ_WRITE")
+    # Events are append-only: append a receipt in the pre-ADR-0014 shape (no workspace_tools).
+    db = sqlite3.connect(tmp_path / "api.sqlite")
+    try:
+        with db:
+            row = db.execute(
+                "SELECT aggregate_kind,aggregate_id,aggregate_version,actor_principal_id,"
+                "event_type,schema_version,trace_id,payload_json,created_at FROM events "
+                "WHERE aggregate_kind='ClientSettings' ORDER BY seq DESC LIMIT 1"
+            ).fetchone()
+            doc = json.loads(row[7])
+            del doc["receipt"]["config"]["workspace_tools"]
+            db.execute(
+                "INSERT INTO events(event_id,aggregate_kind,aggregate_id,aggregate_version,"
+                "actor_principal_id,event_type,schema_version,trace_id,payload_json,created_at) "
+                "VALUES('evt_legacy_settings',?,?,?,?,?,?,?,?,?)",
+                (*row[:7], json.dumps(doc), row[8]),
+            )
+    finally:
+        db.close()
+    assert state.settings()["config"]["workspace_tools"] == "READ"

@@ -794,7 +794,7 @@ def scripted_factory_runtime(env, root, monkeypatch, script, *, mcp_enabled, max
 
     monkeypatch.setattr(httpx, "AsyncHTTPTransport", transport)
     runtime, state, _ = make_runtime(env, root)
-    updates = {"mcp_enabled": mcp_enabled}
+    updates = {"mcp_enabled": mcp_enabled, "workspace_tools": "READ_WRITE"}
     if max_steps is not None:
         updates["max_steps"] = max_steps
     apply_config(state, **updates)
@@ -987,7 +987,7 @@ def test_fresh_profile_default_step_budget_fits_the_write_chain(
     runtime, state, payloads = scripted_factory_runtime(
         local_api_env, workspace, monkeypatch, chain_script, mcp_enabled=False, max_steps=None
     )
-    assert state.settings()["config"]["max_steps"] == 8
+    assert state.settings()["config"]["max_steps"] == 200
     target = workspace / "notes.txt"
     target.write_text("status = old\n")
     task = submit(local_api_env, "Change the status in notes.txt from old to new")
