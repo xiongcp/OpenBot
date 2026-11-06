@@ -14,6 +14,7 @@ from openbot.application.budgets import BudgetService, TaskBudgetPolicy
 from openbot.application.runtime_budget import RuntimeBudget
 from openbot.application.runtime_factory import model_factory
 from openbot.domain.providers import ModelRequest, ModelResponse, Text, ToolCall, ToolResult
+from openbot.providers.openai_compatible import MAX_COMPLETION_TOKENS
 from openbot.storage.writer import RequestConflict
 
 from tests.contracts.local_api.test_local_api_contracts import _headers, local_api_env
@@ -213,7 +214,10 @@ def test_default_factory_budget_gate_prevents_http(local_api_env, tmp_path, monk
         policy = replace(policy, max_duration_ms=1)
         now = time.time_ns() + 60_000_000_000
         monkeypatch.setattr("openbot.application.budgets.time.time_ns", lambda: now)
-    configure_budget(local_api_env, task, limit=0 if gate == "tokens" else 5000, policy=policy)
+    # Non-token gates get room for one normal 64k-output request, so only their own gate (or,
+    # for "unicode", the oversized payload itself) can deny admission (ADR-0014).
+    roomy = MAX_COMPLETION_TOKENS + 5000
+    configure_budget(local_api_env, task, limit=0 if gate == "tokens" else roomy, policy=policy)
     try:
         runtime.start(task)
         wait_for(
@@ -245,9 +249,9 @@ def test_default_factory_reserves_before_http_and_accounts_once(
         on_http=lambda _: during_http.extend(reservation_rows(local_api_env)),
     )
     task = submit(local_api_env)
-    # The payload now carries the five published workspace tool schemas (~1.5 KB), which the
-    # reservation must cover; 2048 tokens would correctly deny admission before HTTP.
-    budgets = configure_budget(local_api_env, task, limit=4096)
+    # The reservation covers the serialized payload (incl. published tool schemas) plus the
+    # 64k output bound (ADR-0014); this limit still fits exactly one request.
+    budgets = configure_budget(local_api_env, task, limit=MAX_COMPLETION_TOKENS + 8192)
     try:
         runtime.start(task)
         wait_for(
@@ -260,8 +264,8 @@ def test_default_factory_reserves_before_http_and_accounts_once(
         assert during_http[0][1] == "RESERVED"
         reserved = during_http[0][2]
         payload = json.loads(requests[0].content)
-        assert payload["max_completion_tokens"] == 256
-        assert reserved >= len(requests[0].content) + 256
+        assert payload["max_completion_tokens"] == MAX_COMPLETION_TOKENS
+        assert reserved >= len(requests[0].content) + MAX_COMPLETION_TOKENS
         rows = reservation_rows(local_api_env)
         assert rows == [
             (during_http[0][0], "SETTLED" if usage else "UNKNOWN", reserved, 20 if usage else None)
@@ -349,7 +353,11 @@ def test_default_factory_sizes_full_payload_before_admission(
         runtime.close()
 
 
-@pytest.mark.parametrize("initial_limit", [5000, 10000])
+# Floor above payload + 64k output so the reservation equals the floor (ADR-0014 grew it from 5000).
+FLOOR = MAX_COMPLETION_TOKENS + 5000
+
+
+@pytest.mark.parametrize("initial_limit", [FLOOR, 2 * FLOOR])
 def test_default_factory_concurrent_reservation_exhaustion_prevents_second_http(
     local_api_env, tmp_path, monkeypatch, initial_limit
 ):
@@ -374,7 +382,7 @@ def test_default_factory_concurrent_reservation_exhaustion_prevents_second_http(
         state,
         task,
         blocks=(Text("First"),),
-        floor=5000,
+        floor=FLOOR,
         ref="first",
     )
     second, req2 = running_model_request(
@@ -383,16 +391,16 @@ def test_default_factory_concurrent_reservation_exhaustion_prevents_second_http(
         state,
         task,
         blocks=(Text("Second"),),
-        floor=5000,
+        floor=FLOOR,
         ref="second",
     )
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(asyncio.run, first.generate(req1))
         try:
             assert entered.wait(5)
-            assert budgets.snapshot(local_api_env[1], task)["tokens_reserved"] == 5000
-            if initial_limit > 5000:
-                configure_budget(local_api_env, task, limit=5000, request_id="shrink-inflight")
+            assert budgets.snapshot(local_api_env[1], task)["tokens_reserved"] == FLOOR
+            if initial_limit > FLOOR:
+                configure_budget(local_api_env, task, limit=FLOOR, request_id="shrink-inflight")
             with pytest.raises(PermissionError, match="^BUDGET_ADMISSION_DENIED$"):
                 asyncio.run(second.generate(req2))
             assert len(requests) == 1
@@ -1125,3 +1133,53 @@ def test_every_request_carries_the_runtime_system_instruction(local_api_env, tmp
     for payload in payloads:
         assert payload["messages"][0] == {"role": "system", "content": RUNTIME_SYSTEM_INSTRUCTION}
     assert "untrusted data" in RUNTIME_SYSTEM_INSTRUCTION
+
+
+def test_fresh_task_default_budget_admits_one_64k_request(local_api_env, tmp_path, monkeypatch):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env,
+        workspace,
+        monkeypatch,
+        lambda payload: final_text_frame("done"),
+        mcp_enabled=False,
+    )
+    task = submit(local_api_env, "Synthetic goal")  # no configure_budget: inbox default applies
+    try:
+        runtime.start(task)
+        wait_for(
+            lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"]
+            in {"SUCCEEDED", "PAUSED"}
+        )
+    finally:
+        runtime.close()
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    assert len(payloads) == 1
+    assert payloads[0]["max_completion_tokens"] == 64_000
+
+
+def test_request_deadline_scales_for_long_output(local_api_env, tmp_path):
+    from openbot.application.agent_runtime import MODEL_REQUEST_DEADLINE_MS
+
+    runtime, state, models = make_runtime(local_api_env, tmp_path, model_tool=False)
+    task = submit(local_api_env, "Synthetic goal")
+    started = time.monotonic() * 1000
+    try:
+        runtime.start(task)
+        wait_for(lambda: models and hasattr(models[0], "last_request"))
+    finally:
+        runtime.close()
+    remaining = models[0].last_request.deadline_monotonic_ms - started
+    assert MODEL_REQUEST_DEADLINE_MS == 900_000
+    assert remaining >= MODEL_REQUEST_DEADLINE_MS - 5_000
+
+
+def test_default_budget_policy_supports_two_hundred_steps():
+    from openbot.application.budgets import TaskBudgetPolicy
+
+    policy = TaskBudgetPolicy()
+    assert policy.max_steps == 200
+    assert policy.max_model_calls == 200
+    assert policy.max_tool_calls == 400
+    assert policy.max_duration_ms == 14_400_000

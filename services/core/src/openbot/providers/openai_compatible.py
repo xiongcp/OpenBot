@@ -31,6 +31,8 @@ FORBIDDEN_SDK_HELPERS = frozenset(
         "tool_runner",
     }
 )
+# ADR-0014: per-request output bound; reservation covers the full serialized request plus this.
+MAX_COMPLETION_TOKENS = 64_000
 ALLOWED_OPENAI_REQUEST_FIELDS = frozenset(
     {
         "model",
@@ -203,7 +205,7 @@ class OpenAICompatibleAdapter:
             "model": self._model,
             "messages": messages,
             "stream": True,
-            "max_completion_tokens": 256,
+            "max_completion_tokens": MAX_COMPLETION_TOKENS,
         }
         if self._profile.supports_stream_usage:
             payload["stream_options"] = {"include_usage": True}

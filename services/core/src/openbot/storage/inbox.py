@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from openbot.contracts import SchemaRegistry, canonicalize, strict_json
 from openbot.storage.writer import LookupResult, RequestConflict, Writer, WriterCommand
 
+# ADR-0014: room for a 200-step run with 64k-output reservations; adjustable per task.
+DEFAULT_TASK_TOKEN_LIMIT = 4_000_000
+
 
 @dataclass(frozen=True, slots=True)
 class InboundContext:
@@ -178,8 +181,8 @@ class Inbox:
             db.execute(
                 "INSERT INTO budgets(budget_id,owner_id,currency,amount_limit_micros,"
                 "token_limit,created_at,updated_at) "
-                "VALUES(?,?,'USD',0,16384,?,?)",
-                (budget_id, context.principal_id, now, now),
+                "VALUES(?,?,'USD',0,?,?,?)",
+                (budget_id, context.principal_id, DEFAULT_TASK_TOKEN_LIMIT, now, now),
             )
             db.execute(
                 "INSERT INTO tasks(task_id,session_id,owner_id,budget_id,goal,"
