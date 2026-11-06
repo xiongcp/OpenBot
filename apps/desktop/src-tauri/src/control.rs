@@ -1,298 +1,306 @@
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::{
+    fs,
+    io::{Read, Write},
+    net::{IpAddr, SocketAddr, TcpStream},
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
+type Result<T> = std::result::Result<T, String>;
+pub struct Control {
+    pub profile: PathBuf,
 }
-}    
-;))(rre_si.)gnissim(>sgnitteS<::eulav_morf::nosj_edres(!tressa        
-;)"sloot_ecapskrow"(evomer.)(parwnu.)(tum_tcejbo_sa.gnissim        
-;esab = gnissim tum tel        
-;))(rre_si.)(etadilav.)(parwnu.)level(>sgnitteS<::eulav_morf::nosj_edres(!tressa        
-;)"LLA"(!nosj = ]"sloot_ecapskrow"[level        
-;)(enolc.esab = level tum tel        
-;))(rre_si.)(etadilav.)(parwnu.)revo(>sgnitteS<::eulav_morf::nosj_edres(!tressa        
-;)102(!nosj = ]"spets_xam"[revo        
-;)(enolc.esab = revo tum tel        
-;))(ko_si.)(etadilav.)(parwnu.))(enolc.esab(>sgnitteS<::eulav_morf::nosj_edres(!tressa        
-;)}eslaf:"delbane_uhsief",eslaf:"delbane_pcm",eurt:"delbane_lliks","ETIRW_DAER":"sloot_ecapskrow",002:"spets_xam","DETCENNOC":"edom","omed":"ledom","ne":"elacol"{(!nosj = esab tel        
-{ )(slevel_loot_ecapskrow_dna_snur_gnol_sdnuob nf    
-]tset[#    
-}    
-;))(rre_si.            
-)(etadilav.            
-)(parwnu.            
-)eulav(>sgnitteS<::eulav_morf::nosj_edres(!tressa        
-;)"tset.devorppanu//:sptth"(!nosj = ]"ledom"[eulav        
-;)"yek_ipa"(evomer.)(parwnu.)(tum_tcejbo_sa.eulav        
-;))(rre_si.))(enolc.eulav(>sgnitteS<::eulav_morf::nosj_edres(!tressa        
-;)"citehtnys"(!nosj = ]"yek_ipa"[eulav        
-;))(ko_si.            
-)(etadilav.            
-)(parwnu.            
-))(enolc.eulav(>sgnitteS<::eulav_morf::nosj_edres(!tressa        
-;)}eslaf:"delbane_uhsief",eslaf:"delbane_pcm",eurt:"delbane_lliks","DAER":"sloot_ecapskrow",4:"spets_xam","DETCENNOC":"edom","omed":"ledom","ne":"elacol"{(!nosj = eulav tum tel        
-{ )(syek_dna_sgnittes_nwonknu_stcejer nf    
-]tset[#    
-}    
-}        
-;))(rre_si.)tsoh(sserdda_kcabpool(!tressa            
-{ ]        
-,"0:1.0.0.721"            
-,"08:2.1.861.291"            
-,"4321:live.1.0.0.721"            
-,"08:moc.elpmaxe"            
-[ ni tsoh rof        
-;))(ko_si.)"_kst" ,"321-cba_kst"(di_dilav(!tressa        
-}        
-;))(rre_si.)"_kst" ,di(di_dilav(!tressa            
-{ ]"_kst" ,"tset_po" ,"x:tsoHn\r\a_kst" ,"terces/.._kst"[ ni di rof        
-{ )(kcabpool_non_dna_setuor_stcejer nf    
-]tset[#    
-;*::repus esu    
-{ stset dom
-])tset(gfc[#
+#[derive(Deserialize)]
+struct Session {
+    profile_id: String,
+    workspace_id: String,
+    host: String,
+}
+struct Connection {
+    session: Session,
+    address: SocketAddr,
+    token: String,
+}
 
+pub fn valid_id(id: &str, prefix: &str) -> Result<()> {
+    if !id.starts_with(prefix)
+        || id.len() > 84
+        || id.len() <= prefix.len()
+        || !id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        return Err("INVALID_ID".into());
+    }
+    Ok(())
 }
-}    
-))((kO        
-}        
-;))(otni."DILAVNI_WEIVERP"(rrE nruter            
-{        
-7 > )(nel.segnahc.fles ||            
-))(rts_sa.noitavitca.fles&(sniatnoc.]"NUR_TXEN" ,"DEILPPA"[! ||            
-))(esacreppu_iicsa_si.b! && )(tigidxeh_iicsa_si.b |b|(lla.                
-)(setyb.                
-hsah_weiverp.                
-fles! ||            
-46 =! )(nel.hsah_weiverp.fles ||            
-mrifnoc.fles! fi        
-;?)(etadilav.gifnoc.fles        
-{ >)(<tluseR >- )fles&(etadilav nf bup    
-{ weiverP lpmi
+pub fn loopback_address(host: &str) -> Result<SocketAddr> {
+    let address: SocketAddr = host.parse().map_err(|_| "INVALID_DAEMON_ADDRESS")?;
+    if address.ip() != IpAddr::V4(std::net::Ipv4Addr::LOCALHOST) || address.port() == 0 {
+        return Err("LOOPBACK_ONLY".into());
+    }
+    Ok(address)
 }
-,loob :mrifnoc bup    
-,gnirtS :noitavitca bup    
-,>gnirtS<ceV :segnahc bup    
-,gnirtS :hsah_weiverp bup    
-,sgnitteS :gifnoc bup    
-,46u :noisiver_detcepxe bup    
-{ weiverP tcurts bup
-])sdleif_nwonknu_yned(edres[#
-])ezilaireS ,ezilaireseD(evired[#
+fn protected_file(profile: &Path, name: &str) -> Result<Vec<u8>> {
+    let path = profile.join(name);
+    let meta = fs::symlink_metadata(&path).map_err(|_| "PROFILE_NOT_READY")?;
+    if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 8192 {
+        return Err("UNSAFE_PROFILE_FILE".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if meta.permissions().mode() & 0o077 != 0 {
+            return Err("PROFILE_FILE_PERMISSIONS".into());
+        }
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)
+        .map_err(|_| "PROFILE_READ_FAILED")?
+        .take(8193)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "PROFILE_READ_FAILED")?;
+    if bytes.len() > 8192 {
+        return Err("PROFILE_FILE_LIMIT".into());
+    }
+    Ok(bytes)
 }
-}    
-))((kO        
-}        
-;))(otni."DILAVNI_SGNITTES"(rrE nruter            
-{        
-)delbane_uhsief.fles && "ENILFFO" == edom.fles( ||            
-))b&(sniatnoc."-/:_."b || )(ciremunahpla_iicsa_si.b |b|(lla.                
-)(setyb.                
-ledom.                
-fles! ||            
-)"//:"(sniatnoc.ledom.fles ||            
-)"-ks"(htiw_strats.ledom.fles ||            
-69 > )(nel.ledom.fles ||            
-)(ytpme_si.ledom.fles ||            
-))(rts_sa.sloot_ecapskrow.fles&(sniatnoc.]"ETIRW_DAER" ,"DAER" ,"FFO"[! ||            
-)spets_xam.fles&(sniatnoc.)002=..1(! ||            
-))(rts_sa.edom.fles&(sniatnoc.]"ENILFFO" ,"LEDOM_LACOL" ,"DETCENNOC"[! ||            
-))(rts_sa.elacol.fles&(sniatnoc.]"ne" ,"NC-hz"[! fi        
-{ >)(<tluseR >- )fles&(etadilav nf bup    
-{ sgnitteS lpmi
+impl Control {
+    fn connect(&self) -> Result<Connection> {
+        let session: Session =
+            serde_json::from_slice(&protected_file(&self.profile, "daemon_session.json")?)
+                .map_err(|_| "SESSION_INVALID")?;
+        valid_id(&session.profile_id, "pro_")?;
+        valid_id(&session.workspace_id, "wsp_")?;
+        let address = loopback_address(&session.host)?;
+        let token = String::from_utf8(protected_file(&self.profile, "owner_cli.token")?)
+            .map_err(|_| "TOKEN_INVALID")?
+            .trim()
+            .to_owned();
+        if !token.starts_with("obt_owner_cli_")
+            || token.len() > 256
+            || !token
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
+            return Err("TOKEN_INVALID".into());
+        }
+        Ok(Connection {
+            session,
+            address,
+            token,
+        })
+    }
+    pub fn call(&self, method: &str, path: &str, body: Option<Value>) -> Result<Value> {
+        let connection = self.connect()?;
+        connection.call(method, path, body)
+    }
+    pub fn create(&self, goal: &str) -> Result<Value> {
+        if goal.trim().is_empty() || goal.chars().count() > 4000 {
+            return Err("GOAL_INVALID".into());
+        }
+        let connection = self.connect()?;
+        let settings = connection.call("GET", "/v1/client/settings", None)?;
+        connection.call("POST", "/v1/tasks", Some(json!({"goal":goal,"workspace_id":connection.session.workspace_id,"network_mode":settings["config"]["mode"]})))
+    }
+    pub fn bootstrap_status(&self) -> Result<Value> {
+        let profile_exists = self.profile.is_dir();
+        let session_ready = self.profile.join("daemon_session.json").is_file()
+            && self.profile.join("owner_cli.token").is_file();
+        let daemon_alive = self
+            .connect()
+            .and_then(|c| c.call("GET", "/v1/health", None))
+            .is_ok();
+        Ok(json!({
+            "profile_dir": self.profile.to_string_lossy(),
+            "profile_exists": profile_exists,
+            "session_ready": session_ready,
+            "daemon_alive": daemon_alive,
+        }))
+    }
 }
-,loob :delbane_uhsief bup    
-,loob :delbane_pcm bup    
-,loob :delbane_lliks bup    
-,gnirtS :sloot_ecapskrow bup    
-,8u :spets_xam bup    
-,gnirtS :edom bup    
-,gnirtS :ledom bup    
-,gnirtS :elacol bup    
-{ sgnitteS tcurts bup
-])sdleif_nwonknu_yned(edres[#
-])enolC ,ezilaireS ,ezilaireseD(evired[#
+impl Connection {
+    fn call(&self, method: &str, path: &str, body: Option<Value>) -> Result<Value> {
+        // Private helper: callers below construct every path. No WebView URL/method is accepted.
+        let payload = body
+            .map(|b| serde_json::to_vec(&b))
+            .transpose()
+            .map_err(|_| "BODY_INVALID")?
+            .unwrap_or_default();
+        if payload.len() > 65536 {
+            return Err("BODY_LIMIT".into());
+        }
+        let mut stream = TcpStream::connect_timeout(&self.address, Duration::from_secs(2))
+            .map_err(|_| "DAEMON_UNAVAILABLE")?;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .map_err(|_| "TRANSPORT_ERROR")?;
+        stream
+            .set_write_timeout(Some(Duration::from_secs(3)))
+            .map_err(|_| "TRANSPORT_ERROR")?;
+        let request_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "CLOCK_ERROR")?
+            .as_nanos();
+        let head = format!("{method} {path} HTTP/1.0\r\nHost: {}\r\nAuthorization: Bearer {}\r\nX-OpenBot-Profile: {}\r\nIdempotency-Key: desktop_{}_{}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", self.address,self.token,self.session.profile_id,std::process::id(),request_id,payload.len());
+        stream
+            .write_all(head.as_bytes())
+            .and_then(|_| stream.write_all(&payload))
+            .map_err(|_| "TRANSPORT_ERROR")?;
+        let mut response = Vec::new();
+        stream
+            .take(1_100_001)
+            .read_to_end(&mut response)
+            .map_err(|_| "DAEMON_TIMEOUT")?;
+        if response.len() > 1_100_000 {
+            return Err("RESPONSE_LIMIT".into());
+        }
+        let split = response
+            .windows(4)
+            .position(|x| x == b"\r\n\r\n")
+            .filter(|n| *n < 16384)
+            .ok_or("HTTP_RESPONSE_INVALID")?;
+        let headers =
+            std::str::from_utf8(&response[..split]).map_err(|_| "HTTP_RESPONSE_INVALID")?;
+        let status = headers
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|s| s.parse::<u16>().ok())
+            .ok_or("HTTP_RESPONSE_INVALID")?;
+        let value: Value =
+            serde_json::from_slice(&response[split + 4..]).map_err(|_| "JSON_RESPONSE_INVALID")?;
+        if !(200..300).contains(&status) {
+            let code = value["code"].as_str().unwrap_or("SERVER_ERROR");
+            return Err(
+                if code.len() < 80 && code.bytes().all(|b| b.is_ascii_uppercase() || b == b'_') {
+                    code.to_owned()
+                } else {
+                    "SERVER_ERROR".into()
+                },
+            );
+        }
+        Ok(value)
+    }
 }
-}    
-)eulav(kO        
-}        
-;)            
-,}                
-)(otni."RORRE_REVRES"                    
-{ esle }                
-)(denwo_ot.edoc                    
-{ )'_'b == b || )(esacreppu_iicsa_si.b |b|(lla.)(setyb.edoc && 08 < )(nel.edoc fi                
-(rrE nruter            
-;)"RORRE_REVRES"(ro_parwnu.)(rts_sa.]"edoc"[eulav = edoc tel            
-{ )sutats&(sniatnoc.)003..002(! fi        
-;?)"DILAVNI_ESNOPSER_NOSJ" |_|(rre_pam.)]..4 + tilps[esnopser&(ecils_morf::nosj_edres            
-= eulaV :eulav tel        
-;?)"DILAVNI_ESNOPSER_PTTH"(ro_ko.            
-))(ko.)(>61u<::esrap.s |s|(neht_dna.            
-))1(htn.)(ecapsetihw_tilps.enil |enil|(neht_dna.            
-)(txen.            
-)(senil.            
-sredaeh = sutats tel        
-;?)"DILAVNI_ESNOPSER_PTTH" |_|(rre_pam.)]tilps..[esnopser&(8ftu_morf::rts::dts            
-= sredaeh tel        
-;?)"DILAVNI_ESNOPSER_PTTH"(ro_ko.            
-)48361 < n* |n|(retlif.            
-)"n\r\n\r\"b == x |x|(noitisop.            
-)4(swodniw.            
-esnopser = tilps tel        
-}        
-;))(otni."TIMIL_ESNOPSER"(rrE nruter            
-{ 000_001_1 > )(nel.esnopser fi        
-;?)"TUOEMIT_NOMEAD" |_|(rre_pam.            
-)esnopser tum&(dne_ot_daer.            
-)100_001_1(ekat.            
-maerts        
-;)(wen::ceV = esnopser tum tel        
-;?)"RORRE_TROPSNART" |_|(rre_pam.            
-))daolyap&(lla_etirw.maerts |_|(neht_dna.            
-))(setyb_sa.daeh(lla_etirw.            
-maerts        
-;))(nel.daolyap,di_tseuqer,)(di::ssecorp::dts,di_eliforp.noisses.fles,nekot.fles,sserdda.fles ,"n\r\n\r\esolc :noitcennoCn\r\}{ :htgneL-tnetnoCn\r\nosj/noitacilppa :epyT-tnetnoCn\r\}{_}{_potksed :yeK-ycnetopmedIn\r\}{ :eliforP-toBnepO-Xn\r\}{ reraeB :noitazirohtuAn\r\}{ :tsoHn\r\0.1/PTTH }htap{ }dohtem{"(!tamrof = daeh tel        
-;)(sonan_sa.            
-?)"RORRE_KCOLC" |_|(rre_pam.            
-)HCOPE_XINU(ecnis_noitarud.            
-)(won::emiTmetsyS = di_tseuqer tel        
-;?)"RORRE_TROPSNART" |_|(rre_pam.            
-)))3(sces_morf::noitaruD(emoS(tuoemit_etirw_tes.            
-maerts        
-;?)"RORRE_TROPSNART" |_|(rre_pam.            
-)))5(sces_morf::noitaruD(emoS(tuoemit_daer_tes.            
-maerts        
-;?)"ELBALIAVANU_NOMEAD" |_|(rre_pam.            
-))2(sces_morf::noitaruD ,sserdda.fles&(tuoemit_tcennoc::maertSpcT = maerts tum tel        
-}        
-;))(otni."TIMIL_YDOB"(rrE nruter            
-{ 63556 > )(nel.daolyap fi        
-;)(tluafed_ro_parwnu.            
-?)"DILAVNI_YDOB" |_|(rre_pam.            
-)(esopsnart.            
-))b&(cev_ot::nosj_edres |b|(pam.            
-ydob = daolyap tel        
-.detpecca si dohtem/LRU weiVbeW oN .htap yreve tcurtsnoc woleb srellac :repleh etavirP //        
-{ >eulaV<tluseR >- )>eulaV<noitpO :ydob ,rts& :htap ,rts& :dohtem ,fles&(llac nf    
-{ noitcennoC lpmi
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Settings {
+    pub locale: String,
+    pub model: String,
+    pub mode: String,
+    pub max_steps: u8,
+    pub workspace_tools: String,
+    pub skill_enabled: bool,
+    pub mcp_enabled: bool,
+    pub feishu_enabled: bool,
 }
-}    
-))}        
-,evila_nomead :"evila_nomead"            
-,ydaer_noisses :"ydaer_noisses"            
-,stsixe_eliforp :"stsixe_eliforp"            
-,)(yssol_gnirts_ot.eliforp.fles :"rid_eliforp"            
-{(!nosj(kO        
-;)(ko_si.            
-))enoN ,"htlaeh/1v/" ,"TEG"(llac.c |c|(neht_dna.            
-)(tcennoc.            
-fles = evila_nomead tel        
-;)(elif_si.)"nekot.ilc_renwo"(nioj.eliforp.fles &&            
-)(elif_si.)"nosj.noisses_nomead"(nioj.eliforp.fles = ydaer_noisses tel        
-;)(rid_si.eliforp.fles = stsixe_eliforp tel        
-{ >eulaV<tluseR >- )fles&(sutats_partstoob nf bup    
-}    
-)))}]"edom"[]"gifnoc"[sgnittes:"edom_krowten",di_ecapskrow.noisses.noitcennoc:"di_ecapskrow",laog:"laog"{(!nosj(emoS ,"sksat/1v/" ,"TSOP"(llac.noitcennoc        
-;?)enoN ,"sgnittes/tneilc/1v/" ,"TEG"(llac.noitcennoc = sgnittes tel        
-;?)(tcennoc.fles = noitcennoc tel        
-}        
-;))(otni."DILAVNI_LAOG"(rrE nruter            
-{ 0004 > )(tnuoc.)(srahc.laog || )(ytpme_si.)(mirt.laog fi        
-{ >eulaV<tluseR >- )rts& :laog ,fles&(etaerc nf bup    
-}    
-)ydob ,htap ,dohtem(llac.noitcennoc        
-;?)(tcennoc.fles = noitcennoc tel        
-{ >eulaV<tluseR >- )>eulaV<noitpO :ydob ,rts& :htap ,rts& :dohtem ,fles&(llac nf bup    
-}    
-)}        
-,nekot            
-,sserdda            
-,noisses            
-{ noitcennoC(kO        
-}        
-;))(otni."DILAVNI_NEKOT"(rrE nruter            
-{        
-)'-'b == b || '_'b == b || )(ciremunahpla_iicsa_si.b |b|(lla.                
-)(setyb.                
-nekot! ||            
-652 > )(nel.nekot ||            
-)"_ilc_renwo_tbo"(htiw_strats.nekot! fi        
-;)(denwo_ot.            
-)(mirt.            
-?)"DILAVNI_NEKOT" |_|(rre_pam.            
-)?)"nekot.ilc_renwo" ,eliforp.fles&(elif_detcetorp(8ftu_morf::gnirtS = nekot tel        
-;?)tsoh.noisses&(sserdda_kcabpool = sserdda tel        
-;?)"_psw" ,di_ecapskrow.noisses&(di_dilav        
-;?)"_orp" ,di_eliforp.noisses&(di_dilav        
-;?)"DILAVNI_NOISSES" |_|(rre_pam.                
-)?)"nosj.noisses_nomead" ,eliforp.fles&(elif_detcetorp&(ecils_morf::nosj_edres            
-= noisseS :noisses tel        
-{ >noitcennoC<tluseR >- )fles&(tcennoc nf    
-{ lortnoC lpmi
+impl Settings {
+    pub fn validate(&self) -> Result<()> {
+        if !["zh-CN", "en"].contains(&self.locale.as_str())
+            || !["CONNECTED", "LOCAL_MODEL", "OFFLINE"].contains(&self.mode.as_str())
+            || !(1..=200).contains(&self.max_steps)
+            || !["OFF", "READ", "READ_WRITE"].contains(&self.workspace_tools.as_str())
+            || self.model.is_empty()
+            || self.model.len() > 96
+            || self.model.starts_with("sk-")
+            || self.model.contains("://")
+            || !self
+                .model
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._:/-".contains(&b))
+            || (self.mode == "OFFLINE" && self.feishu_enabled)
+        {
+            return Err("SETTINGS_INVALID".into());
+        }
+        Ok(())
+    }
 }
-)setyb(kO    
-}    
-;))(otni."TIMIL_ELIF_ELIFORP"(rrE nruter        
-{ 2918 > )(nel.setyb fi    
-;?)"DELIAF_DAER_ELIFORP" |_|(rre_pam.        
-)setyb tum&(dne_ot_daer.        
-)3918(ekat.        
-?)"DELIAF_DAER_ELIFORP" |_|(rre_pam.        
-)htap(nepo::eliF::sf    
-;)(wen::ceV = setyb tum tel    
-}    
-}        
-;))(otni."SNOISSIMREP_ELIF_ELIFORP"(rrE nruter            
-{ 0 =! 770o0 & )(edom.)(snoissimrep.atem fi        
-;txEsnoissimreP::sf::xinu::so::dts esu        
-{    
-])xinu(gfc[#    
-}    
-;))(otni."ELIF_ELIFORP_EFASNU"(rrE nruter        
-{ 2918 > )(nel.atem || )(knilmys_si.)(epyt_elif.atem || )(elif_si.atem! fi    
-;?)"YDAER_TON_ELIFORP" |_|(rre_pam.)htap&(atadatem_knilmys::sf = atem tel    
-;)eman(nioj.eliforp = htap tel    
-{ >>8u<ceV<tluseR >- )rts& :eman ,htaP& :eliforp(elif_detcetorp nf
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Preview {
+    pub expected_revision: u64,
+    pub config: Settings,
+    pub preview_hash: String,
+    pub changes: Vec<String>,
+    pub activation: String,
+    pub confirm: bool,
 }
-)sserdda(kO    
-}    
-;))(otni."YLNO_KCABPOOL"(rrE nruter        
-{ 0 == )(trop.sserdda || )TSOHLACOL::rddA4vpI::ten::dts(4V::rddApI =! )(pi.sserdda fi    
-;?)"SSERDDA_NOMEAD_DILAVNI" |_|(rre_pam.)(esrap.tsoh = rddAtekcoS :sserdda tel    
-{ >rddAtekcoS<tluseR >- )rts& :tsoh(sserdda_kcabpool nf bup
+impl Preview {
+    pub fn validate(&self) -> Result<()> {
+        self.config.validate()?;
+        if !self.confirm
+            || self.preview_hash.len() != 64
+            || !self
+                .preview_hash
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+            || !["APPLIED", "NEXT_RUN"].contains(&self.activation.as_str())
+            || self.changes.len() > 7
+        {
+            return Err("PREVIEW_INVALID".into());
+        }
+        Ok(())
+    }
 }
-))((kO    
-}    
-;))(otni."DI_DILAVNI"(rrE nruter        
-{    
-)'-'b == b || '_'b == b || )(ciremunahpla_iicsa_si.b |b|(lla.            
-)(setyb.            
-di! ||        
-)(nel.xiferp =< )(nel.di ||        
-48 > )(nel.di ||        
-)xiferp(htiw_strats.di! fi    
-{ >)(<tluseR >- )rts& :xiferp ,rts& :di(di_dilav nf bup
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rejects_routes_and_non_loopback() {
+        for id in ["tsk_../secret", "tsk_a\r\nHost:x", "op_test", "tsk_"] {
+            assert!(valid_id(id, "tsk_").is_err());
+        }
+        assert!(valid_id("tsk_abc-123", "tsk_").is_ok());
+        for host in [
+            "example.com:80",
+            "127.0.0.1.evil:1234",
+            "192.168.1.2:80",
+            "127.0.0.1:0",
+        ] {
+            assert!(loopback_address(host).is_err());
+        }
+    }
+    #[test]
+    fn rejects_unknown_settings_and_keys() {
+        let mut value = json!({"locale":"en","model":"demo","mode":"CONNECTED","max_steps":4,"workspace_tools":"READ","skill_enabled":true,"mcp_enabled":false,"feishu_enabled":false});
+        assert!(serde_json::from_value::<Settings>(value.clone())
+            .unwrap()
+            .validate()
+            .is_ok());
+        value["api_key"] = json!("synthetic");
+        assert!(serde_json::from_value::<Settings>(value.clone()).is_err());
+        value.as_object_mut().unwrap().remove("api_key");
+        value["model"] = json!("https://unapproved.test");
+        assert!(serde_json::from_value::<Settings>(value)
+            .unwrap()
+            .validate()
+            .is_err());
+    }
+    #[test]
+    fn bounds_long_runs_and_workspace_tool_levels() {
+        let base = json!({"locale":"en","model":"demo","mode":"CONNECTED","max_steps":200,"workspace_tools":"READ_WRITE","skill_enabled":true,"mcp_enabled":false,"feishu_enabled":false});
+        assert!(serde_json::from_value::<Settings>(base.clone())
+            .unwrap()
+            .validate()
+            .is_ok());
+        let mut over = base.clone();
+        over["max_steps"] = json!(201);
+        assert!(serde_json::from_value::<Settings>(over)
+            .unwrap()
+            .validate()
+            .is_err());
+        let mut level = base.clone();
+        level["workspace_tools"] = json!("ALL");
+        assert!(serde_json::from_value::<Settings>(level)
+            .unwrap()
+            .validate()
+            .is_err());
+        let mut missing = base;
+        missing.as_object_mut().unwrap().remove("workspace_tools");
+        assert!(serde_json::from_value::<Settings>(missing).is_err());
+    }
 }
-,gnirtS :nekot    
-,rddAtekcoS :sserdda    
-,noisseS :noisses    
-{ noitcennoC tcurts
-}
-,gnirtS :tsoh    
-,gnirtS :di_ecapskrow    
-,gnirtS :di_eliforp    
-{ noisseS tcurts
-])ezilaireseD(evired[#
-}
-,fuBhtaP :eliforp bup    
-{ lortnoC tcurts bup
-;>gnirtS ,T<tluseR::tluser::dts = >T<tluseR epyt
-
-;}
-,}HCOPE_XINU ,emiTmetsyS ,noitaruD{::emit    
-,}fuBhtaP ,htaP{::htap    
-,}maertSpcT ,rddAtekcoS ,rddApI{::ten    
-,}etirW ,daeR{::oi    
-,sf    
-{::dts esu
-;}eulaV ,nosj{::nosj_edres esu
-;}ezilaireS ,ezilaireseD{::edres esu

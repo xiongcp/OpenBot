@@ -10,9 +10,12 @@ from openbot.domain.providers import Block, Text, ToolCall, ToolResult
 MAX_HISTORY_BLOCKS = 1024
 MAX_TOOL_RESULT_BYTES = 65_536
 MAX_HISTORY_BYTES = 1_048_576
-KEEP_RECENT_PAIRS = 6
-# Room under the adapter/canonical 1 MiB cap for the system message and per-message framing.
-MODEL_VIEW_BYTES = MAX_HISTORY_BYTES - 65_536
+KEEP_RECENT_PAIRS = 3  # 3 × ≤64 KiB bounded results always fit MODEL_VIEW_BYTES
+# Model view target (ADR-0014 §5): 256 KiB ≈ 64k tokens at ~4 bytes/token, so prompt plus the
+# 64k output bound fits an assumed ≥128k-token context window, and each request's reservation
+# (serialized bytes counted 1:1 as tokens + 64k) stays far below the default task budget. The
+# adapter's 1 MiB cap remains the hard ceiling. Per-model windows are W9 work.
+MODEL_VIEW_BYTES = 262_144
 _BLOCK_OVERHEAD = 128
 _ELIDED = b"ELIDED_TOOL_RESULT "
 

@@ -129,6 +129,16 @@ def _decide_pending(
         counts["approved" if in_scope else "denied"] += 1
 
 
+def stop_daemon(proc: Any) -> None:
+    """The daemon holds the key in memory; never leave it running after the smoke."""
+    proc.terminate()
+    try:
+        proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=30)
+
+
 def run(endpoint: str, key: str, model: str, timeout_s: int) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="openbot-smoke-") as tmp:
         tmp_path = Path(tmp)
@@ -225,8 +235,7 @@ def run(endpoint: str, key: str, model: str, timeout_s: int) -> dict[str, Any]:
                 and (workspace / "other.txt").read_text() == "untouched\n",
             }
         finally:
-            proc.terminate()
-            proc.wait(timeout=30)
+            stop_daemon(proc)
 
 
 def main(argv: list[str]) -> int:

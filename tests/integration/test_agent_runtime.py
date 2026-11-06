@@ -1380,3 +1380,274 @@ def test_empty_subpath_means_workspace_root(local_api_env, tmp_path, monkeypatch
         wait_for(lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED")
     finally:
         runtime.close()
+
+
+def test_reading_a_large_file_truncates_the_model_view_instead_of_failing(
+    local_api_env, tmp_path, monkeypatch
+):
+    def script(payload):
+        if not [m for m in payload["messages"] if m["role"] == "tool"]:
+            return tool_call_frame("call_big", "workspace.read", {"path": "big.py"})
+        return final_text_frame("read the large file")
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "big.py").write_text("".join(f"value_{i} = {i}  # padding\n" for i in range(4000)))
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False
+    )
+    task = submit(local_api_env, "Read big.py")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    try:
+        runtime.start(task)
+        decide(local_api_env, state, task)
+        wait_for(
+            lambda: any(
+                e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in all_events(state, task)
+            ),
+            timeout=8,
+        )
+    finally:
+        runtime.close()
+    interrupted = [e["data"] for e in all_events(state, task) if e["kind"] == "RUN_INTERRUPTED"]
+    assert interrupted == []
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    tool_message = payloads[-1]["messages"][-1]["content"]
+    assert "TRUNCATED" in tool_message and "start_line" in tool_message
+    assert len(tool_message.encode()) <= 65_536 + len("UNTRUSTED_TOOL_DATA\n")
+
+
+def test_tightening_tools_while_a_write_awaits_approval_blocks_the_write(
+    local_api_env, tmp_path, monkeypatch
+):
+    def script(payload):
+        args = {"path": "notes.txt", "old_snippet": "status = old", "new_snippet": "status = new"}
+        return tool_call_frame("call_w", "workspace.apply_patch", args)
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "notes.txt").write_text("status = old\n")
+    runtime, state, _ = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False
+    )
+    task = submit(local_api_env, "Change status")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    try:
+        runtime.start(task)
+        wait_for(lambda: any(e["kind"] == "WAITING_APPROVAL" for e in all_events(state, task)))
+        apply_config(state, workspace_tools="READ")  # owner narrows access mid-approval
+        decide(local_api_env, state, task)
+        interrupted = wait_for(
+            lambda: [e["data"] for e in all_events(state, task) if e["kind"] == "RUN_INTERRUPTED"],
+            timeout=8,
+        )
+    finally:
+        runtime.close()
+    assert interrupted[0]["error_code"] == "WORKSPACE_TOOL_DISABLED"
+    assert (workspace / "notes.txt").read_text() == "status = old\n"
+    assert not any(e["kind"] == "TOOL_DISPATCHED" for e in all_events(state, task))
+
+
+def test_reapplying_an_inline_bundle_fails_with_a_fixed_code(local_api_env, tmp_path, monkeypatch):
+    def script(payload):
+        tools = [m for m in payload["messages"] if m["role"] == "tool"]
+        if not tools:
+            args = {
+                "path": "notes.txt",
+                "old_snippet": "status = old",
+                "new_snippet": "status = new",
+            }
+            return tool_call_frame("call_inline", "workspace.apply_patch", args)
+        bundle_id = json.loads(tools[-1]["content"].split("\n", 2)[2])["bundle_id"]
+        return tool_call_frame("call_again", "workspace.apply_patch", {"bundle_id": bundle_id})
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "notes.txt").write_text("status = old\n")
+    runtime, state, _ = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False
+    )
+    task = submit(local_api_env, "Change status")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    seen = set()
+
+    def next_approval():
+        events = all_events(state, task)
+        if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+            return "done"
+        waiting = [
+            e["data"]["approval_id"]
+            for e in events
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        while (approval := wait_for(next_approval, timeout=8)) != "done":
+            seen.add(approval)
+            decide(local_api_env, state, task)
+    finally:
+        runtime.close()
+    interrupted = [e["data"] for e in all_events(state, task) if e["kind"] == "RUN_INTERRUPTED"]
+    assert interrupted and interrupted[0]["error_code"] == "PATCH_PRECONDITION_CHANGED"
+    assert (workspace / "notes.txt").read_text() == "status = new\n"  # applied exactly once
+
+
+class HangingModel:
+    """Streams forever until cancelled, like a long 64k-token answer."""
+
+    def __init__(self, budget):
+        self.budget, self.cancelled = budget, []
+        self.in_flight = threading.Event()
+
+    async def generate(self, request):
+        self.budget.reserve(request.request_id, request.reserved_cost_units)
+        self.in_flight.set()  # admitted and "sent": only now is there something to abort
+        while request.request_id not in self.cancelled:
+            await asyncio.sleep(0.01)
+        self.budget.unknown(request.request_id)
+        raise PermissionError("PROVIDER_CANCELLED")
+
+    async def cancel(self, request_id):
+        self.cancelled.append(request_id)
+
+    async def close(self):
+        pass
+
+
+@pytest.mark.parametrize("how", ["task_cancel", "runtime_close"])
+def test_cancel_or_close_aborts_an_in_flight_model_request(local_api_env, tmp_path, how):
+    runtime, state, _ = make_runtime(local_api_env, tmp_path)
+    models = []
+
+    def factory(config, budget):
+        models.append(HangingModel(budget))
+        return models[-1]
+
+    runtime.model_factory = factory
+    task = submit(local_api_env)
+    started = time.monotonic()
+    try:
+        runtime.start(task)
+        wait_for(lambda: models and models[0].in_flight.is_set())
+        if how == "task_cancel":
+            snap = local_api_env[3].snapshot(local_api_env[1], task)
+            response = local_api_env[0].handle(
+                ApiRequest(
+                    "POST",
+                    f"/v1/tasks/{task}/cancel",
+                    headers=_headers(local_api_env[7]),
+                    body=json.dumps({"expected_version": snap["version"]}),
+                )
+            )
+            assert response.status_code == 200
+            wait_for(lambda: models[0].cancelled, timeout=3)
+        else:
+            runtime.close()
+    finally:
+        runtime.close()
+    assert models[0].cancelled, "the in-flight request must be cancelled, not left streaming"
+    assert time.monotonic() - started < 10
+    assert runtime._thread is not None and not runtime._thread.is_alive()
+
+
+def test_recording_events_does_not_rescan_the_whole_trace(local_api_env, tmp_path, monkeypatch):
+    def script(payload):
+        step = len([m for m in payload["messages"] if m["role"] == "tool"])
+        if step < 12:
+            return tool_call_frame(f"call_{step}", "workspace.read", {"path": f"p{step}.txt"})
+        return final_text_frame("done")
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    for i in range(12):
+        (workspace / f"p{i}.txt").write_text(f"{i}\n")
+    runtime, state, _ = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False, max_steps=None
+    )
+    task = submit(local_api_env, "Read twelve files")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    runtime_trace_calls = []
+    original_trace = state.trace
+
+    def counting_trace(task_id, after_seq=0):
+        if threading.current_thread().name == "openbot-agent-run":
+            runtime_trace_calls.append(after_seq)
+        return original_trace(task_id, after_seq)
+
+    monkeypatch.setattr(state, "trace", counting_trace)
+    seen = set()
+
+    def next_approval():
+        events = all_events(state, task)
+        if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+            return "done"
+        waiting = [
+            e["data"]["approval_id"]
+            for e in events
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        while (approval := wait_for(next_approval, timeout=8)) != "done":
+            seen.add(approval)
+            decide(local_api_env, state, task)
+    finally:
+        runtime.close()
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    # ~80 events were recorded; parent lookup must not page the trace for each of them.
+    assert len(runtime_trace_calls) <= 10
+
+
+def test_default_budget_carries_a_forty_step_run_with_realistic_usage(
+    local_api_env, tmp_path, monkeypatch
+):
+    """Usage grows with the real payload (≈4 bytes/token), not a fixed 10/20 (ADR-0014 §3, §5)."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    for i in range(40):
+        (workspace / f"part{i}.txt").write_text(f"line {i}\n" * 3000)
+
+    def script(payload):
+        step = len([m for m in payload["messages"] if m["role"] == "tool"])
+        prompt = len(json.dumps(payload, ensure_ascii=False).encode()) // 4
+        if step < 40:
+            frame = tool_call_frame(f"call_{step}", "workspace.read", {"path": f"part{step}.txt"})
+        else:
+            frame = final_text_frame("read all parts")
+        frame["usage"] = {
+            "prompt_tokens": prompt,
+            "completion_tokens": 50,
+            "total_tokens": prompt + 50,
+        }
+        return frame
+
+    runtime, state, payloads = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False, max_steps=None
+    )
+    task = submit(local_api_env, "Read part0..part39 and report")  # default task budget
+    seen = set()
+
+    def next_approval():
+        events = all_events(state, task)
+        if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+            return "done"
+        waiting = [
+            e["data"]["approval_id"]
+            for e in events
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        while (approval := wait_for(next_approval, timeout=8)) != "done":
+            seen.add(approval)
+            decide(local_api_env, state, task)
+    finally:
+        runtime.close()
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    assert len(payloads) == 41

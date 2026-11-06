@@ -29,3 +29,29 @@ def test_evidence_redaction_drops_secrets_and_bodies():
         {"endpoint": "https://h/v1", "api_key": "sk-abc", "file_text": "body", "requests": 5}
     )
     assert record == {"requests": 5}
+
+
+def test_daemon_holding_credentials_is_killed_if_it_ignores_terminate():
+    import subprocess
+
+    mod = load()
+
+    class Stubborn:
+        def __init__(self):
+            self.calls = []
+
+        def terminate(self):
+            self.calls.append("terminate")
+
+        def kill(self):
+            self.calls.append("kill")
+
+        def wait(self, timeout=None):
+            self.calls.append("wait")
+            if "kill" not in self.calls:
+                raise subprocess.TimeoutExpired("openbot", timeout)
+            return -9
+
+    proc = Stubborn()
+    mod.stop_daemon(proc)
+    assert proc.calls == ["terminate", "wait", "kill", "wait"]
