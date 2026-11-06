@@ -1,0 +1,163 @@
+{
+  "schema_version": "1.0",
+  "package": "OpenBot_macOS_MVP_Test_Package_v1_0",
+  "document_date": "2026-11-05",
+  "self_excluded": true,
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2855,
+      "sha256": "f0d173b6a44833d4ba4bbe8b155a32b5732c7c218da84cc5cf26afcd04424035"
+    },
+    {
+      "path": "cases/TEST_CASES.md",
+      "bytes": 189796,
+      "sha256": "fb76ee466acba9bed22da8bfb3de985fa74b3c7e059c3d8a3e09b77e94c3b1d6"
+    },
+    {
+      "path": "cases/initial_findings.json",
+      "bytes": 7385,
+      "sha256": "cee2965034f18ff04b16e30a8e86ae5c616cdf7b2a39ee75309aebad75c19bc2"
+    },
+    {
+      "path": "cases/test_cases.json",
+      "bytes": 225543,
+      "sha256": "2e91c56b625b8b724bef794c4607ebf16c78da45e0851c563a5d54fcd0dfbb9e"
+    },
+    {
+      "path": "commands/command_map.json",
+      "bytes": 2560,
+      "sha256": "92423323df63b04ec75fff62756a7279a7447c8d2189318ee1cbe90f2d2b2693"
+    },
+    {
+      "path": "docs/00_scope_and_baseline.md",
+      "bytes": 7340,
+      "sha256": "839291ea257d78fb9d63790267ca4a3317e599bfea9fdf087065b94d87287aff"
+    },
+    {
+      "path": "docs/01_environment_and_commands.md",
+      "bytes": 8518,
+      "sha256": "e6668d0446901e5cdccfad3656e9c33c08fe423638786065c717647475d14ae8"
+    },
+    {
+      "path": "docs/02_repository_fix_queue.md",
+      "bytes": 20302,
+      "sha256": "3b05c756c5bf42249e0aaddf2a78d7ad2f2519ef85737eddf4625d86c9137f76"
+    },
+    {
+      "path": "docs/03_acceptance_sequence.md",
+      "bytes": 10382,
+      "sha256": "b6259221b8aa117e9dff4d0fe7ac0ec625747378ac1abe461a5138a07400c780"
+    },
+    {
+      "path": "docs/04_quality_and_evidence.md",
+      "bytes": 6727,
+      "sha256": "85c8120a1625ea69ada77ac1b57d31776fa3b7828404635b8ef773e373685cd7"
+    },
+    {
+      "path": "docs/05_core_testing.md",
+      "bytes": 43714,
+      "sha256": "71c578411f06777f29f9b8ba8ff81464df5ff40b9734d8475785b61b71228805"
+    },
+    {
+      "path": "docs/06_macos_integrations.md",
+      "bytes": 43175,
+      "sha256": "79e61923abf80042085dcdf86d93302593c992240ed7a3e985a1e16387e12b3e"
+    },
+    {
+      "path": "docs/07_fix_commit_workflow.md",
+      "bytes": 27159,
+      "sha256": "1305f7957de70b2bf287614ce563c12d63e1de71fa2250d1467671fe34139209"
+    },
+    {
+      "path": "docs/08_release_gate.md",
+      "bytes": 20259,
+      "sha256": "5bc32b29a4605580595b0b70a16f6b9a8dfaeecc64085c79e0b62ebb065309a4"
+    },
+    {
+      "path": "docs/09_codex_execution_prompt.md",
+      "bytes": 14619,
+      "sha256": "497e486a2cd44d053bd927cdfaf6f7d58bc97aac7c097e9b4e69911ad06d1d72"
+    },
+    {
+      "path": "docs/10_case_index.md",
+      "bytes": 10288,
+      "sha256": "2ec5137fb0d3fac76ae75e57e9985f1b8b6cd02d4176876e11431f3de497eae6"
+    },
+    {
+      "path": "docs/11_sources_and_validation.md",
+      "bytes": 3814,
+      "sha256": "a73a28d821a8f68f12cef0c6cc68dee873e2fb4ca65d257440deb8a8cef7bb7f"
+    },
+    {
+      "path": "evidence/package_validation.json",
+      "bytes": 1563,
+      "sha256": "1a9c9384a83fbb20a035ae91501b565d79e684c94c565db4055de6dc738ed095"
+    },
+    {
+      "path": "evidence/repository_review.json",
+      "bytes": 2630,
+      "sha256": "15c6da86f0198b6066cf4284df99f6258f4d70350177000a25c691e1c8e98c1e"
+    },
+    {
+      "path": "evidence/source_index.json",
+      "bytes": 1168,
+      "sha256": "d1fb8d26a4d0954c6465e490936f40114c986d25d3c26eb9cc2d36774082b974"
+    },
+    {
+      "path": "prompts/CODEX_EXECUTION_PROMPT.md",
+      "bytes": 14619,
+      "sha256": "497e486a2cd44d053bd927cdfaf6f7d58bc97aac7c097e9b4e69911ad06d1d72"
+    },
+    {
+      "path": "reports/OpenBot_macOS_MVP_Test_and_Fix_Handbook_v1_0.pdf",
+      "bytes": 600445,
+      "sha256": "f99c9f88b7e12904ba2b6677144b5a28a70963e5f7403276b19bf74a828f748f"
+    },
+    {
+      "path": "templates/workflow/README.md",
+      "bytes": 5452,
+      "sha256": "f3553df431a8104ac26c38528e8249e8642df6436cd2ca227b7e7ceba476f30e"
+    },
+    {
+      "path": "templates/workflow/ci_run.template.json",
+      "bytes": 1564,
+      "sha256": "66329c6d1e1a1d7720a2f46f4d87aa18d335bbb67029c898b337a28187ec6402"
+    },
+    {
+      "path": "templates/workflow/command_manifest.template.json",
+      "bytes": 3870,
+      "sha256": "7b3877b6b5e43cc467a582afad8cb6a0929aa4f5a9886c99b59fefd61aab6f67"
+    },
+    {
+      "path": "templates/workflow/issue_ledger.template.json",
+      "bytes": 2162,
+      "sha256": "7bcdb26ad59d40e2031f4069f300d2fe9da6482005f4de6d098fef73710a87f9"
+    },
+    {
+      "path": "templates/workflow/push_receipt.template.json",
+      "bytes": 1240,
+      "sha256": "fabb90d6a91eefd5056a0fe9a65b239721b0ada3783c635efff6da345cebc01d"
+    },
+    {
+      "path": "templates/workflow/release_candidate.template.json",
+      "bytes": 7139,
+      "sha256": "f34bc5ee5fbd6260ee835e04c47410c6918b527557165e58952316657233ef95"
+    },
+    {
+      "path": "templates/workflow/repo_binding.template.json",
+      "bytes": 2026,
+      "sha256": "e6289365d044254f763098bfc9467a1ef63138c6ee0d9317602c02cb9fb0d0a5"
+    },
+    {
+      "path": "templates/workflow/test_run.template.json",
+      "bytes": 1957,
+      "sha256": "b94e5724ad23762f34c8182a7563bf6f80bbbb9884ac0835d78c68955ff0f34a"
+    },
+    {
+      "path": "tools/validate_package.py",
+      "bytes": 5269,
+      "sha256": "42639056e98a47cb3cc89c1d129be359ab809344b335a00c11a90de383879df9"
+    }
+  ]
+}

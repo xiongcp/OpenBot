@@ -1,0 +1,45 @@
+{
+  "validation_scope": "DELIVERABLE_ONLY_NOT_PRODUCT_ACCEPTANCE",
+  "document_date": "2026-11-05",
+  "structure": {
+    "validation_scope": "DELIVERABLE_STRUCTURE_ONLY_NOT_PRODUCT_TESTING",
+    "result": "PASS",
+    "case_count": 100,
+    "case_groups": {
+      "QA": 8,
+      "CORE": 44,
+      "MAC": 22,
+      "INT": 16,
+      "GIT": 6,
+      "EVAL": 4
+    },
+    "all_cases_initial_not_run": true,
+    "findings_count": 16,
+    "execution_templates": 7,
+    "markdown_files": 16,
+    "relative_links_checked": 12,
+    "errors": [],
+    "macOS_product_execution": "NOT_RUN",
+    "repository_commit_push": "NOT_ATTEMPTED"
+  },
+  "pdf": {
+    "file": "reports/OpenBot_macOS_MVP_Test_and_Fix_Handbook_v1_0.pdf",
+    "pages": 65,
+    "all_pages_rendered": true,
+    "font_cmap_missing_characters": 0,
+    "bounds_or_glyph_anomalies": [],
+    "visual_review": "PASS",
+    "review_scope": "Latest 65-page render: every page inspected in contact sheets or individually; enlarged review of commands, gates, tables, sources, cover and index.",
+    "sha256": "f99c9f88b7e12904ba2b6677144b5a28a70963e5f7403276b19bf74a828f748f"
+  },
+  "privacy_and_scope": {
+    "raw_repository_snapshot_included": false,
+    "raw_ci_logs_included": false,
+    "credentials_or_user_datasets_included": false,
+    "source_changes_performed": false,
+    "product_tests_run": 0,
+    "repository_commits_created": 0,
+    "repository_pushes_attempted": 0
+  },
+  "notice": "本文件的PASS只指交付包完整性与PDF版面；100项产品/流程用例仍为NOT_RUN，16项问题仍OPEN。"
+}

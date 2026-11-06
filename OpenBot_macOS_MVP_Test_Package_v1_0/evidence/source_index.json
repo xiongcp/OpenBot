@@ -1,0 +1,37 @@
+{
+  "review_date": "2026-11-05",
+  "primary_sources": [
+    {
+      "id": "T01",
+      "title": "GitHub workflows directory and subdirectory restrictions",
+      "urls": [
+        "https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows",
+        "https://docs.github.com/en/actions/concepts/workflows-and-actions/workflows"
+      ]
+    },
+    {
+      "id": "T02",
+      "title": "macOS14 GitHub runner retirement and supported labels",
+      "urls": [
+        "https://github.com/actions/runner-images/issues/13518",
+        "https://github.com/actions/runner-images",
+        "https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job"
+      ]
+    },
+    {
+      "id": "T03",
+      "title": "pytest versus python -m pytest import paths",
+      "urls": [
+        "https://docs.pytest.org/en/stable/explanation/pythonpath.html"
+      ]
+    },
+    {
+      "id": "T04",
+      "title": "uv fixed Python distributions and installation",
+      "urls": [
+        "https://docs.astral.sh/uv/concepts/python-versions/",
+        "https://docs.astral.sh/uv/guides/install-python/"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "review_date": "2026-11-05",
+  "timezone": "Asia/Shanghai",
+  "repository": "xiongcp/OpenBot",
+  "branch": "main",
+  "source_sha": "a223d36a659b7ecf32fca2b4890fc187d3e96e48",
+  "commit_time_local": "2026-11-05T09:35:26+08:00",
+  "scope": "Read-only source and existing CI observations. No local Mac execution, product modification, commit or push performed in this report.",
+  "task_status_counts": {
+    "DONE": 4,
+    "VERIFIED": 12,
+    "IN_PROGRESS": 67,
+    "BLOCKED": 3,
+    "TODO": 10
+  },
+  "ci_run": {
+    "id": 41949551726,
+    "url": "https://github.com/xiongcp/OpenBot/actions/runs/41949551726",
+    "head_sha": "a223d36a659b7ecf32fca2b4890fc187d3e96e48",
+    "conclusion": "failure",
+    "jobs": [
+      {
+        "id": 126989967233,
+        "platform": "macOS arm64",
+        "observed": "setup-python could not obtain 3.12.12; application test steps skipped"
+      },
+      {
+        "id": 126989967018,
+        "platform": "Windows x64",
+        "observed": "setup-python could not obtain 3.12.12; application test steps skipped"
+      },
+      {
+        "id": 126989967317,
+        "platform": "Ubuntu 24.04",
+        "observed": "pytest exited 2, 24 collection errors (tests module imports), 2 SDK modules skipped"
+      }
+    ]
+  },
+  "unverified": [
+    "User Mac unpushed changes and other branches",
+    "Actual native and live service behavior",
+    "All implementation paths beyond the sampled files"
+  ],
+  "source_urls": [
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/README.md",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/AGENTS.md",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/pyproject.toml",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/tasks/backlog.json",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/scripts/verify.py",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/services/core/src/openbot/cli.py",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/services/core/src/openbot/application/macos_gate.py",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/services/core/src/openbot/application/chaos_soak.py",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/services/core/src/openbot/application/mvp_release_gate.py",
+    "https://github.com/xiongcp/OpenBot/blob/a223d36a659b7ecf32fca2b4890fc187d3e96e48/.github/workflows/pr.yml"
+  ]
+}
