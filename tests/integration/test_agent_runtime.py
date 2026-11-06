@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pytest
+from openbot.adapters.local_api.client_routes import ClientRoutes
 from openbot.adapters.local_api.server import ApiRequest
 from openbot.application.budgets import BudgetService, TaskBudgetPolicy
 from openbot.application.runtime_budget import RuntimeBudget
@@ -1305,3 +1306,77 @@ def test_workspace_read_can_repeat_after_a_write(local_api_env, tmp_path, monkey
         lambda db: db.execute("SELECT count(DISTINCT operation_id) FROM operations").fetchone()[0]
     )
     assert ops == 3  # the second read is a fresh Operation, not a replayed receipt
+
+
+def test_bundle_apply_approval_shows_and_binds_the_staged_change(
+    local_api_env, tmp_path, monkeypatch
+):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    runtime, state, _ = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, chain_script, mcp_enabled=False
+    )
+    (workspace / "notes.txt").write_text("status = old\n")
+    task = submit(local_api_env, "Change the status in notes.txt from old to new")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    seen, apply_previews = set(), []
+
+    def next_approval():
+        events = all_events(state, task)
+        if any(e["kind"] in {"RUN_FINISHED", "RUN_INTERRUPTED"} for e in events):
+            return "done"
+        waiting = [
+            e["data"]["approval_id"]
+            for e in events
+            if e["kind"] == "WAITING_APPROVAL" and e["data"]["approval_id"] not in seen
+        ]
+        return waiting[-1] if waiting else None
+
+    try:
+        runtime.start(task)
+        while (approval := wait_for(next_approval, timeout=8)) != "done":
+            seen.add(approval)
+            item = ClientRoutes(state, runtime).preview(approval)  # the desktop's preview DTO
+            if item["tool_name"] == "workspace.apply_patch":
+                apply_previews.append(item)
+            decide(local_api_env, state, task)
+    finally:
+        runtime.close()
+    assert local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED"
+    assert len(apply_previews) == 1
+    preview = apply_previews[0]
+    # The owner sees the real target and diff, and the approval binds them (not just an id).
+    assert preview["target_path"] == "notes.txt"
+    assert "+status = new" in preview["diff_lines"]
+    args = json.loads(preview["args_preview"])
+    assert args["path"] == "notes.txt" and args["new_snippet"] == "status = new"
+
+
+def test_empty_subpath_means_workspace_root(local_api_env, tmp_path, monkeypatch):
+    def script(payload):
+        if not [m for m in payload["messages"] if m["role"] == "tool"]:
+            return tool_call_frame("call_l", "workspace.list", {"subpath": ""})
+        return final_text_frame("listed")
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "notes.txt").write_text("x\n")
+    runtime, state, _ = scripted_factory_runtime(
+        local_api_env, workspace, monkeypatch, script, mcp_enabled=False
+    )
+    task = submit(local_api_env, "List the workspace")
+    configure_budget(local_api_env, task, limit=4_000_000)
+    try:
+        runtime.start(task)
+        wait_for(
+            lambda: any(
+                e["kind"] in {"WAITING_APPROVAL", "RUN_INTERRUPTED"}
+                for e in all_events(state, task)
+            )
+        )
+        interrupted = [e["data"] for e in all_events(state, task) if e["kind"] == "RUN_INTERRUPTED"]
+        assert interrupted == []
+        decide(local_api_env, state, task)
+        wait_for(lambda: local_api_env[3].snapshot(local_api_env[1], task)["state"] == "SUCCEEDED")
+    finally:
+        runtime.close()

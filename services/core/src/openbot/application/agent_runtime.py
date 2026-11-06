@@ -253,6 +253,7 @@ class AgentRuntime:
         self._thread: threading.Thread | None = None
         self._active: str | None = None
         self._patch_bundles: dict[str, PatchProposalBundle] = {}
+        self._patch_edits: dict[str, FileEditSpec] = {}
         self._ws_read = WorkspaceReadTools(self.workspace)
         self._ws_patch = WorkspacePatchTool(
             self.workspace, self.artifacts, self.workspace.parent / "journals"
@@ -459,6 +460,8 @@ class AgentRuntime:
         if call.tool_name not in admitted:
             raise PermissionError("UNREVIEWED_TOOL_PROPOSAL")
 
+        if args.get("subpath") == "":
+            args = {**args, "subpath": "."}  # an empty subpath means the workspace root
         guard = WorkspaceFileGuard(self.workspace)
         target_path = str(args.get("path", args.get("subpath", ".")))
         if target_path != ".":
@@ -469,20 +472,20 @@ class AgentRuntime:
                 raise PermissionError("FORBIDDEN_PATCH_TARGET") from exc
 
         if call.tool_name == "workspace.propose_patch":
+            edit = FileEditSpec(
+                relative_path=str(args["path"]),
+                old_snippet=str(args["old_snippet"]),
+                new_snippet=str(args["new_snippet"]),
+            )
             bundle = self._ws_patch.propose_patch(
                 self.state.context,
                 task_id=task_id,
-                edits=(
-                    FileEditSpec(
-                        relative_path=str(args["path"]),
-                        old_snippet=str(args["old_snippet"]),
-                        new_snippet=str(args["new_snippet"]),
-                    ),
-                ),
+                edits=(edit,),
                 request_id="agent-propose-patch:" + self._call_scope(task_id, call),
                 deadline_monotonic_ms=deadline(),
             )
             self._patch_bundles[bundle.bundle_id] = bundle
+            self._patch_edits[bundle.bundle_id] = edit
             plan = bundle.files[0]
             summary_doc = {
                 "bundle_id": bundle.bundle_id,
@@ -511,10 +514,22 @@ class AgentRuntime:
         )
         precond_files: list[dict[str, str]] = []
         bundle_to_apply: PatchProposalBundle | None = None
+        operation_args = call.arguments
         if call.tool_name == "workspace.apply_patch":
             bid = args.get("bundle_id")
             if isinstance(bid, str) and bid in self._patch_bundles:
                 bundle_to_apply = self._patch_bundles[bid]
+                edit = self._patch_edits[bid]
+                # Bind and show what this bundle will write, from the runtime's own staging
+                # record, never from model-supplied fields next to the id.
+                operation_args = canonicalize(
+                    {
+                        "bundle_id": bid,
+                        "path": edit.relative_path,
+                        "old_snippet": edit.old_snippet,
+                        "new_snippet": edit.new_snippet,
+                    }
+                )
             elif all(k in args for k in ("path", "old_snippet", "new_snippet")):
                 bundle_to_apply = self._ws_patch.propose_patch(
                     self.state.context,
@@ -543,7 +558,7 @@ class AgentRuntime:
                 self.state.context,
                 task_id,
                 call.tool_name,
-                call.arguments,
+                operation_args,
                 {"workspace_generation": generation, "files": precond_files},
                 "WORKSPACE",
                 {"kind": "LOCAL", "resource_ref": self.state.context.workspace_id},
